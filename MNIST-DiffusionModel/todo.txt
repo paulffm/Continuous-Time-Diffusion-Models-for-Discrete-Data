@@ -1,0 +1,24 @@
+time difference in continous
+diffusion model für one hot encoding
+diffusion model für bit encoding
+Lucidrains verstehen => improved DDPM? => äquivalenzen finden
+Improved DDPM: Wie Cov lernen wie erweitern
+gamma = alpha bar, aber in bitduffison predicten sie x?
+
+
+ToDo:
+wann -1, 1 und wann 0, 1?
+continuous_time_gaussian_diffusion.py in Lucidrains:
+https://github.com/lucidrains/denoising-diffusion-pytorch/blob/main/denoising_diffusion_pytorch/continuous_time_gaussian_diffusion.py#L228
+
+testen wie gut es ist mit StandardModel => also scaling
+
+=> anderen Model => learned Var, TargetDiffusion x0, v als Backup
+
+=> Implicit Model implementieren?
+=> One hot encoding
+
+Prüfen, wieso bit_diffusion schlecht ist
+
+# TO DO:
+Verstehen wieso vereinfachung von DDPM Paper nicht genutzt wird, vll dazu  nochmal video

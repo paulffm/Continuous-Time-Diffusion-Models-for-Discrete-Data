@@ -1,0 +1,11 @@
+.vscode/
+diffvenv/
+.DS_Store
+**/__pycache__/
+DNA-Diffusion/checkpoints/*
+MNIST-DiffusionModel/checkpoints/*
+Bit-Diffusion/checkpoints/*
+*.pyc
+**/.DS_Store
+MNIST-DiffusionModel/MNIST
+# git filter-branch -f --index-filter 'git rm --cached --ignore-unmatch checkpoints/saved_epoch_1_model.pt'
