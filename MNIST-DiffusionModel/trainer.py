@@ -16,19 +16,21 @@ class Trainer:
         optimizer: torch.optim,
         use_guided_diff: bool = False,
         use_ema: bool = False,
-        device: str = "cpu",
+        cond_weight: float = 2.0,
         nb_epochs: int = 1,
+        image_size: int = 32,
+        batch_size: int = 64,
         loss_show_epoch: int = 1,
         sample_epoch: int = 2,
         save_epoch: int = 1,
-        image_size: int = 32,
-        batch_size: int = 64,
         dataloader: DataLoader = None,
+        device: str = "cpu",
     ):
         self.diffusion_model = diffusion_model
         self.optimizer = optimizer
         self.use_guided_diff = use_guided_diff
         self.use_ema = use_ema
+        self.cond_weight = cond_weight
         self.nb_epochs = nb_epochs
         self.image_size = image_size
         self.batch_size = batch_size
@@ -52,14 +54,15 @@ class Trainer:
         training_loss = []
 
         for epoch in range(self.start_epoch, self.nb_epochs):
+            epoch_plus1 = epoch + 1
             self.diffusion_model.model.train()
-            print(f"Epoch: {epoch+1}")
+            print(f"Epoch: {epoch_plus1}")
             pbar = tqdm(self.dataloader, desc="Training Loop")
 
             for step, batch in enumerate(pbar):
                 x, y = batch
                 x = x.type(torch.float32).to(self.device)
-                y = y.type(torch.long).to(self.device) # contains 0
+                y = y.type(torch.long).to(self.device)  # contains 0
 
                 # Algorithm 1 line 3: sample t uniformally for every example in the batch
                 # sampling a t to generate t and t+1
@@ -78,23 +81,25 @@ class Trainer:
                 training_loss.append(loss.item())
 
             # Saving model
-            if (epoch + 1) % self.save_epoch == 0 or (epoch + 1) == self.nb_epochs:
+            if (epoch_plus1) % self.save_epoch == 0 or (epoch_plus1) == self.nb_epochs:
                 # epoch + 1
-                self.save_model(epoch + 1)
+                self.save_model(epoch_plus1)
 
             # Plot and Save loss figure
-            if (epoch + 1 % self.loss_show_epoch == 0) or (epoch + 1 == self.nb_epochs):
-                print(f"Epoch {epoch+1} Loss:", training_loss[-1])
+            if (epoch_plus1 % self.loss_show_epoch == 0) or (epoch_plus1 == self.nb_epochs):
+                print(f"Epoch {epoch_plus1} Loss:", training_loss[-1])
                 plt.plot(training_loss)
                 plt.title("Training loss")
-                plt.savefig(f"PNGs/training_loss{epoch+1}.png")
+                plt.savefig(f"PNGs/training_loss{epoch_plus1}.png")
                 plt.close()
 
             # save generated images
-            if (epoch + 1 % self.sample_epoch == 0) or (epoch + 1 == self.nb_epochs):
-                self.sampling(epoch)
+            if (epoch_plus1 % self.sample_epoch == 0) or (epoch_plus1 == self.nb_epochs):
+                self.sampling(epoch_plus1, cond_weight=self.cond_weight, sample_random=False)
 
-    def sampling(self, epoch: int, n_samples: int = 16) -> None:
+    def sampling(
+        self, epoch: int, n_samples: int = 20, cond_weight: float = 2.0, sample_random: bool=False
+    ) -> None:
         """
 
         Args:
@@ -104,11 +109,18 @@ class Trainer:
         self.diffusion_model.model.eval()
 
         if self.use_guided_diff:
-            classes_list = np.arange(0, 10)
-            random_classes = torch.from_numpy(np.random.choice(classes_list, n_samples))
-            # random_classes = sampled.cuda()
+            if sample_random:
+                classes_list = np.arange(0, 10)
+                classes = torch.from_numpy(np.random.choice(classes_list, n_samples))
+            #classes = sampled.cuda()
+            else:
+                classes = torch.arange(0,10).to('cpu') # context for us just cycles throught the mnist labels
+                classes = classes.repeat(int(20/classes.shape[0]))
+            print("We sample the following classes: ")
+            print(classes)
+
             samples = self.diffusion_model.sample(
-                n_samples=n_samples, classes=random_classes, cond_weight=1
+                n_samples=n_samples, classes=classes, cond_weight=cond_weight
             )
         else:
             samples = self.diffusion_model.sample(
@@ -116,9 +128,9 @@ class Trainer:
             )
 
         plt.figure(figsize=(16, 16))
-        int_s2root = int(np.sqrt(n_samples))
+        #int_s2root = int(np.sqrt(n_samples))
         for i in range(n_samples):
-            plt.subplot(int_s2root, int_s2root, 1 + i)
+            plt.subplot(5, 4, 1 + i)
             plt.axis("off")
             plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
         plt.savefig(f"PNGS/samples_epoch_{epoch}.png")
