@@ -14,7 +14,6 @@ class Trainer:
         self,
         diffusion_model: DiffusionModel,
         optimizer: torch.optim,
-        loss_type: str = "l2",
         use_guided_diff: bool = False,
         use_ema: bool = False,
         device: str = "cpu",
@@ -28,7 +27,6 @@ class Trainer:
     ):
         self.diffusion_model = diffusion_model
         self.optimizer = optimizer
-        self.loss_type = loss_type
         self.use_guided_diff = use_guided_diff
         self.use_ema = use_ema
         self.nb_epochs = nb_epochs
@@ -61,9 +59,6 @@ class Trainer:
             for step, batch in enumerate(pbar):
                 loss = self._train_step(batch)
                 training_loss.append(loss.item())
-                if step == 3:
-                    break
-
 
             # Saving model
             if (epoch + 1) % self.save_epoch == 0 or (epoch + 1) == self.nb_epochs:
@@ -129,7 +124,7 @@ class Trainer:
             )
 
         plt.figure(figsize=(16, 16))
-        int_s2root = np.sqrt(n_samples)
+        int_s2root = int(np.sqrt(n_samples))
         for i in range(n_samples):
             plt.subplot(int_s2root, int_s2root, 1 + i)
             plt.axis("off")

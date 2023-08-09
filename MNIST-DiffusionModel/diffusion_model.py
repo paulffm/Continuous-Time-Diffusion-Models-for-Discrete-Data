@@ -109,8 +109,8 @@ class DiffusionModel(nn.Module):
                 t_index=i,
             )
 
-        img.clamp_(-1.0, 1.0)
-        img = utils.unnormalize_to_zero_to_one(img)
+        #img.clamp_(-1.0, 1.0)
+        #img = utils.unnormalize_to_zero_to_one(img)
         return img
 
     @torch.no_grad()
@@ -199,7 +199,7 @@ class DiffusionModel(nn.Module):
         classes: torch.Tensor,
         t_index: int,
         context_mask,
-        cond_weight: float = 0.0,
+        cond_weight: float = 1,
     ) -> torch.Tensor:
         """
         Generates guided samples adapted from: https://openreview.net/pdf?id=qw8AKxfYbI
@@ -308,7 +308,7 @@ class DiffusionModel(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.normalize_to_neg_one_to_one(x)
+        #x = utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -418,7 +418,7 @@ class DiffusionModelExtended(DiffusionModel):
 
         # offset noise
         if self.offset_noise_strength > 0.0:
-            offset_noise = torch.randn(x.shape[:2], device=self.device)
+            offset_noise = torch.randn(x.shape[:2], device=device)
             noise += self.offset_noise_strength * rearrange(
                 offset_noise, "b c -> b c 1 1"
             )

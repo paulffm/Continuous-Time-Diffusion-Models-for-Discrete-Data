@@ -2,9 +2,8 @@
 diffvenv/
 .DS_Store
 **/__pycache__/
-DNA-Diffusion/checkpoints/*
-MNIST-DiffusionModel/checkpoints/*
-Bit-Diffusion/checkpoints/*
+**/checkpoints
+**/PNGs
 *.pyc
 **/.DS_Store
 MNIST-DiffusionModel/MNIST

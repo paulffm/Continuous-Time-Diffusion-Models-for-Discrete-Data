@@ -4,8 +4,8 @@ from torchvision.datasets import MNIST
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from einops import rearrange, reduce
-from math import pi, sqrt, log 
-from math import pi, sqrt, log 
+from math import pi, sqrt, log
+from math import pi, sqrt, log
 
 BITS = 8
 
@@ -22,7 +22,7 @@ def cosine_beta_schedule(timesteps, s=0.008):
     return torch.clip(betas, 0.0001, 0.9999)
 
 
-def linear_beta_schedule(timesteps: int, beta_end: float=0.02):
+def linear_beta_schedule(timesteps: int, beta_end: float = 0.02):
     # beta_end = 0.005
     # beta_start = 0.0001
     # beta_end = 0.02
@@ -60,11 +60,14 @@ def default(val, d):
         return val
     return d() if callable(d) else d
 
+
 def identity(t, *args, **kwargs):
     return t
 
-def normalize_to_neg_one_to_one(img: torch.Tensor) -> torch.Tensor: 
+
+def normalize_to_neg_one_to_one(img: torch.Tensor) -> torch.Tensor:
     return img * 2 - 1
+
 
 def unnormalize_to_zero_to_one(t: torch.Tensor) -> torch.Tensor:
     return (t + 1) * 0.5
@@ -75,7 +78,10 @@ def l2norm(t):
 
 
 def create_mnist_dataloaders(
-    batch_size: int, image_size: int=32, num_workers: int=4, use_subset: bool = False
+    batch_size: int,
+    image_size: int = 32,
+    num_workers: int = 4,
+    use_subset: bool = False,
 ) -> DataLoader:
     """
     preprocess=transforms.Compose([transforms.Resize((image_size,image_size)),\
@@ -151,39 +157,49 @@ def bits_to_decimal(x: torch.Tensor, bits: int = BITS) -> torch.Tensor:
 
 # for learned covariance model
 
-def log(t, eps = 1e-15):
-    return torch.log(t.clamp(min = eps))
+
+def log(t, eps=1e-15):
+    return torch.log(t.clamp(min=eps))
+
 
 def meanflat(x):
-    return x.mean(dim = tuple(range(1, len(x.shape))))
+    return x.mean(dim=tuple(range(1, len(x.shape))))
+
 
 def normal_kl(mean1, logvar1, mean2, logvar2):
     """
     KL divergence between normal distributions parameterized by mean and log-variance.
     """
-    return 0.5 * (-1.0 + logvar2 - logvar1 + torch.exp(logvar1 - logvar2) + ((mean1 - mean2) ** 2) * torch.exp(-logvar2))
+    return 0.5 * (
+        -1.0
+        + logvar2
+        - logvar1
+        + torch.exp(logvar1 - logvar2)
+        + ((mean1 - mean2) ** 2) * torch.exp(-logvar2)
+    )
+
 
 def approx_standard_normal_cdf(x):
-    return 0.5 * (1.0 + torch.tanh(sqrt(2.0 / pi) * (x + 0.044715 * (x ** 3))))
+    return 0.5 * (1.0 + torch.tanh(sqrt(2.0 / pi) * (x + 0.044715 * (x**3))))
 
-def discretized_gaussian_log_likelihood(x, *, means, log_scales, thres: float=0.999):
+
+def discretized_gaussian_log_likelihood(x, *, means, log_scales, thres: float = 0.999):
     assert x.shape == means.shape == log_scales.shape
 
     centered_x = x - means
     inv_stdv = torch.exp(-log_scales)
-    plus_in = inv_stdv * (centered_x + 1. / 255.)
+    plus_in = inv_stdv * (centered_x + 1.0 / 255.0)
     cdf_plus = approx_standard_normal_cdf(plus_in)
-    min_in = inv_stdv * (centered_x - 1. / 255.)
+    min_in = inv_stdv * (centered_x - 1.0 / 255.0)
     cdf_min = approx_standard_normal_cdf(min_in)
     log_cdf_plus = log(cdf_plus)
-    log_one_minus_cdf_min = log(1. - cdf_min)
+    log_one_minus_cdf_min = log(1.0 - cdf_min)
     cdf_delta = cdf_plus - cdf_min
 
-    log_probs = torch.where(x < -thres,
+    log_probs = torch.where(
+        x < -thres,
         log_cdf_plus,
-        torch.where(x > thres,
-            log_one_minus_cdf_min,
-            log(cdf_delta)))
+        torch.where(x > thres, log_one_minus_cdf_min, log(cdf_delta)),
+    )
 
     return log_probs
-

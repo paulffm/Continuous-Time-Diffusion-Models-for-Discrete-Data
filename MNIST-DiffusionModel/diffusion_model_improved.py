@@ -173,7 +173,6 @@ class TargetDiffusion(nn.Module):
         img = utils.unnormalize_to_zero_to_one(img)
         return img
 
-
     @torch.no_grad()
     def p_sample(
         self,
@@ -182,7 +181,7 @@ class TargetDiffusion(nn.Module):
         t_index: int,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond=None,
+        x_self_cond: torch.Tensor=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         model_mean, _, model_log_variance, x_start = self.p_mean_variance(
             x=x, classes=classes, cond_weight=cond_weight, t=t, clip_denoised=True
@@ -204,10 +203,9 @@ class TargetDiffusion(nn.Module):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond=None,
-        clip_denoised=True,
+        x_self_cond: torch.Tensor=None,
+        clip_denoised: bool=True,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         # x_self_cond = None
         pred_noise, pred_x0 = self._model_predictions(
             x, t, classes=classes, cond_weight=cond_weight, x_self_cond=x_self_cond
@@ -241,8 +239,8 @@ class TargetDiffusion(nn.Module):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond=None,
-        clip_x_start=False,
+        x_self_cond: torch.Tensor=None,
+        clip_x_start: bool=False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if classes is not None:
             device = x.device
@@ -284,7 +282,6 @@ class TargetDiffusion(nn.Module):
         if self.objective == "pred_noise":
             pred_noise = model_output
             pred_x_start = self._predict_start_from_noise(x_t=x, t=t, noise=pred_noise)
-            pred_x_start = self._predict_start_from_noise(x_t=x, t=t, noise=pred_noise)
             pred_x_start = maybe_clip(pred_x_start)
 
             # if clip_x_start and rederive_pred_noise:
@@ -293,15 +290,12 @@ class TargetDiffusion(nn.Module):
         elif self.objective == "pred_x0":
             pred_x_start = model_output
             pred_x_start = maybe_clip(pred_x_start)
-            pred_noise = self._predict_noise_from_start(x_t=x, t=t, x0=pred_x_start)
-            pred_noise = self._predict_noise_from_start(x_t=x, t=t, x0=pred_x_start)
+
 
         elif self.objective == "pred_v":
             v = model_output
             pred_x_start = self._predict_start_from_v(x_t=x, t=t, v=v)
-            pred_x_start = self._predict_start_from_v(x_t=x, t=t, v=v)
             pred_x_start = maybe_clip(pred_x_start)
-            pred_noise = self._predict_noise_from_start(x_t=x, t=t, x0=pred_x_start)
             pred_noise = self._predict_noise_from_start(x_t=x, t=t, x0=pred_x_start)
 
         return pred_noise, pred_x_start
@@ -354,7 +348,7 @@ class TargetDiffusion(nn.Module):
         noise = torch.randn_like(x)
 
         if self.offset_noise_strength > 0.0:
-            offset_noise = torch.randn(x.shape[:2], device=self.device)
+            offset_noise = torch.randn(x.shape[:2], device=device)
             noise += self.offset_noise_strength * rearrange(
                 offset_noise, "b c -> b c 1 1"
             )
@@ -560,7 +554,7 @@ class LearnedVarDiffusion(TargetDiffusion):
         noise = torch.randn_like(x)
 
         if self.offset_noise_strength > 0.0:
-            offset_noise = torch.randn(x.shape[:2], device=self.device)
+            offset_noise = torch.randn(x.shape[:2], device=device)
             noise += self.offset_noise_strength * rearrange(
                 offset_noise, "b c -> b c 1 1"
             )
@@ -632,5 +626,4 @@ class LearnedVarDiffusion(TargetDiffusion):
         # no weighing of loss for now: Just Simple loss L_{Simple}
         simple_losses = F.mse_loss(pred_noise, noise)
 
-        return simple_losses + vb_losses.mean() * self.vb_loss_weight
         return simple_losses + vb_losses.mean() * self.vb_loss_weight

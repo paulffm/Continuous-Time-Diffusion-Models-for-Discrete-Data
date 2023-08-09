@@ -1,4 +1,3 @@
-
 import utils
 import torch
 from torch import nn
@@ -6,13 +5,15 @@ import torch.nn.functional as F
 from functools import partial
 from tqdm import tqdm
 
+
 class BitDiffusionModel(nn.Module):
     def __init__(
         self,
         model: nn.Module,
         image_size: int,
         timesteps: int,
-        bit_scale=1.0,
+        loss_type: str = "cpu",
+        bit_scale: float = 1.0,
         beta_schedule: str = "linear",
     ):
         super().__init__()
@@ -25,6 +26,15 @@ class BitDiffusionModel(nn.Module):
 
         # bit scale
         self.bit_scale = bit_scale
+
+        if loss_type == "l1":
+            self.loss_func = F.l1_loss
+        elif loss_type == "l2":
+            self.loss_func = F.mse_loss
+        elif loss_type == "huber":
+            self.loss_func = F.smooth_l1_loss
+        else:
+            raise NotImplementedError()
 
         if beta_schedule == "linear":
             betas = utils.linear_beta_schedule(timesteps, beta_end=0.02)
@@ -44,14 +54,18 @@ class BitDiffusionModel(nn.Module):
         self.register_buffer("alphas_cumprod_prev", alphas_cumprod_prev)
         self.register_buffer("sqrt_recip_alphas", torch.sqrt(1.0 / alphas))
         self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(alphas_cumprod))
-        self.register_buffer("sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod))
+        self.register_buffer(
+            "sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod)
+        )
         self.register_buffer(
             "posterior_variance",
             betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod),
         )
 
     @torch.no_grad()
-    def sample(self, n_samples, classes: torch.Tensor = None, cond_weight: float = 0):
+    def sample(
+        self, n_samples: int, classes: torch.Tensor = None, cond_weight: float = 1
+    ) -> torch.Tensor:
         """
         Generates samples denoised (images)
 
@@ -63,24 +77,14 @@ class BitDiffusionModel(nn.Module):
         Returns:
             _type_: _description_
         """
-        return self.p_sample_loop(
-            classes=classes,
-            shape=(n_samples, self.in_channels, self.image_size, self.image_size),
-            cond_weight=cond_weight,
-        )
-
-    @torch.no_grad()
-    def p_sample_loop(self, classes, shape, cond_weight) -> list:
-        # self.model.eval()
         device = next(self.model.parameters()).device
 
         # number of samples to generate
-        b = shape[0]
-        print("shape b sample loop", shape)
+
         # start from pure noise (for each example in the batch)
         # img = x_t
+        shape = (n_samples, self.in_channels, self.image_size, self.image_size)
         img = torch.randn(shape, device=device)
-        imgs = []
 
         if classes is not None:
             n_sample = classes.shape[0]
@@ -101,7 +105,9 @@ class BitDiffusionModel(nn.Module):
 
         for i in tqdm(reversed(range(0, self.timesteps)), desc="Sampling Time Step:"):
             img = sampling_fn(
-                x=img, t=torch.full((b,), i, device=device, dtype=torch.long), t_index=i
+                x=img,
+                t=torch.full((n_samples,), i, device=device, dtype=torch.long),
+                t_index=i,
             )
             # imgs.append(img.cpu().numpy())
         # I only need last img
@@ -137,7 +143,6 @@ class BitDiffusionModel(nn.Module):
         model_mean = sqrt_recip_alphas_t * (
             x - betas_t * pred_noise / sqrt_one_minus_alphas_cumprod_t
         )
-        print("model_mean", model_mean.shape)
         # self.model.train()
         if t_index == 0:
             return model_mean
@@ -310,71 +315,28 @@ class BitDiffusionModel(nn.Module):
             # output x_{t-1}
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
-        # x = (x.clamp(-1, 1) + 1) / 2
-        # x = (x * 255).type(torch.uint8)
-
-    def q_sample(
-        self, x_start: torch.Tensor, t: torch.Tensor, noise: torch.Tensor = None
-    ) -> torch.Tensor:
-        """
-        Gets unnoisy sample (image) and noises it
-
-        Args:
-            x_start (torch.Tensor): _description_
-            t (torch.Tensor): _description_
-            noise (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            torch.Tensor: _description_
-        """
-        if noise is None:
-            noise = torch.randn_like(x_start)
-        # device = self.device
-
-        sqrt_alphas_cumprod_t = utils.extract(
-            self.sqrt_alphas_cumprod, t, x_start.shape
-        )
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
-            self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
-        )
-
-        return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
-
-    def p_loss(
+    def forward(
         self,
-        x_start: torch.Tensor,
-        t: torch.Tensor,
+        x: torch.Tensor,
         classes: torch.Tensor = None,
-        noise: torch.Tensor = None,
-        loss_type: str = "l2",
         p_uncond: float = 0.1,
-        device: str = "cpu",
     ):
-        """
-        Calculate the loss conditioned and noise injected.
-
-        Args:
-            x_start (torch.Tensor): _description_
-            classes (torch.Tensor, optional): torch.tensor with size of batch_size=x_start.shape[0] with the class labels
-            noise (torch.Tensor, optional): _description_. Defaults to None.
-            loss_type (str, optional): _description_. Defaults to "l2".
-            p_uncond (float, optional): _description_. Defaults to 0.1.
-
-        Raises:
-            NotImplementedError: _description_
-
-        Returns:
-            _type_: _description_
-        """
         # self.model.train()
+        device = x.device
+        t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
 
-        if noise is None:
-            noise = torch.randn_like(x_start)  #  gauss noise
-        x_noisy = self.q_sample(
-            x_start=x_start, t=t, noise=noise
-        )  # this is the auto generated noise given t and Noise
+        # shape: (Batch_size, channels * number of bits, image_size, image_size)
+        # (B, C * BITS, W, H)
+        x = utils.decimal_to_bits(x) * self.bit_scale
 
-        # müsste ich noch fixen fü sample guided2 
+        noise = torch.randn_like(x)
+
+        # q_sample: noise images
+        x_noisy = (
+            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+        )
+
         # setting some class labels with probability of p_uncond to 0
         if classes is not None:
             context_mask = torch.bernoulli(
@@ -385,41 +347,7 @@ class BitDiffusionModel(nn.Module):
             classes = classes * context_mask
             classes = classes.type(torch.long)  # multiplication changes type
 
-        predicted_noise = self.model(x=x_noisy, time=t, classes=classes)
+        pred_noise = self.model(x=x_noisy, time=t, classes=classes)
 
-        if loss_type == "l1":
-            loss = F.l1_loss(noise, predicted_noise)
-        elif loss_type == "l2":
-            loss = F.mse_loss(noise, predicted_noise)
-        elif loss_type == "huber":
-            loss = F.smooth_l1_loss(noise, predicted_noise)
-        else:
-            raise NotImplementedError()
-
+        loss = self.loss_func(noise, pred_noise)
         return loss
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        classes: torch.Tensor = None,
-        loss_type: str = "l2",
-        p_uncond: float = 0.1,
-    ):
-        device = x.device
-        t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-
-        # shape: (Batch_size, channels * number of bits, image_size, image_size)
-        # (B, C * BITS, W, H)
-        x = utils.decimal_to_bits(x) * self.bit_scale
-
-        noise = torch.randn_like(x)
-
-        return self.p_loss(
-            x_start=x,
-            t=t,
-            classes=classes,
-            noise=noise,
-            loss_type=loss_type,
-            p_uncond=p_uncond,
-            device=device,
-        )
