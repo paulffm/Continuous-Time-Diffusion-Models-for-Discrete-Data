@@ -435,6 +435,7 @@ class LearnedVarDiffusion(TargetDiffusion):
 
         self.vb_loss_weight = vb_loss_weight
 
+    # for sampling
     def _model_predictions(
         self,
         x: torch.Tensor,

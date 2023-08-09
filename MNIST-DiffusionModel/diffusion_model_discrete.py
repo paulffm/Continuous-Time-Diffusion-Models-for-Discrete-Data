@@ -320,7 +320,7 @@ class BitDiffusionModel(nn.Module):
         x: torch.Tensor,
         classes: torch.Tensor = None,
         p_uncond: float = 0.1,
-    ):
+    ) -> float:
         # self.model.train()
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
@@ -338,6 +338,7 @@ class BitDiffusionModel(nn.Module):
         )
 
         # setting some class labels with probability of p_uncond to 0
+        # Questions: Why setting to 0 => 0 is a class label
         if classes is not None:
             context_mask = torch.bernoulli(
                 torch.zeros(classes.shape[0]) + (1 - p_uncond)

@@ -18,8 +18,8 @@ class Trainer:
         use_ema: bool = False,
         device: str = "cpu",
         nb_epochs: int = 1,
-        loss_show_epoch: int = 10,
-        sample_epoch: int = 10,
+        loss_show_epoch: int = 1,
+        sample_epoch: int = 2,
         save_epoch: int = 1,
         image_size: int = 32,
         batch_size: int = 64,
@@ -57,13 +57,30 @@ class Trainer:
             pbar = tqdm(self.dataloader, desc="Training Loop")
 
             for step, batch in enumerate(pbar):
-                loss = self._train_step(batch)
+                x, y = batch
+                x = x.type(torch.float32).to(self.device)
+                y = y.type(torch.long).to(self.device) # contains 0
+
+                # Algorithm 1 line 3: sample t uniformally for every example in the batch
+                # sampling a t to generate t and t+1
+                if self.use_guided_diff:
+                    loss = self.diffusion_model(x=x, classes=y, p_uncond=0.1)
+                else:
+                    loss = self.diffusion_model(x=x, classes=None, p_uncond=0)
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                if self.use_ema:
+                    self.ema.step_ema(self.ema_model, self.diffusion_model.model)
+
                 training_loss.append(loss.item())
 
             # Saving model
             if (epoch + 1) % self.save_epoch == 0 or (epoch + 1) == self.nb_epochs:
                 # epoch + 1
-                self.save_model(epoch+1)
+                self.save_model(epoch + 1)
 
             # Plot and Save loss figure
             if (epoch + 1 % self.loss_show_epoch == 0) or (epoch + 1 == self.nb_epochs):
@@ -77,32 +94,7 @@ class Trainer:
             if (epoch + 1 % self.sample_epoch == 0) or (epoch + 1 == self.nb_epochs):
                 self.sampling(epoch)
 
-    def _train_step(self, batch: torch.Tensor):
-        x, y = batch
-        x = x.type(torch.float32).to(self.device)
-        y = y.type(torch.long).to(self.device)
-
-        # Algorithm 1 line 3: sample t uniformally for every example in the batch
-        # sampling a t to generate t and t+1
-        if self.use_guided_diff:
-            loss = self.diffusion_model(
-                x=x, classes=y, p_uncond=0.1
-            )
-        else:
-            loss = self.diffusion_model(
-                x=x, classes=None, p_uncond=0
-            )
-
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        if self.use_ema:
-            self.ema.step_ema(self.ema_model, self.diffusion_model.model)
-
-        return loss
-
-    def sampling(self, epoch: int, n_samples: int=16) -> None:
+    def sampling(self, epoch: int, n_samples: int = 16) -> None:
         """
 
         Args:
