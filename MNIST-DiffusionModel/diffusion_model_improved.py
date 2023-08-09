@@ -181,7 +181,7 @@ class TargetDiffusion(nn.Module):
         t_index: int,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond: torch.Tensor=None,
+        x_self_cond: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         model_mean, _, model_log_variance, x_start = self.p_mean_variance(
             x=x, classes=classes, cond_weight=cond_weight, t=t, clip_denoised=True
@@ -192,6 +192,7 @@ class TargetDiffusion(nn.Module):
             return model_mean
         else:
             noise = torch.randn_like(x)
+            # why 0.5?
             pred_img = model_mean + (0.5 * model_log_variance).exp() * noise
             # return pred_img, x_start
             # return pred_img, x_start
@@ -203,8 +204,8 @@ class TargetDiffusion(nn.Module):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond: torch.Tensor=None,
-        clip_denoised: bool=True,
+        x_self_cond: torch.Tensor = None,
+        clip_denoised: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # x_self_cond = None
         pred_noise, pred_x0 = self._model_predictions(
@@ -239,10 +240,12 @@ class TargetDiffusion(nn.Module):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond: torch.Tensor=None,
-        clip_x_start: bool=False,
+        x_self_cond: torch.Tensor = None,
+        clip_x_start: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if classes is not None:
+            # dna diffusion
+            """
             device = x.device
             n_samples = classes.shape[0]
             context_mask = torch.ones_like(classes).to(device)
@@ -269,6 +272,14 @@ class TargetDiffusion(nn.Module):
             eps1 = (1 + cond_weight) * preds[:batch_size]
             eps2 = cond_weight * preds[batch_size:]
             model_output = eps1 - eps2
+            """
+
+            # dome
+            model_output = self.model(x=x, time=t, classes=classes, x_self_cond=None)
+
+            if cond_weight > 0:
+                uncond_pred = self.model(x=x, time=t, classes=None, x_self_cond=None)
+                model_output = torch.lerp(uncond_pred, model_output, cond_weight)
 
         else:
             model_output = self.model(
@@ -290,7 +301,6 @@ class TargetDiffusion(nn.Module):
         elif self.objective == "pred_x0":
             pred_x_start = model_output
             pred_x_start = maybe_clip(pred_x_start)
-
 
         elif self.objective == "pred_v":
             v = model_output
@@ -339,6 +349,7 @@ class TargetDiffusion(nn.Module):
         x: torch.Tensor,
         classes: torch.Tensor,
         p_uncond: float = 0.1,
+        clip_x_start: bool = False,
     ) -> float:
         # loss type not included
         device = x.device
@@ -361,6 +372,42 @@ class TargetDiffusion(nn.Module):
         )
 
         # setting some class labels with probability of p_uncond to 0
+
+        x_self_cond_x0 = None
+        if self.self_condition and random() < 0.5:
+            with torch.inference_mode():
+                # _, x_self_cond_x0 = self._model_predictions(x=x_noisy, t=t, classes=classes, cond_weight=1)  # eps = eps1 - eps2 only for sampling?
+                x_self_cond_model_output = self.model(
+                    x=x_noisy, t=t, classes=classes, x_self_cond=None
+                )
+
+                if self.objective == "pred_noise":
+                    pred_noise = x_self_cond_model_output
+                    x_self_cond_x0 = self._predict_start_from_noise(
+                        x_t=x, t=t, noise=pred_noise
+                    )
+                    # if clip_x_start and rederive_pred_noise:
+                    #    pred_noise = self.predict_noise_from_start(x, t, x_start)
+
+                elif self.objective == "pred_x0":
+                    x_self_cond_x0 = x_self_cond_model_output
+
+                elif self.objective == "pred_v":
+                    v = x_self_cond_model_output
+                    x_self_cond_x0 = self._predict_start_from_v(x_t=x, t=t, v=v)
+                    pred_noise = self._predict_noise_from_start(
+                        x_t=x, t=t, x0=x_self_cond_x0
+                    )
+
+                if clip_x_start:
+                    x_self_cond_x0 = torch.clamp(x_self_cond_x0, min=-1.0, max=1.0)
+                x_self_cond_x0.detach_()
+
+        # predict and take gradient step
+        if random() < p_uncond:
+            classes = None
+
+        """
         if classes is not None:
             context_mask = torch.bernoulli(
                 torch.zeros(classes.shape[0]) + (1 - p_uncond)
@@ -369,18 +416,10 @@ class TargetDiffusion(nn.Module):
             # mask for unconditinal guidance
             classes = classes * context_mask
             classes = classes.type(torch.long)  # multiplication changes type
+        """
 
-        x_self_cond = None
-        if self.self_condition and random() < 0.5:
-            with torch.inference_mode():
-                _, x_self_cond = self._model_predictions(
-                    x=x_noisy, t=t, classes=classes, cond_weight=1
-                )  # predict x_start
-                x_self_cond.detach_()
-
-        # predict and take gradient step
         model_out = self.model(
-            x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond
+            x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0
         )
 
         if self.objective == "pred_noise":
@@ -442,10 +481,11 @@ class LearnedVarDiffusion(TargetDiffusion):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond=None,
-        clip_x_start=False,
+        x_self_cond: torch.Tensor = None,
+        clip_x_start: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if classes is not None:
+            """
             device = x.device
             n_samples = classes.shape[0]
             context_mask = torch.ones_like(classes).to(device)
@@ -472,6 +512,14 @@ class LearnedVarDiffusion(TargetDiffusion):
             eps1 = (1 + cond_weight) * preds[:batch_size]
             eps2 = cond_weight * preds[batch_size:]
             model_output = eps1 - eps2
+            """
+
+            # dome
+            model_output = self.model(x=x, time=t, classes=classes, x_self_cond=None)
+
+            if cond_weight > 0:
+                uncond_pred = self.model(x=x, time=t, classes=None, x_self_cond=None)
+                model_output = torch.lerp(uncond_pred, model_output, cond_weight)
 
         else:
             model_output = self.model(
@@ -502,9 +550,9 @@ class LearnedVarDiffusion(TargetDiffusion):
         t: torch.Tensor,
         classes: torch.Tensor = None,
         cond_weight: float = 0,
-        x_self_cond=None,
-        clip_denoised: bool = True,
-        model_output=None,
+        x_self_cond: torch.Tensor = None,
+        clip_denoised: bool = False,
+        model_output: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if model_output is None:
             # is None in Sample process
@@ -547,7 +595,9 @@ class LearnedVarDiffusion(TargetDiffusion):
         classes: torch.Tensor = None,
         clip_denoised=False,
         p_uncond: float = 0.1,
+        clip_x_start: bool = False,
     ) -> float:
+        # now p_mean_variance will also be used in the learning process => to calculate KL-Div and then loss
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
         x = utils.normalize_to_neg_one_to_one(x)
@@ -566,6 +616,31 @@ class LearnedVarDiffusion(TargetDiffusion):
             + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
+        x_self_cond_x0 = None
+        if self.self_condition and random() < 0.5:
+            with torch.inference_mode():
+                # _, x_self_cond, _ = self._model_predictions(x=x_noisy, t=t, classes=classes, cond_weight=1)  # predict x_start
+
+                x_self_cond_model_output = self.model(
+                    x=x_noisy, t=t, classes=classes, x_self_cond=None
+                )
+
+                if self.objective == "pred_noise":
+                    pred_noise = x_self_cond_model_output
+                    x_self_cond_x0 = self._predict_start_from_noise(
+                        x_t=x, t=t, noise=pred_noise
+                    )
+                    # if clip_x_start and rederive_pred_noise:
+                    #    pred_noise = self.predict_noise_from_start(x, t, x_start)
+
+                elif self.objective == "pred_x0":
+                    x_self_cond_x0 = x_self_cond_model_output
+
+                if clip_x_start:
+                    x_self_cond_x0 = torch.clamp(x_self_cond_x0, min=-1.0, max=1.0)
+                x_self_cond_x0.detach_()
+
+        """
         # setting some class labels with probability of p_uncond to 0
         if classes is not None:
             context_mask = torch.bernoulli(
@@ -574,26 +649,28 @@ class LearnedVarDiffusion(TargetDiffusion):
 
             # mask for unconditinal guidance
             classes = classes * context_mask
-            classes = classes.type(torch.long)  # multiplication changes type
-
-        x_self_cond = None
-        if self.self_condition and random() < 0.5:
-            with torch.inference_mode():
-                # or classes None, bzw: model_output = self.model(x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond)
-                _, x_self_cond, _ = self._model_predictions(
-                    x=x_noisy, t=t, classes=classes, cond_weight=1
-                )  # predict x_start
-                x_self_cond.detach_()
+            classes = classes.type(torch.long) 
+        """
+        if random() < p_uncond:
+            classes = None
 
         # predict and take gradient step
         model_output = self.model(
-            x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond
+            x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0
         )
 
         # calculating kl loss for learned variance (interpolation)
-        true_mean, _, true_log_variance_clipped = self._q_posterior(
-            x_start=x, x_t=x_noisy, t=t
+        # true posterior and variance:
+        true_mean = (
+            utils.extract(self.posterior_mean_coef1, t, x_noisy.shape) * x
+            + utils.extract(self.posterior_mean_coef2, t, x_noisy.shape) * x_noisy
         )
+
+        true_log_variance_clipped = utils.extract(
+            self.posterior_log_variance_clipped, t, x_noisy.shape
+        )
+
+        # learned mean and variance of posterior
         model_mean, _, model_log_variance, _ = self.p_mean_variance(
             x=x_noisy,
             t=t,

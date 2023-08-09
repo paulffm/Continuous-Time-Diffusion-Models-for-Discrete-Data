@@ -390,6 +390,8 @@ class DiffusionModelExtended(DiffusionModel):
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
 
         # predict and take gradient step
+        if random() < p_uncond:
+            classes = None
         pred_noise = self.model(
             x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0
         )
