@@ -55,3 +55,35 @@ Frage2: Kombination Self-conditioning und Classifier Free Guidance
 => Testen, welche Classifier Free Guidance version besser, dann noise, weigh, self-conditioning mit einfacher prediction
 
 
+Current Versions:
+
+DiffusionModel: Dome classifier 
+    -   free guidance
+    -   no scaling
+
+DiffusionModelExtended: 
+    -   Dome classifier free guidance
+    -   no scaling
+    -   Self-Cond:
+        +   x_self_cond_noise = self.model(x=x_noisy, time=t, classes=classes) => then calculate x0
+        +   if random() < p_uncond: => classes = None => then:        
+        +   pred_noise = self.model(x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0)
+
+TargetDiffusion:
+    -   Dome classifier free guidance
+    -   scaling because in LearnedVarDiffusion v gets scaled
+    -   Self-Cond:
+        +   x_self_cond_noise = self.model(x=x_noisy, time=t, classes=classes) => then calculate x0
+        +   if random() < p_uncond: => classes = None => then:        
+        +   pred_noise = self.model(x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0)
+
+No Problem: in LearnedVarDiffusion func p_mean_variance also will be called in forward() (learning process) => I use just self.model(x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0)
+But for LearnedVarDiffusion: Only Target=Noise?
+
+Loglikehood berechnung?
+FID? => lucidrains, medium article was ist? nur relevant für bilder?
+
+Paper mit Implementation finden
+
+Frage: Loss curve gut, aber samples schlecht nach einer interpolation
+       Wie Trainigsprozess verbessern
