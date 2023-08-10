@@ -86,9 +86,24 @@ class DiffusionModel(nn.Module):
         img = torch.randn(shape, device=device)
 
         if classes is not None:
+            n_sample = classes.shape[0]
+            context_mask = torch.ones_like(classes).to(device)
+            # make 0 index unconditional
+            # double the batch
+            classes = classes.repeat(2)
+            context_mask = context_mask.repeat(2)
+            context_mask[n_sample:] = 0.0  # makes second half of batch context free
             sampling_fn = partial(
-                self.p_sample_guided, classes=classes, cond_weight=cond_weight
+                self.p_sample_guided,
+                classes=classes,
+                cond_weight=cond_weight,
+                context_mask=context_mask,
             )
+            """
+            sampling_fn = partial(
+                self.p_sample_guided2, classes=classes, cond_weight=cond_weight
+            )
+            """
         else:
             sampling_fn = partial(self.p_sample)
 
@@ -185,6 +200,68 @@ class DiffusionModel(nn.Module):
     def p_sample_guided(
         self,
         x: torch.Tensor,
+        t: torch.Tensor,
+        classes: torch.Tensor,
+        t_index: int,
+        context_mask,
+        cond_weight: float = 1,
+    ) -> torch.Tensor:
+        """
+        Generates guided samples adapted from: https://openreview.net/pdf?id=qw8AKxfYbI
+
+        Args:
+            x (torch.Tensor): _description_
+            classes (int): _description_
+            t (torch.Tensor): _description_
+            t_index (int): _description_
+            context_mask (_type_): _description_
+            cond_weight (float, optional): _description_. Defaults to 0.0.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        batch_size = x.shape[0]
+        # double to do guidance with
+        t_double = t.repeat(2)
+        x_double = x.repeat(2, 1, 1, 1)
+        betas_t = utils.extract(self.betas, t_double, x_double.shape)
+        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+            self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
+        )
+        sqrt_recip_alphas_t = utils.extract(
+            self.sqrt_recip_alphas, t_double, x_double.shape
+        )
+
+        # classifier free sampling interpolates between guided and non guided using `cond_weight`
+        classes_masked = classes * context_mask
+        classes_masked = classes_masked.type(torch.long)
+        # first half is gui, second
+        preds = self.model(x_double, time=t_double, classes=classes_masked)
+        eps1 = (1 + cond_weight) * preds[:batch_size]
+        eps2 = cond_weight * preds[batch_size:]
+        # predicted noise
+        x_t = eps1 - eps2
+
+        # Equation 11 in the paper
+        # Use our model (noise predictor) to predict the mean
+        model_mean = sqrt_recip_alphas_t[:batch_size] * (
+            x
+            - betas_t[:batch_size] * x_t / sqrt_one_minus_alphas_cumprod_t[:batch_size]
+        )
+
+        if t_index == 0:
+            return model_mean
+        else:
+            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            noise = torch.randn_like(x)
+            # Algorithm 2 line 4:
+            return model_mean + torch.sqrt(posterior_variance_t) * noise
+
+    @torch.no_grad()
+    def p_sample_guided2(
+        self,
+        x: torch.Tensor,
         classes: int,
         t: torch.Tensor,
         t_index: int,
@@ -234,7 +311,7 @@ class DiffusionModel(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        # x = utils.normalize_to_neg_one_to_one(x)
+        x = utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -247,9 +324,18 @@ class DiffusionModel(nn.Module):
 
         # setting some class labels with probability of p_uncond to 0
         # Question to this in todo.txt
-
+        """
         if random() < p_uncond:
             classes = None
+        """
+
+        if classes is not None:
+            context_mask = torch.bernoulli(
+                torch.zeros(classes.shape[0]) + (1 - p_uncond)
+            ).to(device)
+            # mask for unconditinal guidance
+            classes = classes * context_mask
+            classes = classes.type(torch.long)  # multiplication changes type
 
         pred_noise = self.model(x=x_noisy, time=t, classes=classes)
 
@@ -552,8 +638,8 @@ class DiffusionModelTest(nn.Module):
                 t_index=i,
             )
 
-        # img.clamp_(-1.0, 1.0)
-        # img = utils.unnormalize_to_zero_to_one(img)
+        img.clamp_(-1.0, 1.0)
+        img = utils.unnormalize_to_zero_to_one(img)
         return img
 
     @torch.no_grad()
@@ -749,7 +835,7 @@ class DiffusionModelTest(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        # x = utils.normalize_to_neg_one_to_one(x)
+        x = utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
