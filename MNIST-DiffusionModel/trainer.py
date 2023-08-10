@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import create_mnist_dataloaders
+from utils import create_train_mnist_dataloaders, create_full_mnist_dataloaders
 from ema import EMA
 from torch.utils.data import DataLoader
 import copy
@@ -33,12 +33,16 @@ class Trainer:
         self.use_guided_diff = use_guided_diff
         self.use_ema = use_ema
         self.cond_weight = cond_weight
+
         self.nb_epochs = nb_epochs
+
         self.image_size = image_size
         self.batch_size = batch_size
+
         self.loss_show_epoch = loss_show_epoch
         self.sample_epoch = sample_epoch
         self.save_epoch = save_epoch
+
         self.early_stopping = early_stopping
         self.device = device
 
@@ -52,11 +56,24 @@ class Trainer:
         self.val_dataloader = val_dataloader
 
         if not early_stopping:
-            self.train_dataloader = create_mnist_dataloaders(
-                batch_size=self.batch_size, image_size=self.image_size, num_workers=4
+            self.train_dataloader = create_train_mnist_dataloaders(
+                batch_size=self.batch_size,
+                image_size=self.image_size,
+                num_workers=4,
+                use_augmentation=True,
             )
         else:
-            self.train_dataloader = train_dataloader
+            (
+                self.train_dataloader,
+                self.val_dataloader,
+                _,
+            ) = create_full_mnist_dataloaders(
+                batch_size=self.batch_size,
+                image_size=self.image_size,
+                num_workers=4,
+                valid_split=0.1,
+                use_augmentation=True,
+            )
 
         if self.use_ema:
             self.ema = EMA(beta=0.995)
@@ -64,7 +81,7 @@ class Trainer:
                 copy.deepcopy(self.diffusion_model.model).eval().requires_grad_(False)
             )
 
-    def train_loop(self):
+    def train_loop(self) -> None:
         training_loss = []
 
         for epoch in range(self.start_epoch, self.nb_epochs):
@@ -98,20 +115,25 @@ class Trainer:
                 if step == 700:
                     break
 
-                if self.early_stopping:
-                    val_loss = self.compute_validation_loss()
+            # not useful for now
+            """
+            if self.early_stopping:
+                val_loss = self.compute_validation_loss()
 
-                    # Check for improvement
-                    if val_loss < self.best_val_loss:
-                        self.best_val_loss = val_loss
-                        self.patience_counter = 0
-                    else:
-                        self.patience_counter += 1
+                # Check for improvement
+                if val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
+                    self.patience_counter = 0
+                else:
+                    self.patience_counter += 1
 
-                    # If patience is exceeded, stop the training
-                    if self.patience_counter >= self.patience:
-                        print("Early stopping due to no improvement.")
-                        break
+                # If patience is exceeded, stop the training
+                if self.patience_counter >= self.patience:
+                    self.save_model(epoch_plus1)
+                    print("Early stopping due to no improvement.")
+
+                    break
+            """
 
             # Saving model
             if (epoch_plus1) % self.save_epoch == 0 or (epoch_plus1) == self.nb_epochs:
@@ -136,16 +158,14 @@ class Trainer:
                     epoch_plus1, cond_weight=self.cond_weight, sample_random=False
                 )
 
-    def compute_validation_loss(self):
-        # Compute validation loss using your validation data loader
-        # Ensure you switch the model to eval mode and use torch.no_grad()
-        # You will compute loss similar to your training loop, but without any backward pass or optimizer step
+    def compute_validation_loss(self) -> float:
+
         total_loss = 0
-        self.diffusion_model.model.eval()
-        with torch.no_grad():
+        self.diffusion_model.model.eval() # for smth like dropout and batch norm => deactivate it
+        with torch.no_grad(): # no unecessary gradient calculation
             for batch in self.val_dataloader:
                 x, y = batch
-                
+
                 if self.use_guided_diff:
                     loss = self.diffusion_model(x=x, classes=y, p_uncond=0.1)
                 else:
@@ -200,7 +220,7 @@ class Trainer:
         plt.close()
         # hier noch metric
 
-    def save_model(self, epoch):
+    def save_model(self, epoch) -> None:
         checkpoint_dict = {
             "diffusion_model_state": self.diffusion_model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
@@ -209,7 +229,7 @@ class Trainer:
         }
         torch.save(checkpoint_dict, f"checkpoints/epoch_{epoch}_model.pt")
 
-    def load(self, path):
+    def load(self, path) -> None:
         checkpoint_dict = torch.load(path)
         self.diffusion_model.load_state_dict(checkpoint_dict["diffusion_model_state"])
         self.optimizer.load_state_dict(checkpoint_dict["optimizer_state"])
