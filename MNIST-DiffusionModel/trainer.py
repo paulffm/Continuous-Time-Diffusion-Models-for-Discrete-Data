@@ -53,6 +53,9 @@ class Trainer:
         self.patience = 10
         self.best_val_loss = float("inf")
         self.patience_counter = 0
+
+        # not really necessary for now
+        self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
 
         if not early_stopping:
@@ -159,10 +162,9 @@ class Trainer:
                 )
 
     def compute_validation_loss(self) -> float:
-
         total_loss = 0
-        self.diffusion_model.model.eval() # for smth like dropout and batch norm => deactivate it
-        with torch.no_grad(): # no unecessary gradient calculation
+        self.diffusion_model.model.eval()  # for smth like dropout and batch norm => deactivate it
+        with torch.no_grad():  # no unecessary gradient calculation
             for batch in self.val_dataloader:
                 x, y = batch
 
@@ -205,10 +207,39 @@ class Trainer:
             samples = self.diffusion_model.sample(
                 n_samples=n_samples, classes=classes, cond_weight=cond_weight
             )
+            if self.use_ema:
+                samples_ema = self.diffusion_model.sample(
+                    n_samples=n_samples,
+                    ema_model=self.ema_model,
+                    classes=classes,
+                    cond_weight=cond_weight,
+                )
+
         else:
             samples = self.diffusion_model.sample(
                 n_samples=n_samples, classes=None, cond_weight=0
             )
+
+            if self.use_ema:
+                samples_ema = self.diffusion_model.sample(
+                    n_samples=n_samples,
+                    ema_model=self.ema_model,
+                    classes=None,
+                    cond_weight=cond_weight,
+                )
+
+        # Plot
+        self._plot_figure(
+            samples=samples, n_samples=n_samples, epoch=epoch, use_ema=False
+        )
+
+        if self.use_ema:
+            self._plot_figure(
+                samples=samples_ema, n_samples=n_samples, epoch=epoch, use_ema=True
+            )
+
+    def _plot_figure(self, samples, n_samples: int, epoch: int, use_ema: bool):
+        # Helper function for plotting and saving samples
 
         plt.figure(figsize=(16, 16))
         # int_s2root = int(np.sqrt(n_samples))
@@ -216,9 +247,9 @@ class Trainer:
             plt.subplot(5, 4, 1 + i)
             plt.axis("off")
             plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
-        plt.savefig(f"PNGS/samples_epoch_{epoch}.png")
+        if use_ema:
+            plt.savefig(f"PNGS/samples_ema_epoch_{epoch}.png")
         plt.close()
-        # hier noch metric
 
     def save_model(self, epoch) -> None:
         checkpoint_dict = {

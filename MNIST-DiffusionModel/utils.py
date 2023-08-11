@@ -89,12 +89,15 @@ def create_train_mnist_dataloaders(
                                     transforms.Normalize([0.5],[0.5])]) #[0,1] to [-1,1]
     
     """
-    base_transforms = transforms.Compose(
-        [transforms.Resize((image_size, image_size)), transforms.ToTensor()]
-    )
+    base_transforms = [transforms.Resize((image_size, image_size))]
 
+    # Add augmentations if needed
     if use_augmentation:
-        base_transforms.insert(0, transforms.RandomRotation((-10, 10)))  
+        base_transforms.append(transforms.RandomRotation((-10, 10)))
+
+    base_transforms.append(transforms.ToTensor())
+    base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
+
 
     train_dataset = MNIST(
         root="/Users/paulheller/PythonRepositories/Master-Thesis/MNIST-DiffusionModel",
@@ -121,11 +124,14 @@ def create_full_mnist_dataloaders(
     use_augmentation: bool = False
 ):
     # Define base transformations
-    base_transforms = [transforms.Resize((image_size, image_size)), transforms.ToTensor()]
-    
+    base_transforms = [transforms.Resize((image_size, image_size))]
+
     # Add augmentations if needed
     if use_augmentation:
-        base_transforms.insert(0, transforms.RandomRotation((-10, 10)))  # Add random rotation of 10 degrees
+        base_transforms.append(transforms.RandomRotation((-10, 10)))
+
+    base_transforms.append(transforms.ToTensor())
+    base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
 
     preprocess = transforms.Compose(base_transforms)
 

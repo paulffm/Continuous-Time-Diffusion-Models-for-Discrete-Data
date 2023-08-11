@@ -64,7 +64,7 @@ class DiffusionModel(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, classes: torch.Tensor = None, cond_weight: float = 1
+        self, n_samples: int, ema_model: nn.Module=None, classes: torch.Tensor = None, cond_weight: float = 1
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -77,6 +77,11 @@ class DiffusionModel(nn.Module):
         Returns:
             _type_: _description_
         """
+        # sampling with ema_model
+        if ema_model is not None:
+            unet_model = self.model
+            self.model = ema_model
+
 
         device = next(self.model.parameters()).device
         shape = (n_samples, self.in_channels, self.image_size, self.image_size)
@@ -93,6 +98,7 @@ class DiffusionModel(nn.Module):
             classes = classes.repeat(2)
             context_mask = context_mask.repeat(2)
             context_mask[n_sample:] = 0.0  # makes second half of batch context free
+            
             sampling_fn = partial(
                 self.p_sample_guided,
                 classes=classes,
@@ -116,6 +122,10 @@ class DiffusionModel(nn.Module):
 
         # img.clamp_(-1.0, 1.0)
         # img = utils.unnormalize_to_zero_to_one(img)
+
+        # if i want to train again: set self.model back to Unet
+        if ema_model is not None:
+            self.model = unet_model
         return img
 
     @torch.no_grad()
@@ -438,17 +448,7 @@ class DiffusionModelExtended(DiffusionModel):
             + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
-        # setting some class labels with probability of p_uncond to 0
-        """
-        if classes is not None:
-            context_mask = torch.bernoulli(
-                torch.zeros(classes.shape[0]) + (1 - p_uncond)
-            ).to(device)
-
-            # mask for unconditinal guidance
-            classes = classes * context_mask
-            classes = classes.type(torch.long)  # multiplication changes type
-        """
+   
 
         x_self_cond_x0 = None
         if self.self_condition and random() < 0.5:
@@ -476,8 +476,20 @@ class DiffusionModelExtended(DiffusionModel):
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
 
         # predict and take gradient step
+        """
         if random() < p_uncond:
             classes = None
+        """
+
+        if classes is not None:
+            context_mask = torch.bernoulli(
+                torch.zeros(classes.shape[0]) + (1 - p_uncond)
+            ).to(device)
+
+            # mask for unconditinal guidance
+            classes = classes * context_mask
+            classes = classes.type(torch.long)  # multiplication changes type
+
         pred_noise = self.model(
             x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0
         )
