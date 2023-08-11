@@ -4,6 +4,8 @@ from torch import nn
 import torch.nn.functional as F
 from functools import partial
 from tqdm import tqdm
+from random import random
+from einops import rearrange, reduce
 
 
 class BitDiffusionModel(nn.Module):
@@ -11,12 +13,21 @@ class BitDiffusionModel(nn.Module):
         self,
         model: nn.Module,
         image_size: int,
-        timesteps: int,
-        loss_type: str = "cpu",
+        in_channels: int = 1,
+        timesteps: int = 1000,
+        loss_type: str = "l2",
         bit_scale: float = 1.0,
         beta_schedule: str = "linear",
     ):
         super().__init__()
+        self.config = {
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "loss_type": loss_type,
+            "bit_scale": bit_scale,
+            "beta_schedule": beta_schedule,
+        }
         self.model = model
         self.timesteps = timesteps
         self.image_size = image_size
@@ -64,7 +75,11 @@ class BitDiffusionModel(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, classes: torch.Tensor = None, cond_weight: float = 1
+        self,
+        n_samples: int,
+        ema_model: nn.Module = None,
+        classes: torch.Tensor = None,
+        cond_weight: float = 1,
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -77,6 +92,12 @@ class BitDiffusionModel(nn.Module):
         Returns:
             _type_: _description_
         """
+        if ema_model is not None:
+            unet_model = self.model
+            self.model = ema_model
+
+        self.model.eval()
+
         device = next(self.model.parameters()).device
 
         # number of samples to generate
@@ -100,6 +121,13 @@ class BitDiffusionModel(nn.Module):
                 cond_weight=cond_weight,
                 context_mask=context_mask,
             )
+
+            """
+            sampling_fn = partial(
+                self.p_sample_guided2, classes=classes, cond_weight=cond_weight
+            )
+            """
+
         else:
             sampling_fn = partial(self.p_sample)
 
@@ -111,6 +139,11 @@ class BitDiffusionModel(nn.Module):
             )
             # imgs.append(img.cpu().numpy())
         # I only need last img
+        self.model.train()
+
+        if ema_model is not None:
+            self.model = unet_model
+
         return utils.bits_to_decimal(img)
 
     @torch.no_grad()
@@ -347,8 +380,170 @@ class BitDiffusionModel(nn.Module):
             # mask for unconditinal guidance
             classes = classes * context_mask
             classes = classes.type(torch.long)  # multiplication changes type
-
+        """
+        if random() < p_uncond:
+            classes = None
+        """
         pred_noise = self.model(x=x_noisy, time=t, classes=classes)
 
         loss = self.loss_func(noise, pred_noise)
         return loss
+
+
+class BitDiffusionModelExtended(BitDiffusionModel):
+    """
+    Extendend DiffusionModel class by self-conditioning, loss weighing and offset-noise:
+
+    Activate self-conditioning by setting self_condition in Unet constructor to True
+    Activate loss weighing by setting loss_weighing=True https://arxiv.org/abs/2303.09556
+    Activate offset-noise by setting offset_noise_strength > 0 https://www.crosslabs.org/blog/diffusion-with-offset-noise
+
+    Args:
+        DiffusionModel (_type_): _description_
+    """
+
+    def __init__(
+        self,
+        model: nn.Module,
+        image_size: int = 32,
+        in_channels: int = 1,
+        timesteps: int = 1000,
+        loss_type: str = "l2",
+        bit_scale: float = 1.0,
+        beta_schedule: str = "linear",
+        loss_weighing: bool = False,  # if False => Loss weigth is simply 1 if we predict noise
+        min_snr_gamma: int = 5,  # default in the paper
+        offset_noise_strength: float = 0.0,
+    ):
+        super().__init__(
+            model=model,
+            image_size=image_size,
+            in_channels=in_channels,
+            timesteps=timesteps,
+            bit_scale=bit_scale,
+            loss_type=loss_type,
+            beta_schedule=beta_schedule,
+        )
+        self.config = {
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "loss_type": loss_type,
+            "bit_scale": bit_scale,
+            "beta_schedule": beta_schedule,
+            "loss_weighing": loss_weighing,
+            "min_snr_gamma": min_snr_gamma,
+            "offset_noise_strength": offset_noise_strength,
+        }
+        self.offset_noise_strength = offset_noise_strength
+        self.self_condition = self.model.self_condition
+
+        # to predict x_0 from noise in self-conditioning step
+        self.register_buffer(
+            "sqrt_recip_alphas_cumprod", torch.sqrt(1.0 / self.alphas_cumprod)
+        )
+        self.register_buffer(
+            "sqrt_recipm1_alphas_cumprod", torch.sqrt(1.0 / self.alphas_cumprod - 1)
+        )
+
+        # predicting noise ε is mathematically equivalent to predicting x0 by intrinsically involving
+        # Signal-to-Noise Ratio as a weight factor, thus we divide the SNR term in practice
+        snr = self.alphas_cumprod / (1 - self.alphas_cumprod)
+        maybe_clipped_snr = snr.clone()
+        if loss_weighing:
+            maybe_clipped_snr.clamp_(max=min_snr_gamma)
+
+        self.register_buffer("loss_weight", maybe_clipped_snr / snr)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        classes: torch.Tensor = None,
+        p_uncond: float = 0.1,
+        clip_x_start: bool = False,
+    ) -> float:
+        """
+        Calculate the loss conditioned and noise injected.
+
+        Args:
+            x_start (torch.Tensor): _description_
+            classes (torch.Tensor, optional): torch.tensor with size of batch_size=x_start.shape[0] with the class labels
+            noise (torch.Tensor, optional): _description_. Defaults to None.
+            loss_type (str, optional): _description_. Defaults to "l2".
+            p_uncond (float, optional): _description_. Defaults to 0.1.
+
+        Raises:
+            NotImplementedError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+        # self.model.train()
+        device = x.device
+        t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
+        x = utils.decimal_to_bits(x) * self.bit_scale
+        noise = torch.randn_like(x)
+
+        # offset noise
+        if self.offset_noise_strength > 0.0:
+            offset_noise = torch.randn(x.shape[:2], device=device)
+            noise += self.offset_noise_strength * rearrange(
+                offset_noise, "b c -> b c 1 1"
+            )
+
+        # q_sample: noise the input image/data
+        # with autocast(enabled=False):
+        x_noisy = (
+            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+        )
+
+        x_self_cond_x0 = None
+        if self.self_condition and random() < 0.5:
+            with torch.inference_mode():
+                # could include predicted noise but in the paper they include previous predicted x0
+                # but in Bit-Diffusion they include previously predicted noise but they also give log(beta_t) as input in the forward function of the unet instead of t
+                # x_self_cond_noise = self._model_predictions(x=x_noisy, t=t, classes=classes, cond_weight=1)
+
+                x_self_cond_noise = self.model(x=x_noisy, time=t, classes=classes)
+                # x_self_cond_noise = self.model(x=x_noisy, t=t, classes=classes, x_self_cond=None)
+                x_self_cond_noise.detach_()
+
+                # predict x_start from noise: same as func: predict x_start_from_noise
+                maybe_clip = (
+                    partial(torch.clamp, min=-1.0, max=1.0)
+                    if clip_x_start
+                    else utils.identity
+                )
+                x_self_cond_x0 = (
+                    utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
+                    * x_noisy
+                    - utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
+                    * x_self_cond_noise
+                )
+                x_self_cond_x0 = maybe_clip(x_self_cond_x0)
+
+        # predict and take gradient step
+        """
+        if random() < p_uncond:
+            classes = None
+        """
+
+        if classes is not None:
+            context_mask = torch.bernoulli(
+                torch.zeros(classes.shape[0]) + (1 - p_uncond)
+            ).to(device)
+
+            # mask for unconditinal guidance
+            classes = classes * context_mask
+            classes = classes.type(torch.long)  # multiplication changes type
+
+        pred_noise = self.model(
+            x=x_noisy, time=t, classes=classes, x_self_cond=x_self_cond_x0
+        )
+
+        loss = self.loss_func(noise, pred_noise, reduction="none")
+        loss = reduce(loss, "b ... -> b (...)", "mean")
+        loss = loss * utils.extract(a=self.loss_weight, t=t, x_shape=loss.shape)
+
+        return loss.mean()
