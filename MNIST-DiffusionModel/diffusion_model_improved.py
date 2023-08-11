@@ -48,6 +48,16 @@ class TargetDiffusion(nn.Module):
         offset_noise_strength: float = 0.0,  # https://www.crosslabs.org/blog/diffusion-with-offset-noise
     ):
         super().__init__()
+        self.config = {
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "beta_schedule": beta_schedule,
+            "objective": objective,
+            "min_snr_loss_weight": min_snr_loss_weight,
+            "min_snr_gamma": min_snr_gamma,
+            "offset_noise_strength": offset_noise_strength,
+        }
         self.model = model
         self.timesteps = timesteps
         self.image_size = image_size
@@ -141,7 +151,11 @@ class TargetDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, classes: torch.Tensor = None, cond_weight: float = 0
+        self,
+        n_samples: int,
+        ema_model: nn.Module = None,
+        classes: torch.Tensor = None,
+        cond_weight: float = 0,
     ):
         """
         Generates samples denoised (images)
@@ -154,6 +168,12 @@ class TargetDiffusion(nn.Module):
         Returns:
             _type_: _description_
         """
+        if ema_model is not None:
+            unet_model = self.model
+            self.model = ema_model
+
+        self.model.eval()
+
         shape = (n_samples, self.in_channels, self.image_size, self.image_size)
         device = next(self.model.parameters()).device
 
@@ -169,6 +189,12 @@ class TargetDiffusion(nn.Module):
                 t=torch.full((n_samples,), i, device=device, dtype=torch.long),
                 t_index=i,
             )
+
+        self.model.train()
+
+        if ema_model is not None:
+            self.model = unet_model
+
         img.clamp_(-1.0, 1.0)
         img = utils.unnormalize_to_zero_to_one(img)
         return img
@@ -310,6 +336,7 @@ class TargetDiffusion(nn.Module):
 
         return pred_noise, pred_x_start
 
+    # not sure formula is: x0 = x_t * sqrt_recip_alphas_cumprod - sqrt((1 - alphas_cum_prod) / alphas_cum_prod) * noise
     def _predict_start_from_noise(
         self, x_t: torch.Tensor, t: torch.Tensor, noise: torch.Tensor
     ) -> torch.Tensor:
@@ -466,6 +493,17 @@ class LearnedVarDiffusion(TargetDiffusion):
             min_snr_gamma=min_snr_gamma,
             offset_noise_strength=offset_noise_strength,
         )
+        self.config = {
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "beta_schedule": beta_schedule,
+            "objective": objective,
+            "min_snr_loss_weight": min_snr_loss_weight,
+            "min_snr_gamma": min_snr_gamma,
+            "offset_noise_strength": offset_noise_strength,
+            "vb_loss_weight": vb_loss_weight,
+        }
 
         assert model.out_dim == (
             model.channels * 2
