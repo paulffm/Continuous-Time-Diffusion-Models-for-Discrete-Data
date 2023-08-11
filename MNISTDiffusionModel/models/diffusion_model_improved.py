@@ -1,4 +1,4 @@
-import utils
+from MNISTDiffusionModel.utils import model_utils 
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -75,12 +75,12 @@ class TargetDiffusion(nn.Module):
         }, "objective must be either pred_noise (predict noise) or pred_x0 (predict image start) or pred_v (predict v [v-parameterization as defined in appendix D of progressive distillation paper, used in imagen-video successfully])"
 
         if beta_schedule == "linear":
-            betas = utils.linear_beta_schedule(timesteps, beta_end=0.02)
+            betas = model_utils.linear_beta_schedule(timesteps, beta_end=0.02)
         elif beta_schedule == "cosine":
             # cosine better: Improved Denoising Diffusion Probabilistic Models https://arxiv.org/abs/2102.09672
-            betas = utils.cosine_beta_schedule(timesteps, s=0.008)
+            betas = model_utils.cosine_beta_schedule(timesteps, s=0.008)
         elif beta_schedule == "sigmoid":
-            betas = utils.sigmoid_beta_schedule(timesteps)
+            betas = model_utils.sigmoid_beta_schedule(timesteps)
 
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -190,13 +190,11 @@ class TargetDiffusion(nn.Module):
                 t_index=i,
             )
 
-        self.model.train()
-
         if ema_model is not None:
             self.model = unet_model
 
         img.clamp_(-1.0, 1.0)
-        img = utils.unnormalize_to_zero_to_one(img)
+        img = model_utils.unnormalize_to_zero_to_one(img)
         return img
 
     @torch.no_grad()
@@ -244,11 +242,11 @@ class TargetDiffusion(nn.Module):
         # Compute the mean and variance of the diffusion posterior:
         # q(x_{t-1} | x_t, x_0) = p_theta(x_{t-1} | x_t, x_0) => reverse_process
         posterior_mean = (
-            utils.extract(self.posterior_mean_coef1, t, x.shape) * pred_x0
-            + utils.extract(self.posterior_mean_coef2, t, x.shape) * x
+            model_utils.extract(self.posterior_mean_coef1, t, x.shape) * pred_x0
+            + model_utils.extract(self.posterior_mean_coef2, t, x.shape) * x
         )
-        posterior_variance = utils.extract(self.posterior_variance, t, x.shape)
-        posterior_log_variance_clipped = utils.extract(
+        posterior_variance = model_utils.extract(self.posterior_variance, t, x.shape)
+        posterior_log_variance_clipped = model_utils.extract(
             self.posterior_log_variance_clipped, t, x.shape
         )
         # model_mean, posterior_variance, posterior_log_variance = self._q_posterior(x_start=pred_x0, x_t=x, t=t)
@@ -313,7 +311,7 @@ class TargetDiffusion(nn.Module):
             )
 
         maybe_clip = (
-            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else utils.identity
+            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else model_utils.identity
         )
 
         if self.objective == "pred_noise":
@@ -342,8 +340,8 @@ class TargetDiffusion(nn.Module):
     ) -> torch.Tensor:
         # If model_output is noise
         return (
-            utils.extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
-            - utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+            model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
+            - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
         )
 
     def _predict_noise_from_start(
@@ -351,15 +349,15 @@ class TargetDiffusion(nn.Module):
     ) -> torch.Tensor:
         # if model output is x_0
         return (
-            utils.extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0
-        ) / utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+            model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0
+        ) / model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
 
     def _predict_v(
         self, x_start: torch.Tensor, t: torch.Tensor, noise: torch.Tensor
     ) -> torch.Tensor:
         return (
-            utils.extract(self.sqrt_alphas_cumprod, t, x_start.shape) * noise
-            - utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x_start.shape) * noise
+            - model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape)
             * x_start
         )
 
@@ -367,8 +365,8 @@ class TargetDiffusion(nn.Module):
         self, x_t: torch.Tensor, t: torch.Tensor, v
     ) -> torch.Tensor:
         return (
-            utils.extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t
-            - utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t
+            - model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
         )
 
     def forward(
@@ -381,7 +379,7 @@ class TargetDiffusion(nn.Module):
         # loss type not included
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.normalize_to_neg_one_to_one(x)
+        x = model_utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -394,8 +392,8 @@ class TargetDiffusion(nn.Module):
         # q_sample: noise the input image/data
         # with autocast(enabled=False):
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -464,7 +462,7 @@ class TargetDiffusion(nn.Module):
         # mean over all dimension but the batch_size
         loss = reduce(loss, "b ... -> b (...)", "mean")
         # weighing every entry of loss with loss_weight => before will be extendend to the size of
-        loss = loss * utils.extract(self.loss_weight, t, loss.shape)
+        loss = loss * model_utils.extract(self.loss_weight, t, loss.shape)
         return loss.mean()
 
 
@@ -566,7 +564,7 @@ class LearnedVarDiffusion(TargetDiffusion):
         model_output, pred_variance = model_output.chunk(2, dim=1)
 
         maybe_clip = (
-            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else utils.identity
+            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else model_utils.identity
         )
 
         if self.objective == "pred_noise":
@@ -606,9 +604,9 @@ class LearnedVarDiffusion(TargetDiffusion):
             # used in learning process
             pred_noise, var_interp_frac_unnormalized = model_output.chunk(2, dim=1)
 
-        min_log = utils.extract(self.posterior_log_variance_clipped, t, x.shape)
-        max_log = utils.extract(torch.log(self.betas), t, x.shape)
-        var_interp_frac = utils.unnormalize_to_zero_to_one(var_interp_frac_unnormalized)
+        min_log = model_utils.extract(self.posterior_log_variance_clipped, t, x.shape)
+        max_log = model_utils.extract(torch.log(self.betas), t, x.shape)
+        var_interp_frac = model_utils.unnormalize_to_zero_to_one(var_interp_frac_unnormalized)
 
         model_log_variance = var_interp_frac * max_log + (1 - var_interp_frac) * min_log
         model_variance = model_log_variance.exp()
@@ -621,8 +619,8 @@ class LearnedVarDiffusion(TargetDiffusion):
         # Compute the mean of the diffusion posterior:
         # q(x_{t-1} | x_t, x_0) = p_theta(x_{t-1} | x_t, x_0) => reverse_process
         model_mean = (
-            utils.extract(self.posterior_mean_coef1, t, x.shape) * pred_x0
-            + utils.extract(self.posterior_mean_coef2, t, x.shape) * x
+            model_utils.extract(self.posterior_mean_coef1, t, x.shape) * pred_x0
+            + model_utils.extract(self.posterior_mean_coef2, t, x.shape) * x
         )
 
         return model_mean, model_variance, model_log_variance, pred_x0
@@ -638,7 +636,7 @@ class LearnedVarDiffusion(TargetDiffusion):
         # now p_mean_variance will also be used in the learning process => to calculate KL-Div and then loss
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.normalize_to_neg_one_to_one(x)
+        x = model_utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -650,8 +648,8 @@ class LearnedVarDiffusion(TargetDiffusion):
 
         # q_sample: noise the input image/data
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         x_self_cond_x0 = None
@@ -700,11 +698,11 @@ class LearnedVarDiffusion(TargetDiffusion):
         # calculating kl loss for learned variance (interpolation)
         # true posterior and variance:
         true_mean = (
-            utils.extract(self.posterior_mean_coef1, t, x_noisy.shape) * x
-            + utils.extract(self.posterior_mean_coef2, t, x_noisy.shape) * x_noisy
+            model_utils.extract(self.posterior_mean_coef1, t, x_noisy.shape) * x
+            + model_utils.extract(self.posterior_mean_coef2, t, x_noisy.shape) * x_noisy
         )
 
-        true_log_variance_clipped = utils.extract(
+        true_log_variance_clipped = model_utils.extract(
             self.posterior_log_variance_clipped, t, x_noisy.shape
         )
 
@@ -720,18 +718,18 @@ class LearnedVarDiffusion(TargetDiffusion):
         # kl loss with detached model predicted mean, for stability reasons as in paper
         detached_model_mean = model_mean.detach()
 
-        kl = utils.normal_kl(
+        kl = model_utils.normal_kl(
             true_mean,
             true_log_variance_clipped,
             detached_model_mean,
             model_log_variance,
         )
-        kl = utils.meanflat(kl) * 1.0 / log(2)
+        kl = model_utils.meanflat(kl) * 1.0 / log(2)
 
-        decoder_nll = -utils.discretized_gaussian_log_likelihood(
+        decoder_nll = -model_utils.discretized_gaussian_log_likelihood(
             x, means=detached_model_mean, log_scales=0.5 * model_log_variance
         )
-        decoder_nll = utils.meanflat(decoder_nll) * 1.0 / log(2)
+        decoder_nll = model_utils.meanflat(decoder_nll) * 1.0 / log(2)
 
         # at the first timestep return the decoder NLL, otherwise return KL(q(x_{t-1}|x_t,x_0) || p(x_{t-1}|x_t))
         vb_losses = torch.where(t == 0, decoder_nll, kl)

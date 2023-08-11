@@ -6,5 +6,5 @@ diffvenv/
 **/PNGs
 *.pyc
 **/.DS_Store
-MNIST-DiffusionModel/MNIST
+MNISTDiffusionModel/MNIST
 # git filter-branch -f --index-filter 'git rm --cached --ignore-unmatch checkpoints/saved_epoch_1_model.pt'

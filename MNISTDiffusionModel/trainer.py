@@ -1,10 +1,10 @@
-from diffusion_model import DiffusionModel
+from models.diffusion_model import DiffusionModel
 from tqdm import tqdm
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import create_train_mnist_dataloaders, create_full_mnist_dataloaders
-from ema import EMA
+from data.dataloader import create_train_mnist_dataloaders, create_full_mnist_dataloaders
+from models.ema import EMA
 from torch.utils.data import DataLoader
 import copy
 import json
@@ -190,7 +190,7 @@ class Trainer:
             n_samples (int): must have a int square root
             epoch (int): just for naming the plots
         """
-        self.diffusion_model.model.eval()
+        self.diffusion_model.model.eval() # also in diffusion_model.sample()
 
         if self.use_guided_diff:
             if sample_random:
@@ -255,24 +255,17 @@ class Trainer:
         plt.close()
 
     def save_model(self, epoch) -> None:
+        # configs to use models outside of existing trainer class
         checkpoint_dict = {
             "diffusion_model_state": self.diffusion_model.state_dict(),
+            'config_diffusion_model': self.diffusion_model.config,
             "unet_model": self.diffusion_model.model.state_dict(),
+            'config_unet': self.diffusion_model.model.config,
             "optimizer_state": self.optimizer.state_dict(),
             "epoch": epoch,
             "ema_model": self.ema_model.state_dict() if self.use_ema else None,
         }
-        torch.save(checkpoint_dict, f"checkpoints/epoch{epoch}_model.pt")
-
-        # to use models outside of existing trainer class
-        config_unet = self.diffusion_model.model.config
-        with open(f"checkpoints/unet_config_epoch{epoch}.json", 'w') as f:
-            json.dump(config_unet, f)
-
-        config_diffusion_model = self.diffusion_model.config
-        with open(f"checkpoints/diffusion_model_config_epoch{epoch}.json", 'w') as f:
-            json.dump(config_diffusion_model, f)
-
+        torch.save(checkpoint_dict, f"checkpoints/checkpoint_{epoch}.pth.tar")
 
     def load(self, path) -> None:
         checkpoint_dict = torch.load(path)
@@ -291,4 +284,3 @@ class Trainer:
         # trainer.train_loop()
 
         ### load outside of existing trainer class:
-

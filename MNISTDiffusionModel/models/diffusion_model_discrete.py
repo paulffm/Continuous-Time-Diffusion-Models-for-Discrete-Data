@@ -1,4 +1,4 @@
-import utils
+from MNISTDiffusionModel.utils import model_utils 
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -48,12 +48,12 @@ class BitDiffusionModel(nn.Module):
             raise NotImplementedError()
 
         if beta_schedule == "linear":
-            betas = utils.linear_beta_schedule(timesteps, beta_end=0.02)
+            betas = model_utils.linear_beta_schedule(timesteps, beta_end=0.02)
         elif beta_schedule == "cosine":
             # cosine better: Improved Denoising Diffusion Probabilistic Models https://arxiv.org/abs/2102.09672
-            betas = utils.cosine_beta_schedule(timesteps, s=0.008)
+            betas = model_utils.cosine_beta_schedule(timesteps, s=0.008)
         elif beta_schedule == "sigmoid":
-            betas = utils.sigmoid_beta_schedule(timesteps)
+            betas = model_utils.sigmoid_beta_schedule(timesteps)
 
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -139,12 +139,11 @@ class BitDiffusionModel(nn.Module):
             )
             # imgs.append(img.cpu().numpy())
         # I only need last img
-        self.model.train()
 
         if ema_model is not None:
             self.model = unet_model
 
-        return utils.bits_to_decimal(img)
+        return model_utils.bits_to_decimal(img)
 
     @torch.no_grad()
     def p_sample(self, x: torch.Tensor, t: torch.Tensor, t_index: int) -> torch.Tensor:
@@ -161,11 +160,11 @@ class BitDiffusionModel(nn.Module):
         """
         # self.model.eval()
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
@@ -181,7 +180,7 @@ class BitDiffusionModel(nn.Module):
             return model_mean
 
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
@@ -207,13 +206,13 @@ class BitDiffusionModel(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
-        alpha_t = utils.extract(self.alphas_cumprod, t, x.shape)
-        alpha_prev_t = utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
         sigma = (
             eta
             * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
         )
-        sqrt_one_minus_alphas_cumprod = utils.extract(
+        sqrt_one_minus_alphas_cumprod = model_utils.extract(
             sqrt_one_minus_alphas_cumprod, t, x.shape
         )
 
@@ -262,11 +261,11 @@ class BitDiffusionModel(nn.Module):
         # double to do guidance with
         t_double = t.repeat(2)
         x_double = x.repeat(2, 1, 1, 1)
-        betas_t = utils.extract(self.betas, t_double, x_double.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t_double, x_double.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
         )
-        sqrt_recip_alphas_t = utils.extract(
+        sqrt_recip_alphas_t = model_utils.extract(
             self.sqrt_recip_alphas, t_double, x_double.shape
         )
 
@@ -293,7 +292,7 @@ class BitDiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -321,11 +320,11 @@ class BitDiffusionModel(nn.Module):
             _type_: _description_
         """
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
 
         cond_pred_noise = self.model(x, t, classes)
 
@@ -343,7 +342,7 @@ class BitDiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.zeros_like(x)
             # output x_{t-1}
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -360,14 +359,14 @@ class BitDiffusionModel(nn.Module):
 
         # shape: (Batch_size, channels * number of bits, image_size, image_size)
         # (B, C * BITS, W, H)
-        x = utils.decimal_to_bits(x) * self.bit_scale
+        x = model_utils.decimal_to_bits(x) * self.bit_scale
 
         noise = torch.randn_like(x)
 
         # q_sample: noise images
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -481,7 +480,7 @@ class BitDiffusionModelExtended(BitDiffusionModel):
         # self.model.train()
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.decimal_to_bits(x) * self.bit_scale
+        x = model_utils.decimal_to_bits(x) * self.bit_scale
         noise = torch.randn_like(x)
 
         # offset noise
@@ -494,8 +493,8 @@ class BitDiffusionModelExtended(BitDiffusionModel):
         # q_sample: noise the input image/data
         # with autocast(enabled=False):
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         x_self_cond_x0 = None
@@ -513,12 +512,12 @@ class BitDiffusionModelExtended(BitDiffusionModel):
                 maybe_clip = (
                     partial(torch.clamp, min=-1.0, max=1.0)
                     if clip_x_start
-                    else utils.identity
+                    else model_utils.identity
                 )
                 x_self_cond_x0 = (
-                    utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
+                    model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
                     * x_noisy
-                    - utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
+                    - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
                     * x_self_cond_noise
                 )
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
@@ -544,6 +543,6 @@ class BitDiffusionModelExtended(BitDiffusionModel):
 
         loss = self.loss_func(noise, pred_noise, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
-        loss = loss * utils.extract(a=self.loss_weight, t=t, x_shape=loss.shape)
+        loss = loss * model_utils.extract(a=self.loss_weight, t=t, x_shape=loss.shape)
 
         return loss.mean()

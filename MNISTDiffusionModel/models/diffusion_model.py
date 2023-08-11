@@ -89,7 +89,8 @@ class DiffusionModel(nn.Module):
         if ema_model is not None:
             unet_model = self.model
             self.model = ema_model
-
+        
+        self.model.eval()
 
         device = next(self.model.parameters()).device
         shape = (n_samples, self.in_channels, self.image_size, self.image_size)
@@ -132,6 +133,7 @@ class DiffusionModel(nn.Module):
         # img = utils.unnormalize_to_zero_to_one(img)
 
         # if i want to train again: set self.model back to Unet
+
         if ema_model is not None:
             self.model = unet_model
         return img
@@ -393,6 +395,17 @@ class DiffusionModelExtended(DiffusionModel):
             loss_type=loss_type,
             beta_schedule=beta_schedule,
         )
+        self.config = {
+            'image_size': image_size,
+            'in_channels': in_channels,
+            'timesteps': timesteps,
+            'loss_type': loss_type,
+            'beta_schedule': beta_schedule,
+            'loss_weighing': loss_weighing,
+            'min_snr_gamma': min_snr_gamma,
+            'offset_noise_strength': offset_noise_strength
+        }
+
         self.offset_noise_strength = offset_noise_strength
         self.self_condition = self.model.self_condition
 
@@ -561,6 +574,15 @@ class DiffusionModelTest(nn.Module):
         use_cfg_me: bool = True,
     ):
         super().__init__()
+        self.config = {
+            'image_size': image_size,
+            'in_channels': in_channels,
+            'timesteps': timesteps,
+            'loss_type': loss_type,
+            'beta_schedule': beta_schedule,
+            'use_cfg_me': use_cfg_me
+
+        }
         self.model = model
         self.timesteps = timesteps
         self.image_size = image_size
@@ -606,7 +628,7 @@ class DiffusionModelTest(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, classes: torch.Tensor = None, cond_weight: float = 1
+        self, n_samples: int, ema_model: nn.Module=None, classes: torch.Tensor = None, cond_weight: float = 1
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -619,6 +641,11 @@ class DiffusionModelTest(nn.Module):
         Returns:
             _type_: _description_
         """
+        if ema_model is not None:
+            unet_model = self.model
+            self.model = ema_model
+
+        self.model.eval()
 
         device = next(self.model.parameters()).device
         shape = (n_samples, self.in_channels, self.image_size, self.image_size)
@@ -658,8 +685,11 @@ class DiffusionModelTest(nn.Module):
                 t_index=i,
             )
 
-        img.clamp_(-1.0, 1.0)
-        img = utils.unnormalize_to_zero_to_one(img)
+        if ema_model is not None:
+            self.model = unet_model 
+
+        #img.clamp_(-1.0, 1.0)
+        #img = utils.unnormalize_to_zero_to_one(img)
         return img
 
     @torch.no_grad()
