@@ -7,6 +7,7 @@ from utils import create_train_mnist_dataloaders, create_full_mnist_dataloaders
 from ema import EMA
 from torch.utils.data import DataLoader
 import copy
+import json
 
 
 class Trainer:
@@ -179,7 +180,7 @@ class Trainer:
     def sampling(
         self,
         epoch: int,
-        n_samples: int = 20,
+        n_samples: int = 10,
         cond_weight: float = 2.0,
         sample_random: bool = False,
     ) -> None:
@@ -200,7 +201,7 @@ class Trainer:
                 classes = torch.arange(0, 10).to(
                     "cpu"
                 )  # context for us just cycles throught the mnist labels
-                classes = classes.repeat(int(20 / classes.shape[0]))
+                classes = classes.repeat(int(n_samples / classes.shape[0]))
             print("We sample the following classes: ")
             print(classes)
 
@@ -212,7 +213,7 @@ class Trainer:
                     n_samples=n_samples,
                     ema_model=self.ema_model,
                     classes=classes,
-                    cond_weight=cond_weight,
+                    cond_weight=0,
                 )
 
         else:
@@ -225,7 +226,7 @@ class Trainer:
                     n_samples=n_samples,
                     ema_model=self.ema_model,
                     classes=None,
-                    cond_weight=cond_weight,
+                    cond_weight=0,
                 )
 
         # Plot
@@ -249,43 +250,45 @@ class Trainer:
             plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
         if use_ema:
             plt.savefig(f"PNGS/samples_ema_epoch_{epoch}.png")
+        else:
+            plt.savefig(f"PNGS/samples_epoch_{epoch}.png")
         plt.close()
 
     def save_model(self, epoch) -> None:
         checkpoint_dict = {
             "diffusion_model_state": self.diffusion_model.state_dict(),
+            "unet_model": self.diffusion_model.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "epoch": epoch,
             "ema_model": self.ema_model.state_dict() if self.use_ema else None,
         }
-        torch.save(checkpoint_dict, f"checkpoints/epoch_{epoch}_model.pt")
+        torch.save(checkpoint_dict, f"checkpoints/epoch{epoch}_model.pt")
+
+        # to use models outside of existing trainer class
+        config_unet = self.diffusion_model.model.config
+        with open(f"checkpoints/unet_config_epoch{epoch}.json", 'w') as f:
+            json.dump(config_unet, f)
+
+        config_diffusion_model = self.diffusion_model.config
+        with open(f"checkpoints/diffusion_model_config_epoch{epoch}.json", 'w') as f:
+            json.dump(config_diffusion_model, f)
+
 
     def load(self, path) -> None:
         checkpoint_dict = torch.load(path)
         self.diffusion_model.load_state_dict(checkpoint_dict["diffusion_model_state"])
+        self.diffusion_model.model.load_state_dict(checkpoint_dict["unet_model"])
         self.optimizer.load_state_dict(checkpoint_dict["optimizer_state"])
         self.start_epoch = checkpoint_dict["epoch"]
 
         if self.use_ema and checkpoint_dict["ema_model"]:
             self.ema_model.load_state_dict(checkpoint_dict["ema_model"])
 
+        ### Tutorial: How to sample without trainer class:
         # to load and train or sample from it:
         # trainer.load(path)
         # trainer.sampling(epoch_name)
         # trainer.train_loop()
 
-        ### load außerhalb einer trainer klasse:
-        # Lade das Checkpoint-Dictionary
-        # checkpoint_dict = torch.load("path/to/checkpoint.pt")
+        ### load outside of existing trainer class:
 
-        # Erstelle das Modell (wobei 'DiffusionModel' die Klasse deines Modells ist)
-        # diffusion_model = DiffusionModel()
-
-        # Lade den Zustand des Modells
-        # diffusion_model.load_state_dict(checkpoint_dict["diffusion_model_state"])
-
-        # Setze das Modell in den Evaluierungsmodus
-        # diffusion_model.eval()
-
-        # Führe das Sampeln durch
-        # samples = diffusion_model.sample(n_samples=n_samples, classes=classes, cond_weight=cond_weight)

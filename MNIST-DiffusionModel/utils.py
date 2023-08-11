@@ -6,10 +6,10 @@ from torch.utils.data import DataLoader, random_split
 from einops import rearrange, reduce
 from math import pi, sqrt, log
 from math import pi, sqrt, log
+import json
 
 BITS = 8
-
-
+# for diffusion model
 def cosine_beta_schedule(timesteps, s=0.008):
     """
     cosine schedule as proposed in https://arxiv.org/abs/2102.09672
@@ -44,7 +44,12 @@ def sigmoid_beta_schedule(timesteps: int):
     return torch.sigmoid(betas) * (beta_end - beta_start) + beta_start
 
 
-# helper functions
+# helper functions 
+def load_config_from_file(config_path):
+    with open(config_path, 'r') as f:
+        return json.load(f)
+    
+
 def extract(a, t, x_shape):
     batch_size = t.shape[0]
     out = a.gather(-1, t.cpu())
@@ -208,8 +213,6 @@ def bits_to_decimal(x: torch.Tensor, bits: int = BITS) -> torch.Tensor:
 
 
 # for learned covariance model
-
-
 def log(t, eps=1e-15):
     return torch.log(t.clamp(min=eps))
 

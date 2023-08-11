@@ -20,6 +20,14 @@ class DiffusionModel(nn.Module):
         beta_schedule: str = "linear",
     ):
         super().__init__()
+        self.config = {
+            'image_size': image_size,
+            'in_channels': in_channels,
+            'timesteps': timesteps,
+            'loss_type': loss_type,
+            'beta_schedule': beta_schedule,
+
+        }
         self.model = model
         self.timesteps = timesteps
         self.image_size = image_size
@@ -321,7 +329,7 @@ class DiffusionModel(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.normalize_to_neg_one_to_one(x)
+        #x = utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -847,7 +855,7 @@ class DiffusionModelTest(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        x = utils.normalize_to_neg_one_to_one(x)
+        #x = utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 

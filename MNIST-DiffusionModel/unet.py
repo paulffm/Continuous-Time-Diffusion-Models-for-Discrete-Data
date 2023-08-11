@@ -29,6 +29,23 @@ class Unet(nn.Module):
         self_condition: bool = False,
     ):
         super().__init__()
+        # for saving the model config
+        self.config = {
+            'dim': dim,
+            'init_dim': init_dim,
+            'out_dim': out_dim,
+            'dim_mults': dim_mults,
+            'channels': channels,
+            'resnet_block_groups': resnet_block_groups,
+            'learned_sinusoidal_dim': learned_sinusoidal_dim,
+            'num_classes': num_classes,
+            'class_embed_dim': class_embed_dim,
+            'use_bits': use_bits,
+            'use_learned_var': use_learned_var,
+            'use_sinposemb': use_sinposemb,
+            'self_condition': self_condition
+        }
+
         if use_bits:
             bits = 8
             channels *= bits
@@ -131,7 +148,7 @@ class Unet(nn.Module):
         x: torch.Tensor,
         time: torch.Tensor,
         classes: torch.Tensor = None,
-        x_self_cond: torch.Tensor=None,
+        x_self_cond: torch.Tensor = None,
     ):
         # print("unet forward x", x.shape)
         # self conditioning
