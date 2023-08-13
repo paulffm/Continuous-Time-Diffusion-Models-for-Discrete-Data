@@ -1,4 +1,4 @@
-from utils import model_utils 
+from utils import model_utils
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -311,7 +311,9 @@ class TargetDiffusion(nn.Module):
             )
 
         maybe_clip = (
-            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else model_utils.identity
+            partial(torch.clamp, min=-1.0, max=1.0)
+            if clip_x_start
+            else model_utils.identity
         )
 
         if self.objective == "pred_noise":
@@ -340,9 +342,16 @@ class TargetDiffusion(nn.Module):
     ) -> torch.Tensor:
         # If model_output is noise
         return (
+            x_t
+            - model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape)
+            * noise
+        ) / (model_utils.extract(self.alphas_cumprod, t, x_t.shape) ** 0.5)
+        """
+        return (
             model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
             - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
         )
+        """
 
     def _predict_noise_from_start(
         self, x_t: torch.Tensor, t: torch.Tensor, x0: torch.Tensor
@@ -393,7 +402,8 @@ class TargetDiffusion(nn.Module):
         # with autocast(enabled=False):
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -564,7 +574,9 @@ class LearnedVarDiffusion(TargetDiffusion):
         model_output, pred_variance = model_output.chunk(2, dim=1)
 
         maybe_clip = (
-            partial(torch.clamp, min=-1.0, max=1.0) if clip_x_start else model_utils.identity
+            partial(torch.clamp, min=-1.0, max=1.0)
+            if clip_x_start
+            else model_utils.identity
         )
 
         if self.objective == "pred_noise":
@@ -606,7 +618,9 @@ class LearnedVarDiffusion(TargetDiffusion):
 
         min_log = model_utils.extract(self.posterior_log_variance_clipped, t, x.shape)
         max_log = model_utils.extract(torch.log(self.betas), t, x.shape)
-        var_interp_frac = model_utils.unnormalize_to_zero_to_one(var_interp_frac_unnormalized)
+        var_interp_frac = model_utils.unnormalize_to_zero_to_one(
+            var_interp_frac_unnormalized
+        )
 
         model_log_variance = var_interp_frac * max_log + (1 - var_interp_frac) * min_log
         model_variance = model_log_variance.exp()
@@ -649,7 +663,8 @@ class LearnedVarDiffusion(TargetDiffusion):
         # q_sample: noise the input image/data
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         x_self_cond_x0 = None

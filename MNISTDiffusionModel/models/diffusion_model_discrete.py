@@ -1,4 +1,4 @@
-from utils import model_utils 
+from utils import model_utils
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -180,7 +180,9 @@ class BitDiffusionModel(nn.Module):
             return model_mean
 
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
@@ -292,7 +294,9 @@ class BitDiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -342,7 +346,9 @@ class BitDiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             noise = torch.zeros_like(x)
             # output x_{t-1}
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -366,7 +372,8 @@ class BitDiffusionModel(nn.Module):
         # q_sample: noise images
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -494,7 +501,8 @@ class BitDiffusionModelExtended(BitDiffusionModel):
         # with autocast(enabled=False):
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         x_self_cond_x0 = None
@@ -515,11 +523,21 @@ class BitDiffusionModelExtended(BitDiffusionModel):
                     else model_utils.identity
                 )
                 x_self_cond_x0 = (
+                    x_noisy
+                    - model_utils.extract(
+                        self.sqrt_one_minus_alphas_cumprod, t, x_noisy.shape
+                    )
+                    * x_self_cond_noise
+                ) / (model_utils.extract(self.alphas_cumprod, t, x.shape) ** 0.5)
+
+                """
+                x_self_cond_x0 = (
                     model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
                     * x_noisy
                     - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
                     * x_self_cond_noise
                 )
+                """
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
 
         # predict and take gradient step

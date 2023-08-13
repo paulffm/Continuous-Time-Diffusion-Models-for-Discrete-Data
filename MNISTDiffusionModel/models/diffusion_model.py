@@ -177,7 +177,7 @@ class DiffusionModel(nn.Module):
 
     @torch.no_grad()
     def p_ddim_sample(
-        self, x: torch.Tensor, t: torch.Tensor, t_index: int, eta=0, temp=1.0
+        self, x: torch.Tensor, t: torch.Tensor, t_index: int, classes: torch.Tensor=None, eta: float=0, temp: float=1.0
     ) -> torch.Tensor:
         """
         Generates samples after DDIM Paper
@@ -194,24 +194,34 @@ class DiffusionModel(nn.Module):
             torch.Tensor: _description_
         """
         alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+
+        sqrt_one_minus_alphas_cumprod = model_utils.extract(
+            sqrt_one_minus_alphas_cumprod, t, x.shape
+        )
+        
+        # predict x0 with prediction of noise
+        pred_x0 = (x - sqrt_one_minus_alphas_cumprod * self.model(x, time=t)) / (
+            alpha_t**0.5
+        )
+
         alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        
+        # eta = 1: Generative process becomes DDPM
+        # sigma = 0: Deterministic forward process: Generative process becomes DDIM
         sigma = (
             eta
             * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
         )
-        sqrt_one_minus_alphas_cumprod = model_utils.extract(
-            sqrt_one_minus_alphas_cumprod, t, x.shape
-        )
-        pred_x0 = (x - sqrt_one_minus_alphas_cumprod * self.model(x, time=t)) / (
-            alpha_t**0.5
-        )
-        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t)
+        # Direction from equation 12: added here classes 
+        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t, classes=classes)
+
         if sigma == 0.0:
             noise = 0.0
         else:
             noise = torch.randn((1, x.shape[1:]))
         noise *= temp
 
+        # prediction of x_{t-1}: Equation 12 in Paper
         x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
 
         return x_prev
@@ -488,12 +498,9 @@ class DiffusionModelExtended(DiffusionModel):
                     if clip_x_start
                     else model_utils.identity
                 )
-                x_self_cond_x0 = (
-                    model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
-                    * x_noisy
-                    - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
-                    * x_self_cond_noise
-                )
+
+                x_self_cond_x0 = (x_noisy - model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_noisy.shape) * x_self_cond_noise) / (model_utils.extract(self.alphas_cumprod, t, x.shape) ** 0.5)
+                #x_self_cond_x0 = (model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape) * x_noisy - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape) * x_self_cond_noise)
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
 
         # predict and take gradient step
