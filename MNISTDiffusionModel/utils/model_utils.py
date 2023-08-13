@@ -1,8 +1,5 @@
 import torch
 import torch.nn.functional as F
-from torchvision.datasets import MNIST
-from torchvision import transforms
-from torch.utils.data import DataLoader, random_split
 from einops import rearrange, reduce
 from math import pi, sqrt, log
 from math import pi, sqrt, log

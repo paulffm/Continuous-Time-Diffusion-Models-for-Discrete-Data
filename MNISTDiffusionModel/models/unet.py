@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Optional
-from layers import *
-from utils import *
+from .layers import *
+from utils.model_utils import *
 
 
 class Unet(nn.Module):

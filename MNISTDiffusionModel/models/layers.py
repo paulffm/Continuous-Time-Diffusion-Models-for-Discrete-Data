@@ -5,7 +5,7 @@ from torch import nn, einsum
 from einops import rearrange, reduce
 from torch import nn, einsum
 import torch.nn.functional as F
-from utils import *
+from utils.model_utils import *
 
 # Model from HuggingFace has a few changes:
 ## 1 =>

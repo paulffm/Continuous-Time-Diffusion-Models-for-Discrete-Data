@@ -1,4 +1,4 @@
-import utils
+from utils import model_utils
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -44,12 +44,12 @@ class DiffusionModel(nn.Module):
             raise NotImplementedError()
 
         if beta_schedule == "linear":
-            betas = utils.linear_beta_schedule(timesteps, beta_end=0.02)
+            betas = model_utils.linear_beta_schedule(timesteps, beta_end=0.02)
         elif beta_schedule == "cosine":
             # cosine better: Improved Denoising Diffusion Probabilistic Models https://arxiv.org/abs/2102.09672
-            betas = utils.cosine_beta_schedule(timesteps, s=0.008)
+            betas = model_utils.cosine_beta_schedule(timesteps, s=0.008)
         elif beta_schedule == "sigmoid":
-            betas = utils.sigmoid_beta_schedule(timesteps)
+            betas = model_utils.sigmoid_beta_schedule(timesteps)
 
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -153,11 +153,11 @@ class DiffusionModel(nn.Module):
         """
         # self.model.eval()
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
@@ -168,7 +168,7 @@ class DiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
@@ -193,13 +193,13 @@ class DiffusionModel(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
-        alpha_t = utils.extract(self.alphas_cumprod, t, x.shape)
-        alpha_prev_t = utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
         sigma = (
             eta
             * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
         )
-        sqrt_one_minus_alphas_cumprod = utils.extract(
+        sqrt_one_minus_alphas_cumprod = model_utils.extract(
             sqrt_one_minus_alphas_cumprod, t, x.shape
         )
         pred_x0 = (x - sqrt_one_minus_alphas_cumprod * self.model(x, time=t)) / (
@@ -245,11 +245,11 @@ class DiffusionModel(nn.Module):
         # double to do guidance with
         t_double = t.repeat(2)
         x_double = x.repeat(2, 1, 1, 1)
-        betas_t = utils.extract(self.betas, t_double, x_double.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t_double, x_double.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
         )
-        sqrt_recip_alphas_t = utils.extract(
+        sqrt_recip_alphas_t = model_utils.extract(
             self.sqrt_recip_alphas, t_double, x_double.shape
         )
 
@@ -273,7 +273,7 @@ class DiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -301,11 +301,11 @@ class DiffusionModel(nn.Module):
             _type_: _description_
         """
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
         pred_noise = self.model(x, t, classes)
 
         if cond_weight > 0:
@@ -319,7 +319,7 @@ class DiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -338,8 +338,8 @@ class DiffusionModel(nn.Module):
         # q_sample: noise the input image/data
         # with autocast(enabled=False):
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -465,8 +465,8 @@ class DiffusionModelExtended(DiffusionModel):
         # q_sample: noise the input image/data
         # with autocast(enabled=False):
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
    
@@ -486,12 +486,12 @@ class DiffusionModelExtended(DiffusionModel):
                 maybe_clip = (
                     partial(torch.clamp, min=-1.0, max=1.0)
                     if clip_x_start
-                    else utils.identity
+                    else model_utils.identity
                 )
                 x_self_cond_x0 = (
-                    utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
+                    model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape)
                     * x_noisy
-                    - utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
+                    - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape)
                     * x_self_cond_noise
                 )
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
@@ -517,7 +517,7 @@ class DiffusionModelExtended(DiffusionModel):
 
         loss = self.loss_func(noise, pred_noise, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
-        loss = loss * utils.extract(a=self.loss_weight, t=t, x_shape=loss.shape)
+        loss = loss * model_utils.extract(a=self.loss_weight, t=t, x_shape=loss.shape)
 
         return loss.mean()
 
@@ -600,12 +600,12 @@ class DiffusionModelTest(nn.Module):
             raise NotImplementedError()
 
         if beta_schedule == "linear":
-            betas = utils.linear_beta_schedule(timesteps, beta_end=0.02)
+            betas = model_utils.linear_beta_schedule(timesteps, beta_end=0.02)
         elif beta_schedule == "cosine":
             # cosine better: Improved Denoising Diffusion Probabilistic Models https://arxiv.org/abs/2102.09672
-            betas = utils.cosine_beta_schedule(timesteps, s=0.008)
+            betas = model_utils.cosine_beta_schedule(timesteps, s=0.008)
         elif beta_schedule == "sigmoid":
-            betas = utils.sigmoid_beta_schedule(timesteps)
+            betas = model_utils.sigmoid_beta_schedule(timesteps)
 
         alphas = 1 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -707,11 +707,11 @@ class DiffusionModelTest(nn.Module):
         """
         # self.model.eval()
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
@@ -722,7 +722,7 @@ class DiffusionModelTest(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
@@ -747,13 +747,13 @@ class DiffusionModelTest(nn.Module):
         Returns:
             torch.Tensor: _description_
         """
-        alpha_t = utils.extract(self.alphas_cumprod, t, x.shape)
-        alpha_prev_t = utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
         sigma = (
             eta
             * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
         )
-        sqrt_one_minus_alphas_cumprod = utils.extract(
+        sqrt_one_minus_alphas_cumprod = model_utils.extract(
             sqrt_one_minus_alphas_cumprod, t, x.shape
         )
         pred_x0 = (x - sqrt_one_minus_alphas_cumprod * self.model(x, time=t)) / (
@@ -799,11 +799,11 @@ class DiffusionModelTest(nn.Module):
         # double to do guidance with
         t_double = t.repeat(2)
         x_double = x.repeat(2, 1, 1, 1)
-        betas_t = utils.extract(self.betas, t_double, x_double.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t_double, x_double.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
         )
-        sqrt_recip_alphas_t = utils.extract(
+        sqrt_recip_alphas_t = model_utils.extract(
             self.sqrt_recip_alphas, t_double, x_double.shape
         )
 
@@ -827,7 +827,7 @@ class DiffusionModelTest(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -855,11 +855,11 @@ class DiffusionModelTest(nn.Module):
             _type_: _description_
         """
 
-        betas_t = utils.extract(self.betas, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = utils.extract(
+        betas_t = model_utils.extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
         )
-        sqrt_recip_alphas_t = utils.extract(self.sqrt_recip_alphas, t, x.shape)
+        sqrt_recip_alphas_t = model_utils.extract(self.sqrt_recip_alphas, t, x.shape)
         pred_noise = self.model(x, t, classes)
 
         if cond_weight > 0:
@@ -873,7 +873,7 @@ class DiffusionModelTest(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
             noise = torch.randn_like(x)
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -892,8 +892,8 @@ class DiffusionModelTest(nn.Module):
         # q_sample: noise the input image/data
         # with autocast(enabled=False):
         x_noisy = (
-            utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
         # setting some class labels with probability of p_uncond to 0

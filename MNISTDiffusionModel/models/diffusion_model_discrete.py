@@ -1,4 +1,4 @@
-from MNISTDiffusionModel.utils import model_utils 
+from utils import model_utils 
 import torch
 from torch import nn
 import torch.nn.functional as F
