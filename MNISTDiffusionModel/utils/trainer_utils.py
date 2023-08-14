@@ -13,6 +13,26 @@ from torch.utils.data import DataLoader
 import copy
 import json
 
+class EarlyStopping:
+    def __init__(self, patience: int=10):
+        self.patience = patience
+        self.best_val_loss = float("inf")
+        self.patience_counter = 0
+
+    def _check(self, val_loss: float) -> bool:
+                       # Check for improvement
+        if val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            self.patience_counter = 0
+        else:
+            self.patience_counter += 1
+
+        # If patience is exceeded, stop the training
+        if self.patience_counter >= self.patience:
+            print("Early stopping due to no improvement.")
+            return True
+        else:
+            return False
 
 class Trainer:
     def __init__(
@@ -28,7 +48,6 @@ class Trainer:
         loss_show_epoch: int = 1,
         sample_epoch: int = 2,
         save_epoch: int = 1,
-        early_stopping: bool = False,
         train_dataloader: DataLoader = None,
         val_dataloader: DataLoader = None,
         device: str = "cpu",
@@ -44,7 +63,6 @@ class Trainer:
             "loss_show_epoch": loss_show_epoch,
             "sample_epoch": sample_epoch,
             "save_epoch": save_epoch,
-            "early_stopping": early_stopping,
             "device": device,
             "model_name": model_name,
         }
@@ -61,16 +79,10 @@ class Trainer:
         self.sample_epoch = sample_epoch
         self.save_epoch = save_epoch
 
-        self.early_stopping = early_stopping
         self.device = device
 
         # no parameters in constructor
         self.start_epoch = 0
-
-        # early stopping regarded:
-        self.patience = 10
-        self.best_val_loss = float("inf")
-        self.patience_counter = 0
 
         # not really necessary for now
         self.train_dataloader = train_dataloader
@@ -78,25 +90,15 @@ class Trainer:
 
         self.model_name = model_name
 
-        if not early_stopping:
-            self.train_dataloader = create_train_mnist_dataloaders(
-                batch_size=batch_size,
-                image_size=image_size,
-                num_workers=4,
-                use_augmentation=True,
-            )
-        else:
-            (
-                self.train_dataloader,
-                self.val_dataloader,
-                _,
-            ) = create_full_mnist_dataloaders(
-                batch_size=batch_size,
-                image_size=image_size,
-                num_workers=4,
-                valid_split=0.1,
-                use_augmentation=True,
-            )
+
+        self.train_dataloader = create_train_mnist_dataloaders(
+            batch_size=batch_size,
+            image_size=image_size,
+            num_workers=4,
+            use_augmentation=True,
+        )
+        
+        #self.train_dataloader, self.val_dataloader, _, = create_full_mnist_dataloaders(batch_size=batch_size, image_size=image_size,num_workers=4, valid_split=0.1, use_augmentation=True)
 
         if self.use_ema:
             self.ema = EMA(beta=0.995)
@@ -104,8 +106,9 @@ class Trainer:
                 copy.deepcopy(self.diffusion_model.model).eval().requires_grad_(False)
             )
 
-    def train_loop(self) -> None:
+    def train_loop(self, use_val_loss: bool=False, early_stopping: EarlyStopping = None) -> None:
         training_loss = []
+        val_loss = []
 
         for epoch in range(self.start_epoch, self.nb_epochs):
             epoch_plus1 = epoch + 1
@@ -138,24 +141,21 @@ class Trainer:
                 #if step == 700:
                 #    break
 
-            # not useful for now
+            # not useful for now:
+            # MNIST: 
+            # wie könnte ich einbauen 
+                # => entweder gleichzeitig durch beide iterien=> längenproblem
+                # => nach gewisser batch_anzahl val_loss berechnen   
+            # andere Datasets mit mehr epochen:
+                # => nach jeder epoche
+                # => # => nach gewisser batch_anzahl val_loss berechnen   
             """
-            if self.early_stopping:
-                val_loss, vl_loss = self.compute_validation_loss()
-                val_loss_list.append(vl_loss)
+            if use_val_loss:
+                val_avg_loss, vl_loss = self.compute_validation_loss()
+                val_loss.append(vl_loss.item())
 
-                # Check for improvement
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
-                    self.patience_counter = 0
-                else:
-                    self.patience_counter += 1
-
-                # If patience is exceeded, stop the training
-                if self.patience_counter >= self.patience:
-                    self.save_model(epoch_plus1)
-                    print("Early stopping due to no improvement.")
-
+            if early_stopping._check(val_avg_loss):
+                    self.save_model(epoch)
                     break
             """
 
@@ -290,3 +290,4 @@ class Trainer:
         # trainer.train_loop()
 
         ### load outside of existing trainer class:
+
