@@ -3,9 +3,12 @@ import torch.nn.functional as F
 from einops import rearrange, reduce
 from math import pi, sqrt, log
 from math import pi, sqrt, log
+import yaml
 import json
 
 BITS = 8
+
+
 # for diffusion model
 def cosine_beta_schedule(timesteps, s=0.008):
     """
@@ -41,11 +44,11 @@ def sigmoid_beta_schedule(timesteps: int):
     return torch.sigmoid(betas) * (beta_end - beta_start) + beta_start
 
 
-# helper functions 
+# helper functions
 def load_config_from_file(config_path):
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         return json.load(f)
-    
+
 
 def extract(a, t, x_shape):
     batch_size = t.shape[0]
@@ -169,3 +172,31 @@ def discretized_gaussian_log_likelihood(x, *, means, log_scales, thres: float = 
     )
 
     return log_probs
+
+
+def save_config_to_yaml(filename: str = "configs/config.yml", **kwargs) -> None:
+    """
+    Speichert ein gegebenes Konfigurations-Daten-Dictionary in eine YAML-Datei.
+    Jedes Schlüsselwort-Argument stellt einen Abschnitt in der YAML-Datei dar.
+    """
+
+    # Ein leeres Dictionary, in das die Konfigurationsdaten eingegeben werden.
+    config = {}
+
+    # Iteration über jedes Schlüsselwort-Argument
+    for key, value in kwargs.items():
+        # Ein neuer Abschnitt in der Konfiguration für jedes Schlüsselwort-Argument.
+        config[key] = value
+
+    # Speichern des Konfigurations-Dictionarys in eine YAML-Datei.
+    with open(filename, "w") as file:
+        yaml.dump(config, file, default_flow_style=False)
+
+
+def load_config_from_yaml(filename: str) -> dict:
+    """
+    Lädt eine gegebene Konfigurationsdatei und gibt das daraus resultierende Dictionary zurück.
+    """
+    with open(filename, "r") as file:
+        config = yaml.safe_load(file)
+    return config
