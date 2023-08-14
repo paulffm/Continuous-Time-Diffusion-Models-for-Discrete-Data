@@ -113,6 +113,7 @@ class DiffusionModel(nn.Module):
             context_mask[n_sample:] = 0.0  # makes second half of batch context free
 
             if use_ddim:
+                print("DDIM Sample Guided")
                 sampling_fn = partial(
                     self.p_ddim_sample_guided,
                     classes=classes,
@@ -122,6 +123,7 @@ class DiffusionModel(nn.Module):
                     cond_weight=cond_weight,
                 )
             else:
+                print("DDPM Sample Guided")
                 sampling_fn = partial(
                     self.p_sample_guided,
                     classes=classes,
@@ -135,10 +137,13 @@ class DiffusionModel(nn.Module):
             """
         else:
             if use_ddim:
+                print("DDIM Sample")
                 sampling_fn = partial(self.p_ddim_sample, eta=1, temp=1)
             else:
+                print("DDPM Sample")
                 sampling_fn = partial(self.p_sample)
 
+        # from timesteps - 1 to 0
         for i in tqdm(reversed(range(0, self.timesteps)), desc="Sampling Time Step:"):
             img = sampling_fn(
                 x=img,
@@ -181,9 +186,11 @@ class DiffusionModel(nn.Module):
         model_mean = sqrt_recip_alphas_t * (
             x - betas_t * self.model(x, time=t) / sqrt_one_minus_alphas_cumprod_t
         )
-        
+
         # self.model.train()
-        if t_index <= 1:
+        # I actually dont need this if => if alpha_prev == alpha_0 => posterior_variance = 0
+        # but I could define posterior_variance in another way
+        if t_index == 0:
             return model_mean
         else:
             posterior_variance_t = model_utils.extract(
@@ -249,14 +256,14 @@ class DiffusionModel(nn.Module):
             - betas_t[:batch_size] * x_t / sqrt_one_minus_alphas_cumprod_t[:batch_size]
         )
 
-        if t_index == 0:
+        if t_index <= 5:
             return model_mean
         else:
             posterior_variance_t = model_utils.extract(
                 self.posterior_variance, t, x.shape
             )
-            # noise = torch.randn_like(x)
-            noise = torch.zeros_like(x)
+            noise = torch.randn_like(x)
+            #noise = torch.zeros_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -359,13 +366,19 @@ class DiffusionModel(nn.Module):
         # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t)
         dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
 
-        if sigma == 0.0:
+        if (sigma == 0.0).all():
             noise = 0.0
         else:
             noise = torch.randn((1, x.shape[1:]))
         noise *= temp
 
         # prediction of x_{t-1}: Equation 12 in Paper
+        #if t_index == 0:
+        #    noise = torch.randn_like(pred_x0) 
+        #    x_prev = pred_x0 + sigma * noise 
+
+        #else:
+        # t == 0 => alpha_prev = alpha_0 = 1 => sigma = 0 => dir_xt = 0 => x_prev = x_0 = pred_x0 =
         x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
 
         return x_prev
