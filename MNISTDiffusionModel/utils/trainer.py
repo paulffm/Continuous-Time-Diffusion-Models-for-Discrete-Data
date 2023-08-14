@@ -3,7 +3,11 @@ from tqdm import tqdm
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from data.dataloader import create_train_mnist_dataloaders, create_full_mnist_dataloaders
+from data.dataloader import (
+    create_train_mnist_dataloaders,
+    create_full_mnist_dataloaders,
+)
+from utils.data_utils import plot_figure
 from models.ema import EMA
 from torch.utils.data import DataLoader
 import copy
@@ -15,7 +19,7 @@ class Trainer:
         self,
         diffusion_model: DiffusionModel,
         optimizer: torch.optim,
-        use_guided_diff: bool = False,
+        use_cfg: bool = False,
         use_ema: bool = False,
         cond_weight: float = 2.0,
         nb_epochs: int = 1,
@@ -28,17 +32,30 @@ class Trainer:
         train_dataloader: DataLoader = None,
         val_dataloader: DataLoader = None,
         device: str = "cpu",
+        model_name: str = "checkpoint",
     ):
+        self.config = {
+            "use_cfg": use_cfg,
+            "use_ema": use_ema,
+            "cond_weight": cond_weight,
+            "nb_epochs": nb_epochs,
+            "image_size": image_size,
+            "batch_size": batch_size,
+            "loss_show_epoch": loss_show_epoch,
+            "sample_epoch": sample_epoch,
+            "save_epoch": save_epoch,
+            "early_stopping": early_stopping,
+            "device": device,
+            "model_name": model_name,
+        }
+
         self.diffusion_model = diffusion_model
         self.optimizer = optimizer
-        self.use_guided_diff = use_guided_diff
+        self.use_cfg = use_cfg
         self.use_ema = use_ema
         self.cond_weight = cond_weight
 
         self.nb_epochs = nb_epochs
-
-        self.image_size = image_size
-        self.batch_size = batch_size
 
         self.loss_show_epoch = loss_show_epoch
         self.sample_epoch = sample_epoch
@@ -59,10 +76,12 @@ class Trainer:
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
 
+        self.model_name = model_name
+
         if not early_stopping:
             self.train_dataloader = create_train_mnist_dataloaders(
-                batch_size=self.batch_size,
-                image_size=self.image_size,
+                batch_size=batch_size,
+                image_size=image_size,
                 num_workers=4,
                 use_augmentation=True,
             )
@@ -72,8 +91,8 @@ class Trainer:
                 self.val_dataloader,
                 _,
             ) = create_full_mnist_dataloaders(
-                batch_size=self.batch_size,
-                image_size=self.image_size,
+                batch_size=batch_size,
+                image_size=image_size,
                 num_workers=4,
                 valid_split=0.1,
                 use_augmentation=True,
@@ -101,7 +120,7 @@ class Trainer:
 
                 # Algorithm 1 line 3: sample t uniformally for every example in the batch
                 # sampling a t to generate t and t+1
-                if self.use_guided_diff:
+                if self.use_cfg:
                     loss = self.diffusion_model(x=x, classes=y, p_uncond=0.1)
                 else:
                     loss = self.diffusion_model(x=x, classes=None, p_uncond=0)
@@ -114,10 +133,10 @@ class Trainer:
                     self.ema.step_ema(self.ema_model, self.diffusion_model.model)
 
                 training_loss.append(loss.item())
-
+ 
                 # early stopping:
-                if step == 700:
-                    break
+                #if step == 700:
+                #    break
 
             # not useful for now
             """
@@ -169,12 +188,13 @@ class Trainer:
             for batch in self.val_dataloader:
                 x, y = batch
 
-                if self.use_guided_diff:
+                if self.use_cfg:
                     loss = self.diffusion_model(x=x, classes=y, p_uncond=0.1)
                 else:
                     loss = self.diffusion_model(x=x, classes=None, p_uncond=0)
                 total_loss += loss.item()
         avg_loss = total_loss / len(self.val_dataloader)
+        self.diffusion_model.model.train()
         return avg_loss
 
     def sampling(
@@ -190,9 +210,9 @@ class Trainer:
             n_samples (int): must have a int square root
             epoch (int): just for naming the plots
         """
-        self.diffusion_model.model.eval() # also in diffusion_model.sample()
+        self.diffusion_model.model.eval()  # also in diffusion_model.sample()
 
-        if self.use_guided_diff:
+        if self.use_cfg:
             if sample_random:
                 classes_list = np.arange(0, 10)
                 classes = torch.from_numpy(np.random.choice(classes_list, n_samples))
@@ -230,42 +250,23 @@ class Trainer:
                 )
 
         # Plot
-        self._plot_figure(
-            samples=samples, n_samples=n_samples, epoch=epoch, use_ema=False
-        )
+        fig = plot_figure(samples=samples, n_samples=n_samples)
+        fig.savefig(f"PNGS/samples_epoch_{epoch}.png")
 
         if self.use_ema:
-            self._plot_figure(
-                samples=samples_ema, n_samples=n_samples, epoch=epoch, use_ema=True
-            )
-
-    def _plot_figure(self, samples, n_samples: int, epoch: int, use_ema: bool):
-        # Helper function for plotting and saving samples
-
-        plt.figure(figsize=(16, 16))
-        # int_s2root = int(np.sqrt(n_samples))
-        for i in range(n_samples):
-            plt.subplot(5, 4, 1 + i)
-            plt.axis("off")
-            plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
-        if use_ema:
-            plt.savefig(f"PNGS/samples_ema_epoch_{epoch}.png")
-        else:
-            plt.savefig(f"PNGS/samples_epoch_{epoch}.png")
-        plt.close()
+            fig_ema = plot_figure(samples=samples_ema, n_samples=n_samples)
+            fig_ema.savefig(f"PNGS/samples_ema_epoch_{epoch}.png")
 
     def save_model(self, epoch) -> None:
-        # configs to use models outside of existing trainer class
         checkpoint_dict = {
             "diffusion_model_state": self.diffusion_model.state_dict(),
-            'config_diffusion_model': self.diffusion_model.config,
-            "unet_model": self.diffusion_model.model.state_dict(),
-            'config_unet': self.diffusion_model.model.config,
+            "unet_model_state": self.diffusion_model.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "epoch": epoch,
-            "ema_model": self.ema_model.state_dict() if self.use_ema else None,
+            "ema_model_state": self.ema_model.state_dict() if self.use_ema else None,
         }
-        torch.save(checkpoint_dict, f"checkpoints/checkpoint_{epoch}.pth.tar")
+
+        torch.save(checkpoint_dict, f"checkpoints/{self.model_name}_{epoch}.pth.tar")
 
     def load(self, path) -> None:
         checkpoint_dict = torch.load(path)
