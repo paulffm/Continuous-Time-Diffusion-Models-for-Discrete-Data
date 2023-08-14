@@ -37,12 +37,9 @@ def plot_figure(samples, n_samples: int):
     fig = plt.figure(figsize=(16, 16))  # Erstelle einen Figure-Objekt
     # int_s2root = int(np.sqrt(n_samples))
     for i in range(n_samples):
-        plt.subplot(5, 4, 1 + i)
+        plt.subplot(4, 4, 1 + i)
         plt.axis("off")
         plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
-    
-    # Wenn Sie das Bild sofort in der Funktion anzeigen möchten:
-    plt.show()
 
     return fig 
 
