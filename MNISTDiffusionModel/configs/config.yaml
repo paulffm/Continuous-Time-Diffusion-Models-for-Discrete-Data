@@ -1,0 +1,44 @@
+data:
+  batch_size: 64
+  dataset: MNIST
+  image_size: 32
+  use_augmentation: true
+diffusion:
+  beta_schedule: linear
+  image_size: 32
+  in_channels: 1
+  loss_type: l2
+  timesteps: 1000
+model:
+  channels: 1
+  class_embed_dim: 3
+  dim: 32
+  dim_mults:
+  - 1
+  - 2
+  - 2
+  init_dim: null
+  learned_sinusoidal_dim: 18
+  num_classes: 10
+  out_dim: null
+  resnet_block_groups: 4
+  self_condition: false
+  use_bits: false
+  use_learned_var: false
+  use_sinposemb: false
+optimizer:
+  lr: 0.0001
+  optimizer: Adam
+trainer:
+  batch_size: 64
+  cond_weight: 2.0
+  device: cpu
+  early_stopping: false
+  image_size: 32
+  loss_show_epoch: 1
+  model_name: checkpoint
+  nb_epochs: 1
+  sample_epoch: 2
+  save_epoch: 1
+  use_cfg: true
+  use_ema: true
