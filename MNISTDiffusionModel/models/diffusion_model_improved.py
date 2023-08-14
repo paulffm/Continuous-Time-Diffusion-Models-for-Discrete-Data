@@ -11,19 +11,6 @@ from math import log
 from random import random
 
 
-# parametrize cov in the log domain: exp(v log(beta) + (1-v) log(post_variance)
-# L_hybrid = L_simple + lambda * L_vlb
-# many different possibilites to parametrize posterior_mean:
-# could predict:
-# - posterior mean directly
-# - could predict x_0 and use the equation above to calculate posterior_mean
-# - could predict noise and use:
-# equation 9
-#   x_t = sqrt(alpha_bar) x_0 + sqrt(a - alpha_bar) eps  => and
-# equation 11 => exactly the model_mean in my model
-#   post_mean = 1 / sqrt(alpha) * (x_t - beta_t / (sqrt(1 - alpha_bar) * pred_noise)
-
-
 # https://github.com/lucidrains/denoising-diffusion-pytorch/blob/main/denoising_diffusion_pytorch/learned_gaussian_diffusion.py
 # Improved
 
@@ -476,7 +463,14 @@ class TargetDiffusion(nn.Module):
         return loss.mean()
 
 
+
 class LearnedVarDiffusion(TargetDiffusion):
+    """
+    Model where we also learn the variance of the posterior
+
+    Args:
+        TargetDiffusion (_type_): _description_
+    """
     def __init__(
         self,
         model: nn.Module,
