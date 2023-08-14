@@ -1,4 +1,5 @@
 from utils import model_utils
+from utils.data_utils import decimal_to_bits, bits_to_decimal
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -79,7 +80,8 @@ class BitDiffusionModel(nn.Module):
         n_samples: int,
         ema_model: nn.Module = None,
         classes: torch.Tensor = None,
-        cond_weight: float = 1,
+        cond_weight: float = 2,
+        use_ddim: bool = False,
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -92,6 +94,7 @@ class BitDiffusionModel(nn.Module):
         Returns:
             _type_: _description_
         """
+        # sampling with ema_model
         if ema_model is not None:
             unet_model = self.model
             self.model = ema_model
@@ -99,12 +102,10 @@ class BitDiffusionModel(nn.Module):
         self.model.eval()
 
         device = next(self.model.parameters()).device
-
-        # number of samples to generate
+        shape = (n_samples, self.in_channels, self.image_size, self.image_size)
 
         # start from pure noise (for each example in the batch)
         # img = x_t
-        shape = (n_samples, self.in_channels, self.image_size, self.image_size)
         img = torch.randn(shape, device=device)
 
         if classes is not None:
@@ -115,21 +116,33 @@ class BitDiffusionModel(nn.Module):
             classes = classes.repeat(2)
             context_mask = context_mask.repeat(2)
             context_mask[n_sample:] = 0.0  # makes second half of batch context free
-            sampling_fn = partial(
-                self.p_sample_guided,
-                classes=classes,
-                cond_weight=cond_weight,
-                context_mask=context_mask,
-            )
 
+            if use_ddim:
+                sampling_fn = partial(
+                    self.p_ddim_sample_guided,
+                    classes=classes,
+                    context_mask=context_mask,
+                    eta=1,
+                    temp=1,
+                    cond_weight=cond_weight,
+                )
+            else:
+                sampling_fn = partial(
+                    self.p_sample_guided,
+                    classes=classes,
+                    cond_weight=cond_weight,
+                    context_mask=context_mask,
+                )
             """
             sampling_fn = partial(
                 self.p_sample_guided2, classes=classes, cond_weight=cond_weight
             )
             """
-
         else:
-            sampling_fn = partial(self.p_sample)
+            if use_ddim:
+                sampling_fn = partial(self.p_ddim_sample, eta=1, temp=1)
+            else:
+                sampling_fn = partial(self.p_sample)
 
         for i in tqdm(reversed(range(0, self.timesteps)), desc="Sampling Time Step:"):
             img = sampling_fn(
@@ -137,13 +150,11 @@ class BitDiffusionModel(nn.Module):
                 t=torch.full((n_samples,), i, device=device, dtype=torch.long),
                 t_index=i,
             )
-            # imgs.append(img.cpu().numpy())
-        # I only need last img
 
         if ema_model is not None:
             self.model = unet_model
 
-        return model_utils.bits_to_decimal(img)
+        return bits_to_decimal(img)
 
     @torch.no_grad()
     def p_sample(self, x: torch.Tensor, t: torch.Tensor, t_index: int) -> torch.Tensor:
@@ -168,7 +179,6 @@ class BitDiffusionModel(nn.Module):
 
         # Equation 11 in the paper
         # Use our model (noise predictor) to predict the mean
-        print("p_sample", x.shape)
         pred_noise = self.model(x, time=t)
         pred_noise.clamp_(-self.bit_scale, self.bit_scale)
 
@@ -189,50 +199,6 @@ class BitDiffusionModel(nn.Module):
 
             # bits to decimal
             return model_mean + torch.sqrt(posterior_variance_t) * noise
-
-    @torch.no_grad()
-    def p_ddim_sample(
-        self, x: torch.Tensor, t: torch.Tensor, t_index: int, eta=0, temp=1.0
-    ) -> torch.Tensor:
-        """
-        Generates samples after DDIM Paper
-
-
-        Args:
-            x (torch.Tensor): _description_
-            t (torch.Tensor): _description_
-            t_index (int): _description_
-            eta (int, optional): _description_. Defaults to 0.
-            temp (float, optional): _description_. Defaults to 1.0.
-
-        Returns:
-            torch.Tensor: _description_
-        """
-        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
-        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
-        sigma = (
-            eta
-            * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
-        )
-        sqrt_one_minus_alphas_cumprod = model_utils.extract(
-            sqrt_one_minus_alphas_cumprod, t, x.shape
-        )
-
-        pred_noise = self.model(x, time=t)
-        pred_noise.clamp_(-self.bit_scale, self.bit_scale)
-
-        pred_x0 = (x - sqrt_one_minus_alphas_cumprod * pred_noise) / (alpha_t**0.5)
-
-        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
-        if sigma == 0.0:
-            noise = 0.0
-        else:
-            noise = torch.randn((1, x.shape[1:]))
-        noise *= temp
-
-        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
-
-        return x_prev
 
     @torch.no_grad()
     def p_sample_guided(
@@ -301,8 +267,9 @@ class BitDiffusionModel(nn.Module):
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
+
     @torch.no_grad()
-    def sample_guided2(
+    def p_sample_guided2(
         self,
         x: torch.Tensor,
         classes: int,
@@ -353,6 +320,134 @@ class BitDiffusionModel(nn.Module):
             # output x_{t-1}
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
+
+    @torch.no_grad()
+    def p_ddim_sample(
+        self, x: torch.Tensor, t: torch.Tensor, t_index: int, eta=0, temp=1.0
+    ) -> torch.Tensor:
+        """
+        Generates samples after DDIM Paper
+
+
+        Args:
+            x (torch.Tensor): _description_
+            t (torch.Tensor): _description_
+            t_index (int): _description_
+            eta (int, optional): _description_. Defaults to 0.
+            temp (float, optional): _description_. Defaults to 1.0.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        sigma = (
+            eta
+            * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
+        )
+        sqrt_one_minus_alphas_cumprod = model_utils.extract(
+            sqrt_one_minus_alphas_cumprod, t, x.shape
+        )
+
+        pred_noise = self.model(x, time=t)
+        pred_noise.clamp_(-self.bit_scale, self.bit_scale)
+
+        pred_x0 = (x - sqrt_one_minus_alphas_cumprod * pred_noise) / (alpha_t**0.5)
+
+        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
+        if sigma == 0.0:
+            noise = 0.0
+        else:
+            noise = torch.randn((1, x.shape[1:]))
+        noise *= temp
+
+        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
+
+        return x_prev
+    
+    @torch.no_grad()
+    def p_ddim_sample_guided(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        t_index: int,
+        classes: torch.Tensor,
+        context_mask: torch.Tensor,
+        eta: float = 0,
+        temp: float = 1.0,
+        cond_weight: float = 2.0,
+    ) -> torch.Tensor:
+        """
+        Generates samples after DDIM Paper
+
+
+        Args:
+            x (torch.Tensor): _description_
+            t (torch.Tensor): _description_
+            t_index (int): _description_
+            eta (int, optional): _description_. Defaults to 0.
+            temp (float, optional): _description_. Defaults to 1.0.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+        batch_size = x.shape[0]
+        # double to do guidance with
+        t_double = t.repeat(2)
+        x_double = x.repeat(2, 1, 1, 1)
+
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
+            self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
+        )
+
+        alphas_cumprod_t = model_utils.extract(
+            self.alphas_cumprod, t_double, x_double.shape
+        )
+
+        # classifier free sampling interpolates between guided and non guided using `cond_weight`
+        classes_masked = classes * context_mask
+        classes_masked = classes_masked.type(torch.long)
+        # first half is gui, second
+        preds = self.model(x_double, time=t_double, classes=classes_masked)
+        eps1 = (1 + cond_weight) * preds[:batch_size]
+        eps2 = cond_weight * preds[batch_size:]
+        # predicted noise
+        pred_noise = eps1 - eps2
+        pred_noise.clamp_(-self.bit_scale, self.bit_scale)
+
+        # predict x0 with prediction of noise
+        pred_x0 = (x - sqrt_one_minus_alphas_cumprod_t[:batch_size] * pred_noise) / (
+            alphas_cumprod_t[:batch_size] ** 0.5
+        )
+
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+
+        # eta = 1: Generative process becomes DDPM
+        # sigma = 0: Deterministic forward process: Generative process becomes DDIM
+        sigma = (
+            eta
+            * (
+                (1 - alpha_prev_t)
+                / (1 - alphas_cumprod_t)
+                * (1 - alphas_cumprod_t / alpha_prev_t)
+            )
+            ** 0.5
+        )
+        # Direction from equation 12: added here classes: why predict again
+        # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t, classes=classes)
+        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
+
+        if sigma == 0.0:
+            noise = 0.0
+        else:
+            noise = torch.randn((1, x.shape[1:]))
+        noise *= temp
+
+        # prediction of x_{t-1}: Equation 12 in Paper
+        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
+
+        return x_prev
+
     def forward(
         self,
         x: torch.Tensor,
@@ -365,7 +460,7 @@ class BitDiffusionModel(nn.Module):
 
         # shape: (Batch_size, channels * number of bits, image_size, image_size)
         # (B, C * BITS, W, H)
-        x = model_utils.decimal_to_bits(x) * self.bit_scale
+        x = decimal_to_bits(x) * self.bit_scale
 
         noise = torch.randn_like(x)
 
