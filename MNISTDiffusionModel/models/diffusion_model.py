@@ -21,12 +21,11 @@ class DiffusionModel(nn.Module):
     ):
         super().__init__()
         self.config = {
-            'image_size': image_size,
-            'in_channels': in_channels,
-            'timesteps': timesteps,
-            'loss_type': loss_type,
-            'beta_schedule': beta_schedule,
-
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "loss_type": loss_type,
+            "beta_schedule": beta_schedule,
         }
         self.model = model
         self.timesteps = timesteps
@@ -72,7 +71,12 @@ class DiffusionModel(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, ema_model: nn.Module=None, classes: torch.Tensor = None, cond_weight: float = 1
+        self,
+        n_samples: int,
+        ema_model: nn.Module = None,
+        classes: torch.Tensor = None,
+        cond_weight: float = 2,
+        use_ddim: bool = False,
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -89,7 +93,7 @@ class DiffusionModel(nn.Module):
         if ema_model is not None:
             unet_model = self.model
             self.model = ema_model
-        
+
         self.model.eval()
 
         device = next(self.model.parameters()).device
@@ -107,20 +111,33 @@ class DiffusionModel(nn.Module):
             classes = classes.repeat(2)
             context_mask = context_mask.repeat(2)
             context_mask[n_sample:] = 0.0  # makes second half of batch context free
-            
-            sampling_fn = partial(
-                self.p_sample_guided,
-                classes=classes,
-                cond_weight=cond_weight,
-                context_mask=context_mask,
-            )
+
+            if use_ddim:
+                sampling_fn = partial(
+                    self.p_ddim_sample_guided,
+                    classes=classes,
+                    context_mask=context_mask,
+                    eta=1,
+                    temp=1,
+                    cond_weight=cond_weight,
+                )
+            else:
+                sampling_fn = partial(
+                    self.p_sample_guided,
+                    classes=classes,
+                    cond_weight=cond_weight,
+                    context_mask=context_mask,
+                )
             """
             sampling_fn = partial(
                 self.p_sample_guided2, classes=classes, cond_weight=cond_weight
             )
             """
         else:
-            sampling_fn = partial(self.p_sample)
+            if use_ddim:
+                sampling_fn = partial(self.p_ddim_sample, eta=1, temp=1)
+            else:
+                sampling_fn = partial(self.p_sample)
 
         for i in tqdm(reversed(range(0, self.timesteps)), desc="Sampling Time Step:"):
             img = sampling_fn(
@@ -130,7 +147,7 @@ class DiffusionModel(nn.Module):
             )
 
         # img.clamp_(-1.0, 1.0)
-        # img = utils.unnormalize_to_zero_to_one(img)
+        # img = model_utils.unnormalize_to_zero_to_one(img)
 
         # if i want to train again: set self.model back to Unet
 
@@ -164,67 +181,19 @@ class DiffusionModel(nn.Module):
         model_mean = sqrt_recip_alphas_t * (
             x - betas_t * self.model(x, time=t) / sqrt_one_minus_alphas_cumprod_t
         )
+        
         # self.model.train()
-        if t_index == 0:
+        if t_index <= 1:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
 
             return model_mean + torch.sqrt(posterior_variance_t) * noise
-
-    @torch.no_grad()
-    def p_ddim_sample(
-        self, x: torch.Tensor, t: torch.Tensor, t_index: int, classes: torch.Tensor=None, eta: float=0, temp: float=1.0
-    ) -> torch.Tensor:
-        """
-        Generates samples after DDIM Paper
-
-
-        Args:
-            x (torch.Tensor): _description_
-            t (torch.Tensor): _description_
-            t_index (int): _description_
-            eta (int, optional): _description_. Defaults to 0.
-            temp (float, optional): _description_. Defaults to 1.0.
-
-        Returns:
-            torch.Tensor: _description_
-        """
-        alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
-
-        sqrt_one_minus_alphas_cumprod = model_utils.extract(
-            sqrt_one_minus_alphas_cumprod, t, x.shape
-        )
-        
-        # predict x0 with prediction of noise
-        pred_x0 = (x - sqrt_one_minus_alphas_cumprod * self.model(x, time=t)) / (
-            alpha_t**0.5
-        )
-
-        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
-        
-        # eta = 1: Generative process becomes DDPM
-        # sigma = 0: Deterministic forward process: Generative process becomes DDIM
-        sigma = (
-            eta
-            * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
-        )
-        # Direction from equation 12: added here classes 
-        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t, classes=classes)
-
-        if sigma == 0.0:
-            noise = 0.0
-        else:
-            noise = torch.randn((1, x.shape[1:]))
-        noise *= temp
-
-        # prediction of x_{t-1}: Equation 12 in Paper
-        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
-
-        return x_prev
 
     @torch.no_grad()
     def p_sample_guided(
@@ -283,8 +252,11 @@ class DiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
-            noise = torch.randn_like(x)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
+            # noise = torch.randn_like(x)
+            noise = torch.zeros_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -329,9 +301,156 @@ class DiffusionModel(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             noise = torch.randn_like(x)
             return model_mean + torch.sqrt(posterior_variance_t) * noise
+
+    @torch.no_grad()
+    def p_ddim_sample(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        t_index: int,
+        eta: float = 0,
+        temp: float = 1.0,
+    ) -> torch.Tensor:
+        """
+        Generates samples after DDIM Paper
+
+
+        Args:
+            x (torch.Tensor): _description_
+            t (torch.Tensor): _description_
+            t_index (int): _description_
+            eta (int, optional): _description_. Defaults to 0.
+            temp (float, optional): _description_. Defaults to 1.0.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+        alphas_cumprod_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
+
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
+            self.sqrt_one_minus_alphas_cumprod, t, x.shape
+        )
+
+        # predict x0 with prediction of noise
+        pred_noise = self.model(x, time=t)
+        pred_x0 = (x - sqrt_one_minus_alphas_cumprod_t * pred_noise) / (
+            alphas_cumprod_t**0.5
+        )
+
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+
+        # eta = 1: Generative process becomes DDPM
+        # sigma = 0: Deterministic forward process: Generative process becomes DDIM
+        sigma = (
+            eta
+            * (
+                (1 - alpha_prev_t)
+                / (1 - alphas_cumprod_t)
+                * (1 - alphas_cumprod_t / alpha_prev_t)
+            )
+            ** 0.5
+        )
+        # Direction from equation 12: added here classes
+        # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t)
+        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
+
+        if sigma == 0.0:
+            noise = 0.0
+        else:
+            noise = torch.randn((1, x.shape[1:]))
+        noise *= temp
+
+        # prediction of x_{t-1}: Equation 12 in Paper
+        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
+
+        return x_prev
+
+    @torch.no_grad()
+    def p_ddim_sample_guided(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        t_index: int,
+        classes: torch.Tensor,
+        context_mask: torch.Tensor,
+        eta: float = 0,
+        temp: float = 1.0,
+        cond_weight: float = 2.0,
+    ) -> torch.Tensor:
+        """
+        Generates samples after DDIM Paper
+
+
+        Args:
+            x (torch.Tensor): _description_
+            t (torch.Tensor): _description_
+            t_index (int): _description_
+            eta (int, optional): _description_. Defaults to 0.
+            temp (float, optional): _description_. Defaults to 1.0.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+        batch_size = x.shape[0]
+        # double to do guidance with
+        t_double = t.repeat(2)
+        x_double = x.repeat(2, 1, 1, 1)
+
+        sqrt_one_minus_alphas_cumprod_t = model_utils.extract(
+            self.sqrt_one_minus_alphas_cumprod, t_double, x_double.shape
+        )
+
+        alphas_cumprod_t = model_utils.extract(
+            self.alphas_cumprod, t_double, x_double.shape
+        )
+
+        # classifier free sampling interpolates between guided and non guided using `cond_weight`
+        classes_masked = classes * context_mask
+        classes_masked = classes_masked.type(torch.long)
+        # first half is gui, second
+        preds = self.model(x_double, time=t_double, classes=classes_masked)
+        eps1 = (1 + cond_weight) * preds[:batch_size]
+        eps2 = cond_weight * preds[batch_size:]
+        # predicted noise
+        pred_noise = eps1 - eps2
+
+        # predict x0 with prediction of noise
+        pred_x0 = (x - sqrt_one_minus_alphas_cumprod_t[:batch_size] * pred_noise) / (
+            alphas_cumprod_t[:batch_size] ** 0.5
+        )
+
+        alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+
+        # eta = 1: Generative process becomes DDPM
+        # sigma = 0: Deterministic forward process: Generative process becomes DDIM
+        sigma = (
+            eta
+            * (
+                (1 - alpha_prev_t)
+                / (1 - alphas_cumprod_t)
+                * (1 - alphas_cumprod_t / alpha_prev_t)
+            )
+            ** 0.5
+        )
+        # Direction from equation 12: added here classes: why predict again
+        # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t, classes=classes)
+        dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
+
+        if sigma == 0.0:
+            noise = 0.0
+        else:
+            noise = torch.randn((1, x.shape[1:]))
+        noise *= temp
+
+        # prediction of x_{t-1}: Equation 12 in Paper
+        x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
+
+        return x_prev
 
     def forward(
         self,
@@ -341,7 +460,7 @@ class DiffusionModel(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        #x = utils.normalize_to_neg_one_to_one(x)
+        # x = model_utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -349,7 +468,8 @@ class DiffusionModel(nn.Module):
         # with autocast(enabled=False):
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
@@ -406,14 +526,14 @@ class DiffusionModelExtended(DiffusionModel):
             beta_schedule=beta_schedule,
         )
         self.config = {
-            'image_size': image_size,
-            'in_channels': in_channels,
-            'timesteps': timesteps,
-            'loss_type': loss_type,
-            'beta_schedule': beta_schedule,
-            'loss_weighing': loss_weighing,
-            'min_snr_gamma': min_snr_gamma,
-            'offset_noise_strength': offset_noise_strength
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "loss_type": loss_type,
+            "beta_schedule": beta_schedule,
+            "loss_weighing": loss_weighing,
+            "min_snr_gamma": min_snr_gamma,
+            "offset_noise_strength": offset_noise_strength,
         }
 
         self.offset_noise_strength = offset_noise_strength
@@ -462,7 +582,7 @@ class DiffusionModelExtended(DiffusionModel):
         # self.model.train()
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        # x = utils.normalize_to_neg_one_to_one(x)
+        # x = model_utils.normalize_to_neg_one_to_one(x)
         noise = torch.randn_like(x)
 
         # offset noise
@@ -476,10 +596,9 @@ class DiffusionModelExtended(DiffusionModel):
         # with autocast(enabled=False):
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
-
-   
 
         x_self_cond_x0 = None
         if self.self_condition and random() < 0.5:
@@ -499,8 +618,14 @@ class DiffusionModelExtended(DiffusionModel):
                     else model_utils.identity
                 )
 
-                x_self_cond_x0 = (x_noisy - model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x_noisy.shape) * x_self_cond_noise) / (model_utils.extract(self.alphas_cumprod, t, x.shape) ** 0.5)
-                #x_self_cond_x0 = (model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape) * x_noisy - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape) * x_self_cond_noise)
+                x_self_cond_x0 = (
+                    x_noisy
+                    - model_utils.extract(
+                        self.sqrt_one_minus_alphas_cumprod, t, x_noisy.shape
+                    )
+                    * x_self_cond_noise
+                ) / (model_utils.extract(self.alphas_cumprod, t, x.shape) ** 0.5)
+                # x_self_cond_x0 = (model_utils.extract(self.sqrt_recip_alphas_cumprod, t, x_noisy.shape) * x_noisy - model_utils.extract(self.sqrt_recipm1_alphas_cumprod, t, x_noisy.shape) * x_self_cond_noise)
                 x_self_cond_x0 = maybe_clip(x_self_cond_x0)
 
         # predict and take gradient step
@@ -582,13 +707,12 @@ class DiffusionModelTest(nn.Module):
     ):
         super().__init__()
         self.config = {
-            'image_size': image_size,
-            'in_channels': in_channels,
-            'timesteps': timesteps,
-            'loss_type': loss_type,
-            'beta_schedule': beta_schedule,
-            'use_cfg_me': use_cfg_me
-
+            "image_size": image_size,
+            "in_channels": in_channels,
+            "timesteps": timesteps,
+            "loss_type": loss_type,
+            "beta_schedule": beta_schedule,
+            "use_cfg_me": use_cfg_me,
         }
         self.model = model
         self.timesteps = timesteps
@@ -635,7 +759,11 @@ class DiffusionModelTest(nn.Module):
 
     @torch.no_grad()
     def sample(
-        self, n_samples: int, ema_model: nn.Module=None, classes: torch.Tensor = None, cond_weight: float = 1
+        self,
+        n_samples: int,
+        ema_model: nn.Module = None,
+        classes: torch.Tensor = None,
+        cond_weight: float = 1,
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -693,10 +821,10 @@ class DiffusionModelTest(nn.Module):
             )
 
         if ema_model is not None:
-            self.model = unet_model 
+            self.model = unet_model
 
-        #img.clamp_(-1.0, 1.0)
-        #img = utils.unnormalize_to_zero_to_one(img)
+        # img.clamp_(-1.0, 1.0)
+        # img = model_utils.unnormalize_to_zero_to_one(img)
         return img
 
     @torch.no_grad()
@@ -729,7 +857,9 @@ class DiffusionModelTest(nn.Module):
         if t_index == 0:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             # posterior_variance_t = betas_t
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
@@ -831,10 +961,12 @@ class DiffusionModelTest(nn.Module):
             - betas_t[:batch_size] * x_t / sqrt_one_minus_alphas_cumprod_t[:batch_size]
         )
 
-        if t_index == 0:
+        if t_index <= 1:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             noise = torch.randn_like(x)
             # Algorithm 2 line 4:
             return model_mean + torch.sqrt(posterior_variance_t) * noise
@@ -877,10 +1009,13 @@ class DiffusionModelTest(nn.Module):
             x - betas_t * pred_noise / sqrt_one_minus_alphas_cumprod_t
         )
 
-        if t_index == 0:
+        # if t_index == 0:
+        if t_index <= 1:
             return model_mean
         else:
-            posterior_variance_t = model_utils.extract(self.posterior_variance, t, x.shape)
+            posterior_variance_t = model_utils.extract(
+                self.posterior_variance, t, x.shape
+            )
             noise = torch.randn_like(x)
             return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -892,7 +1027,7 @@ class DiffusionModelTest(nn.Module):
     ):
         device = x.device
         t = torch.randint(0, self.timesteps, (x.shape[0],), device=device).long()
-        #x = utils.normalize_to_neg_one_to_one(x)
+        # x = model_utils.normalize_to_neg_one_to_one(x)
 
         noise = torch.randn_like(x)
 
@@ -900,7 +1035,8 @@ class DiffusionModelTest(nn.Module):
         # with autocast(enabled=False):
         x_noisy = (
             model_utils.extract(self.sqrt_alphas_cumprod, t, x.shape) * x
-            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
+            + model_utils.extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+            * noise
         )
 
         # setting some class labels with probability of p_uncond to 0
