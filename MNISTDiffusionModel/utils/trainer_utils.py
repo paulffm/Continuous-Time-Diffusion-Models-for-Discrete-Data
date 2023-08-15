@@ -11,16 +11,21 @@ from utils.data_utils import plot_figure
 from models.ema import EMA
 from torch.utils.data import DataLoader
 import copy
+
+from typing import Tuple, Optional, Type
+from utils.data_utils import load_config_from_yaml
+from models.unet import Unet
 import json
 
+
 class EarlyStopping:
-    def __init__(self, patience: int=10):
+    def __init__(self, patience: int = 10):
         self.patience = patience
         self.best_val_loss = float("inf")
         self.patience_counter = 0
 
     def _check(self, val_loss: float) -> bool:
-                       # Check for improvement
+        # Check for improvement
         if val_loss < self.best_val_loss:
             self.best_val_loss = val_loss
             self.patience_counter = 0
@@ -33,6 +38,7 @@ class EarlyStopping:
             return True
         else:
             return False
+
 
 class Trainer:
     def __init__(
@@ -90,15 +96,14 @@ class Trainer:
 
         self.model_name = model_name
 
-
         self.train_dataloader = create_train_mnist_dataloaders(
             batch_size=batch_size,
             image_size=image_size,
             num_workers=4,
             use_augmentation=True,
         )
-        
-        #self.train_dataloader, self.val_dataloader, _, = create_full_mnist_dataloaders(batch_size=batch_size, image_size=image_size,num_workers=4, valid_split=0.1, use_augmentation=True)
+
+        # self.train_dataloader, self.val_dataloader, _, = create_full_mnist_dataloaders(batch_size=batch_size, image_size=image_size,num_workers=4, valid_split=0.1, use_augmentation=True)
 
         if self.use_ema:
             self.ema = EMA(beta=0.995)
@@ -106,7 +111,9 @@ class Trainer:
                 copy.deepcopy(self.diffusion_model.model).eval().requires_grad_(False)
             )
 
-    def train_loop(self, use_val_loss: bool=False, early_stopping: EarlyStopping = None) -> None:
+    def train_loop(
+        self, use_val_loss: bool = False, early_stopping: EarlyStopping = None
+    ) -> None:
         training_loss = []
         val_loss = []
 
@@ -136,19 +143,19 @@ class Trainer:
                     self.ema.step_ema(self.ema_model, self.diffusion_model.model)
 
                 training_loss.append(loss.item())
- 
+
                 # early stopping:
-                #if step == 700:
+                # if step == 700:
                 #    break
 
             # not useful for now:
-            # MNIST: 
-            # wie könnte ich einbauen 
-                # => entweder gleichzeitig durch beide iterien=> längenproblem
-                # => nach gewisser batch_anzahl val_loss berechnen   
+            # MNIST:
+            # wie könnte ich einbauen
+            # => entweder gleichzeitig durch beide iterien=> längenproblem
+            # => nach gewisser batch_anzahl val_loss berechnen
             # andere Datasets mit mehr epochen:
-                # => nach jeder epoche
-                # => # => nach gewisser batch_anzahl val_loss berechnen   
+            # => nach jeder epoche
+            # => # => nach gewisser batch_anzahl val_loss berechnen
             """
             if use_val_loss:
                 val_avg_loss, vl_loss = self.compute_validation_loss()
@@ -182,7 +189,10 @@ class Trainer:
                 classes = torch.arange(0, 10).to("cpu")
 
                 self.sampling(
-                    n_samples=16, epoch=epoch_plus1, classes=classes, cond_weight=self.cond_weight
+                    n_samples=16,
+                    epoch=epoch_plus1,
+                    classes=classes,
+                    cond_weight=self.cond_weight,
                 )
 
     def compute_validation_loss(self) -> float:
@@ -226,7 +236,9 @@ class Trainer:
                 n_classes = len(classes)
                 repeated_classes = classes.repeat(n_samples // n_classes)
                 # add rest
-                classes = torch.cat([repeated_classes, classes[:n_samples % n_classes]])
+                classes = torch.cat(
+                    [repeated_classes, classes[: n_samples % n_classes]]
+                )
             print("We sample the following classes: ")
             print(classes)
 
@@ -243,7 +255,7 @@ class Trainer:
 
         else:
             samples = self.diffusion_model.sample(
-                n_samples=n_samples, classes=None, cond_weight=0
+                n_samples=n_samples, classes=None, cond_weight=0, use_ddim=True
             )
 
             if self.use_ema:
@@ -252,6 +264,7 @@ class Trainer:
                     ema_model=self.ema_model,
                     classes=None,
                     cond_weight=0,
+                    use_ddim=True,
                 )
 
         # Plot
@@ -291,3 +304,50 @@ class Trainer:
 
         ### load outside of existing trainer class:
 
+
+def config_saved_models(
+    model_path: str, config_path: str, trainer_nb_epochs: int
+) -> Tuple[DiffusionModel, Trainer, Optional[Type[Unet]]]:
+    """
+    Loads saved and trained model from which you can sample and loads Trainer from which you can train again
+
+    Args:
+        model_path (str): _description_
+        config_path (str): _description_
+        trainer_nb_epochs (int): _description_
+
+    Returns:
+        Tuple[DiffusionModel, Trainer]: _description_
+    """
+    checkpoint = torch.load(model_path)
+    config = load_config_from_yaml(config_path)
+
+    config_unet = config["model"]
+    config_diffusion_model = config["diffusion"]
+
+    # create instance of unet
+    unet_model = Unet(**config_unet)
+    unet_model.load_state_dict(checkpoint["unet_model_state"])
+
+    # create instance of DiffusionModel
+    diffusion_model = DiffusionModel(model=unet_model, **config_diffusion_model)
+    diffusion_model.load_state_dict(checkpoint["diffusion_model_state"])
+
+    optimizer = torch.optim.Adam(unet_model.parameters(), lr=config["optimizer"]["lr"])
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+
+    trainer = Trainer(
+        **config["trainer"], diffusion_model=diffusion_model, optimizer=optimizer
+    )
+    trainer.nb_epochs = trainer_nb_epochs
+    trainer.start_epoch = checkpoint["epoch"]
+    
+    models = [diffusion_model, trainer]
+    
+    # create instance of ema mdoel
+    if trainer.use_ema:
+        ema_model = copy.deepcopy(unet_model).eval().requires_grad_(False)
+        ema_model.load_state_dict(checkpoint["ema_model_state"])
+        models.append(ema_model)
+    
+    return models
