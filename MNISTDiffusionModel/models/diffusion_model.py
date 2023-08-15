@@ -349,7 +349,10 @@ class DiffusionModel(nn.Module):
             alphas_cumprod_t**0.5
         )
 
+        #print("pred_x0", pred_x0.shape)
+
         alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        #print("alpha_prev_t", alpha_prev_t.shape)
 
         # eta = 1: Generative process becomes DDPM
         # sigma = 0: Deterministic forward process: Generative process becomes DDIM
@@ -362,14 +365,18 @@ class DiffusionModel(nn.Module):
             )
             ** 0.5
         )
+        #print("sigma", sigma.shape)
         # Direction from equation 12: added here classes
         # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t)
         dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
+        #print("dir_xt", dir_xt.shape)
 
         if (sigma == 0.0).all():
             noise = 0.0
         else:
-            noise = torch.randn((1, x.shape[1:]))
+            #noise = torch.randn((1, x.shape[1:]))
+            #noise = torch.randn((1, *x.shape[1:]))
+            noise = torch.randn_like(x)
         noise *= temp
 
         # prediction of x_{t-1}: Equation 12 in Paper

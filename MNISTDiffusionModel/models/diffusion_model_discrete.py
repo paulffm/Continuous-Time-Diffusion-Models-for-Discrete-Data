@@ -341,10 +341,12 @@ class BitDiffusionModel(nn.Module):
         """
         alpha_t = model_utils.extract(self.alphas_cumprod, t, x.shape)
         alpha_prev_t = model_utils.extract(self.alphas_cumprod_prev, t, x.shape)
+        
         sigma = (
             eta
             * ((1 - alpha_prev_t) / (1 - alpha_t) * (1 - alpha_t / alpha_prev_t)) ** 0.5
         )
+        
         sqrt_one_minus_alphas_cumprod = model_utils.extract(
             sqrt_one_minus_alphas_cumprod, t, x.shape
         )
@@ -355,10 +357,12 @@ class BitDiffusionModel(nn.Module):
         pred_x0 = (x - sqrt_one_minus_alphas_cumprod * pred_noise) / (alpha_t**0.5)
 
         dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
-        if sigma == 0.0:
+        
+        if (sigma == 0.0).all():
             noise = 0.0
         else:
-            noise = torch.randn((1, x.shape[1:]))
+            #noise = torch.randn((1, x.shape[1:]))
+            noise = torch.randn_like(x)
         noise *= temp
 
         x_prev = (alpha_prev_t**0.5) * pred_x0 + dir_xt + sigma * noise
@@ -437,10 +441,11 @@ class BitDiffusionModel(nn.Module):
         # dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * self.model(x, time=t, classes=classes)
         dir_xt = (1.0 - alpha_prev_t - sigma**2).sqrt() * pred_noise
 
-        if sigma == 0.0:
+        if (sigma == 0.0).all():
             noise = 0.0
         else:
             noise = torch.randn((1, x.shape[1:]))
+            noise = torch.randn_like(x)
         noise *= temp
 
         # prediction of x_{t-1}: Equation 12 in Paper
