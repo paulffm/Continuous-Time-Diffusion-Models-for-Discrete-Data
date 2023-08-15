@@ -20,7 +20,7 @@ from utils.model_utils import *
 # self.init_conv = nn.Conv2d(input_channels, init_dim, (7, 7), padding=3)
 
 
-class PreNorm(nn.Module):
+class PreNormHuggingFace(nn.Module):
     def __init__(self, dim, fn):
         """
         Paper about Group Normalization: https://arxiv.org/abs/1803.08494
