@@ -5,6 +5,37 @@ import yaml
 from einops import rearrange, reduce
 import matplotlib.pyplot as plt
 from torchvision import transforms 
+# raw data encoding:
+    # onehot => implemented
+    # binary 
+    # k mer => implemented
+
+# use pretrained bert
+
+"""
+X_train = np.array([one_hot_encode(x, NUCLEOTIDES, 200) for x in tqdm_notebook(raw_dataset['raw_sequence']) if 'N' not in x])
+X_train = np.array([x.T.tolist() for x in X_train])
+X_train[X_train == 0] = -1
+"""
+"""
+from the following link
+https://github.com/jerryji1993/DNABERT/issues/11
+
+import torch
+from transformers import BertModel, BertConfig, DNATokenizer
+
+dir_to_pretrained_model = "xxx/xxx"
+
+config = BertConfig.from_pretrained('https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-6/config.json')
+tokenizer = DNATokenizer.from_pretrained('dna6')
+model = BertModel.from_pretrained(dir_to_pretrained_model, config=config)
+
+sequence = "AATCTA ATCTAG TCTAGC CTAGCA"
+model_input = tokenizer.encode_plus(sequence, add_special_tokens=True, max_length=512)["input_ids"]
+model_input = torch.tensor(model_input, dtype=torch.long)
+model_input = model_input.unsqueeze(0)   # to generate a fake batch with batch size one
+
+output = model(model_input)"""
 
 def one_hot_encode(seq, nucleotides: list[str], max_seq_len):
     """
@@ -126,7 +157,6 @@ def plot_figure(samples, n_samples: int):
         plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
     
     # Wenn Sie das Bild sofort in der Funktion anzeigen möchten:
-    plt.show()
 
     return fig 
 
@@ -196,3 +226,38 @@ for step, batch in enumerate(train_dl):
     print("x_seq", x_seq.shape) # x_seq torch.Size([16, 4]), las 8,4 
     print("y", y.shape) # y torch.Size([16, 1]), last 8, 1
 """
+def kmer2seq(kmers):
+    """
+    Convert kmers to original sequence
+    
+    Arguments:
+    kmers -- str, kmers separated by space.
+    
+    Returns:
+    seq -- str, original sequence.
+
+    """
+    kmers_list = kmers.split(" ")
+    bases = [kmer[0] for kmer in kmers_list[0:-1]]
+    bases.append(kmers_list[-1])
+    seq = "".join(bases)
+    assert len(seq) == len(kmers_list) + len(kmers_list[0]) - 1
+    return seq
+
+def seq2kmer(seq, k, stride=1):
+    """
+    Convert original sequence to kmers
+    
+    Arguments:
+    seq -- str, original sequence.
+    k -- int, kmer of length k specified.
+    
+    Returns:
+    kmers -- str, kmers separated by space
+
+    """
+    if stride > 1:
+        seq = seq[:-stride]
+    kmer = [seq[x:x+k] for x in range(len(seq)+1-k)[::stride]]
+    kmers = " ".join(kmer)
+    return kmers
