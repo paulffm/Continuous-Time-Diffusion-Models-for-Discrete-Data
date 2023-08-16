@@ -1,0 +1,28 @@
+
+Die Idee, das Embedding von DNABERT (oder jedes andere Modell-basierte Embedding) 
+als Eingabe für ein Diffusionsmodell zu verwenden, um DNA-Sequenzen zu generieren, 
+ist interessant und innovativ. Hier sind einige Schritte, die Sie befolgen können:
+
+1. DNABERT Embedding:
+Ihr Code holt bereits das Embedding für die DNA-Sequenzen mit DNABERT.
+
+2. Diffusionsmodellierung:
+Ein Diffusionsmodell nimmt eine Startverteilung (z.B. das DNABERT-Embedding) und führt 
+dann eine Reihe von Schritten durch, um die endgültige Sequenz zu generieren.
+
+Sie könnten z.B. das Modell von OpenAI namens "Guided Diffusion" verwenden oder ein 
+ähnliches Diffusionsmodell. Das Training eines solchen Modells für die DNA-Sequenzgeneration 
+kann jedoch komplex sein und erfordert eine Menge Daten und Rechenkapazität.
+
+3. DNA-Generierung:
+Nachdem das Diffusionsmodell durchlaufen wurde, sollten Sie eine Verteilung über mögliche 
+DNA-Sequenzen haben. Sie können dann die wahrscheinlichste Sequenz wählen oder mehrere Kandidatensequenzen generieren.
+
+Einige Überlegungen:
+Datenmenge: Sie benötigen eine große Datenmenge von DNA-Sequenzen, um das Diffusionsmodell 
+effektiv zu trainieren.
+Komplexität: Das Training eines Diffusionsmodells kann komplex und rechenintensiv sein. Sie 
+benötigen geeignete Hardware und müssen möglicherweise Hyperparameter anpassen.
+Endziel: Überlegen Sie, was Sie genau erreichen möchten. Wenn Sie beispielsweise DNA-Sequenzen 
+generieren möchten, die biologisch relevant sind, könnte es notwendig sein, zusätzliche Schritte 
+oder Einschränkungen in den Prozess einzuführen.
