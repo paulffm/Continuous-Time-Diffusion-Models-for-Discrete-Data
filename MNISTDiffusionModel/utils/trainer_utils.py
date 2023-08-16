@@ -47,7 +47,7 @@ class Trainer:
         optimizer: torch.optim,
         use_cfg: bool = False,
         use_ema: bool = False,
-        cond_weight: float = 2.0,
+        cond_weight: float = 1.0,
         nb_epochs: int = 1,
         image_size: int = 32,
         batch_size: int = 64,
@@ -100,7 +100,7 @@ class Trainer:
             batch_size=batch_size,
             image_size=image_size,
             num_workers=4,
-            use_augmentation=True,
+            use_augmentation=False,
         )
 
         # self.train_dataloader, self.val_dataloader, _, = create_full_mnist_dataloaders(batch_size=batch_size, image_size=image_size,num_workers=4, valid_split=0.1, use_augmentation=True)
@@ -186,12 +186,13 @@ class Trainer:
                 epoch_plus1 == self.nb_epochs
             ):
                 # classes = sampled.cuda() # context for us just cycles throught the mnist labels
-                classes = torch.arange(0, 10).to("cpu")
+
+                labels = torch.arange(0, 10).to("cpu")
 
                 self.sampling(
-                    n_samples=16,
+                    n_samples=20,
                     epoch=epoch_plus1,
-                    classes=classes,
+                    labels=labels,
                     cond_weight=self.cond_weight,
                 )
 
@@ -215,8 +216,9 @@ class Trainer:
         self,
         n_samples: int,
         epoch: int,
-        classes: torch.Tensor = None,
-        cond_weight: float = 2.0,
+        labels: torch.Tensor = None,
+        cond_weight: float = 1.0,
+        use_ddim: bool = False
     ) -> None:
         """
 
@@ -227,17 +229,17 @@ class Trainer:
         self.diffusion_model.model.eval()  # also in diffusion_model.sample()
 
         if self.use_cfg:
-            if classes is None:
+            if labels is None:
                 # random classes
                 classes_list = np.arange(0, 10)
                 classes = torch.from_numpy(np.random.choice(classes_list, n_samples))
             else:
                 # repeat full sequence
-                n_classes = len(classes)
-                repeated_classes = classes.repeat(n_samples // n_classes)
+                n_labels = len(labels)
+                repeated_labels = labels.repeat(n_samples // n_labels)
                 # add rest
                 classes = torch.cat(
-                    [repeated_classes, classes[: n_samples % n_classes]]
+                    [repeated_labels, labels[:n_samples % n_labels]]
                 )
             print("We sample the following classes: ")
             print(classes)
@@ -250,12 +252,12 @@ class Trainer:
                     n_samples=n_samples,
                     ema_model=self.ema_model,
                     classes=classes,
-                    cond_weight=0,
+                    cond_weight=cond_weight,
                 )
 
         else:
             samples = self.diffusion_model.sample(
-                n_samples=n_samples, classes=None, cond_weight=0, use_ddim=True
+                n_samples=n_samples, classes=None, cond_weight=0, use_ddim=use_ddim
             )
 
             if self.use_ema:
@@ -264,7 +266,7 @@ class Trainer:
                     ema_model=self.ema_model,
                     classes=None,
                     cond_weight=0,
-                    use_ddim=True,
+                    use_ddim=use_ddim,
                 )
 
         # Plot
@@ -343,7 +345,7 @@ def config_saved_models(
     trainer.start_epoch = checkpoint["epoch"]
     
     models = [diffusion_model, trainer]
-    
+
     # create instance of ema mdoel
     if trainer.use_ema:
         ema_model = copy.deepcopy(unet_model).eval().requires_grad_(False)
