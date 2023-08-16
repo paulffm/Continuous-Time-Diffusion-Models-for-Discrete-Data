@@ -34,10 +34,10 @@ def load_config_from_yaml(filename: str) -> dict:
 def plot_figure(samples, n_samples: int):
     # Helper function for plotting and saving samples
 
-    fig = plt.figure(figsize=(16, 16))  # Erstelle einen Figure-Objekt
+    fig = plt.figure(figsize=(16, 16))  
     # int_s2root = int(np.sqrt(n_samples))
     for i in range(n_samples):
-        plt.subplot(4, 4, 1 + i)
+        plt.subplot(5, 4, 1 + i)
         plt.axis("off")
         plt.imshow(samples[i].squeeze(0).clip(0, 1).data.cpu().numpy(), cmap="gray")
 
