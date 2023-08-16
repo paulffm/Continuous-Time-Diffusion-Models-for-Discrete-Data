@@ -118,6 +118,7 @@ class BitDiffusionModel(nn.Module):
             context_mask[n_sample:] = 0.0  # makes second half of batch context free
 
             if use_ddim:
+                print("DDIM Sample Guided")
                 sampling_fn = partial(
                     self.p_ddim_sample_guided,
                     classes=classes,
@@ -127,6 +128,7 @@ class BitDiffusionModel(nn.Module):
                     cond_weight=cond_weight,
                 )
             else:
+                print("DDPM Sample Guided")
                 sampling_fn = partial(
                     self.p_sample_guided,
                     classes=classes,
@@ -140,8 +142,10 @@ class BitDiffusionModel(nn.Module):
             """
         else:
             if use_ddim:
+                print("DDIM Sample")
                 sampling_fn = partial(self.p_ddim_sample, eta=1, temp=1)
             else:
+                print("DDPM Sample")
                 sampling_fn = partial(self.p_sample)
 
         for i in tqdm(reversed(range(0, self.timesteps)), desc="Sampling Time Step:"):
@@ -622,6 +626,7 @@ class BitDiffusionModelExtended(BitDiffusionModel):
                     if clip_x_start
                     else model_utils.identity
                 )
+                # my implementation 
                 x_self_cond_x0 = (
                     x_noisy
                     - model_utils.extract(

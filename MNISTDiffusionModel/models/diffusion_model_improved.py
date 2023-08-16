@@ -20,6 +20,7 @@ class TargetDiffusion(nn.Module):
     Diffusion Model where you can choose which target you want to predict:
     You can choose between x0, Noise and v
     It is also Classifier free guidance, self conditioning and weighing of the loss function included.
+    No DDIM Smapling
     """
 
     def __init__(

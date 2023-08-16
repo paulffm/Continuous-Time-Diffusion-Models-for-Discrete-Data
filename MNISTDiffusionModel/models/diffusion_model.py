@@ -75,8 +75,9 @@ class DiffusionModel(nn.Module):
         n_samples: int,
         ema_model: nn.Module = None,
         classes: torch.Tensor = None,
-        cond_weight: float = 2,
+        cond_weight: float = 1,
         use_ddim: bool = False,
+        eta: float = 1 # for ddim sampling
     ) -> torch.Tensor:
         """
         Generates samples denoised (images)
@@ -118,7 +119,7 @@ class DiffusionModel(nn.Module):
                     self.p_ddim_sample_guided,
                     classes=classes,
                     context_mask=context_mask,
-                    eta=1,
+                    eta=eta,
                     temp=1,
                     cond_weight=cond_weight,
                 )
@@ -138,7 +139,7 @@ class DiffusionModel(nn.Module):
         else:
             if use_ddim:
                 print("DDIM Sample")
-                sampling_fn = partial(self.p_ddim_sample, eta=1, temp=1)
+                sampling_fn = partial(self.p_ddim_sample, eta=eta, temp=1)
             else:
                 print("DDPM Sample")
                 sampling_fn = partial(self.p_sample)
@@ -256,7 +257,7 @@ class DiffusionModel(nn.Module):
             - betas_t[:batch_size] * x_t / sqrt_one_minus_alphas_cumprod_t[:batch_size]
         )
 
-        if t_index <= 5:
+        if t_index == 0:
             return model_mean
         else:
             posterior_variance_t = model_utils.extract(
