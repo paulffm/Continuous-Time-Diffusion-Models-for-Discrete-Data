@@ -97,6 +97,7 @@ def main(cfg, custom_name=None):
 
             training_step.step(state, minibatch, loss, writer)
 
+            # just to save model
             if state['n_iter'] % cfg.saving.checkpoint_freq == 0 or state['n_iter'] == cfg.training.n_iters-1:
                 bookkeeping.save_checkpoint(checkpoint_dir, state,
                     cfg.saving.num_checkpoints_to_keep)
@@ -128,6 +129,8 @@ if __name__ == "__main__":
         from config.train.cifar10 import get_config
     elif args.config == 'piano':
         from config.train.piano import get_config
+    elif args.config == 'mnist':
+        from config.train.mnist import get_config
     else:
         raise NotImplementedError
 

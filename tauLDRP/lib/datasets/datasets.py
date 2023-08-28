@@ -50,6 +50,48 @@ class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
 
         return img
 
+@dataset_utils.register_dataset
+class DiscreteMNIST(torchvision.datasets.MNIST):
+    def __init__(self, cfg, device):
+        super().__init__(root=cfg.data.root, train=cfg.data.train,
+            download=cfg.data.download)
+
+        self.data = torch.from_numpy(self.data) # (N, H, W, C)
+        self.data = self.data.transpose(1,3)
+        self.data = self.data.transpose(2,3)
+
+        self.targets = torch.from_numpy(np.array(self.targets))
+
+        # Put both data and targets on GPU in advance
+        self.data = self.data.to(device).view(-1, 1, 32, 32)
+
+        self.random_flips = cfg.data.random_flips
+        if self.random_flips:
+            self.flip = torchvision.transforms.RandomRotation((-10, 10))
+
+
+    @property
+    def raw_folder(self) -> str:
+        return os.path.join(self.root, 'MNIST', 'raw')
+
+    @property
+    def processed_folder(self) -> str:
+        return os.path.join(self.root, 'MNIST', 'processed')
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target) where target is index of the target class.
+        """
+        img, target = self.data[index], self.targets[index]
+
+        if self.random_flips:
+            img = self.flip(img)
+
+        return img
 
 @dataset_utils.register_dataset
 class LakhPianoroll(Dataset):

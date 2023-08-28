@@ -23,30 +23,43 @@ class GenericAux():
     def calc_loss(self, minibatch, state, writer):
         model = state['model']
         S = self.cfg.data.S
+        # if 4 Dim => like images: True
         if len(minibatch.shape) == 4:
             B, C, H, W = minibatch.shape
             minibatch = minibatch.view(B, C*H*W)
+
         B, D = minibatch.shape
         device = model.device
 
+        # get random timestep between 1.0 and self.min_time
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
+        # calculation of P_t = q_t|0 => transition matrix 
+        # B transition matrices with shape SxS
         qt0 = model.transition(ts) # (B, S, S)
 
+        # R_t = beta_t * R_b
         rate = model.rate(ts) # (B, S, S)
 
 
         # --------------- Sampling x_t, x_tilde --------------------
-
+        # qt0 takes
+        # Jede Zeile von qt0_rows_reg entspricht einer spezifischen Zeile aus einer der B Matrizen in qt0, 
+        # die durch den minibatch-Tensor bestimmt wird.
+        # (B*D) rows with probabilites for each category S 
+        # => qt0_rows_reg[0] = [0.1, 0.2, 0.5, 0.2]
         qt0_rows_reg = qt0[
-            torch.arange(B, device=device).repeat_interleave(D),
-            minibatch.flatten().long(),
+            torch.arange(B, device=device).repeat_interleave(D), # repeats every element 0 to B-1 D-times
+            minibatch.flatten().long(), # minibatch.flatten() => (B, D) => (B*D) (1D-Tensor)
             :
         ] # (B*D, S)
 
+        # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
+        # B*D Zeilen von qt0_rows_reg die Wahrscheinlichkeiten für die S Kategorien.
         x_t_cat = torch.distributions.categorical.Categorical(qt0_rows_reg)
-        x_t = x_t_cat.sample().view(B, D)
+        x_t = x_t_cat.sample().view(B, D) # (B*D,) mit view => (B, D) => D entries with the sampled category and this in B rows
 
+        # Zeilen in rate werden durch die Werte in x_t bestimmt
         rate_vals_square = rate[
             torch.arange(B, device=device).repeat_interleave(D),
             x_t.long().flatten(),
@@ -56,11 +69,15 @@ class GenericAux():
             torch.arange(B*D, device=device),
             x_t.long().flatten()
         ] = 0.0 # 0 the diagonals
+
         rate_vals_square = rate_vals_square.view(B, D, S)
+        #  Summe der Werte entlang der Dimension S
         rate_vals_square_dimsum = torch.sum(rate_vals_square, dim=2).view(B, D)
         square_dimcat = torch.distributions.categorical.Categorical(
             rate_vals_square_dimsum
         )
+        # extract new probabilities
+        # why 2 samples?
         square_dims = square_dimcat.sample() # (B,) taking values in [0, D)
         rate_new_val_probs = rate_vals_square[
             torch.arange(B, device=device),
@@ -70,6 +87,7 @@ class GenericAux():
         square_newvalcat = torch.distributions.categorical.Categorical(
             rate_new_val_probs
         )
+        # Shape: (B,) mit Werten im Bereich [0, S)
         square_newval_samples = square_newvalcat.sample() # (B, ) taking values in [0, S)
         x_tilde = x_t.clone()
         x_tilde[
@@ -78,10 +96,15 @@ class GenericAux():
         ] = square_newval_samples
         # x_tilde (B, D)
 
-
+        # loss func auslagern? => 
+        # Now, when we minimize LCT, we are sampling (x, x ̃) from the forward process and then maximizing 
+        # the assigned model probability for the pairing in the reverse direction, just as in LDT
+        
         # ---------- First term of ELBO (regularization) ---------------
+        # use forward from UNet, MLP, Sequencetransformer
 
-
+        # softmax(logits) => probabilities
+        # p0t_reg = q_{0|t}(x0|x)
         if self.one_forward_pass:
             x_logits = model(x_tilde, ts) # (B, D, S)
             p0t_reg = F.softmax(x_logits, dim=2) # (B, D, S)
