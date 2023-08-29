@@ -11,7 +11,7 @@ import torch.autograd.profiler as profiler
 import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-patch_typeguard()
+#patch_typeguard()
 
 
 class ImageX0PredBase(nn.Module):
