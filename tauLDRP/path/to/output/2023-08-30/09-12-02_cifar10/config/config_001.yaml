@@ -1,0 +1,68 @@
+data:
+  S: 256
+  batch_size: 128
+  download: true
+  name: DiscreteCIFAR10
+  random_flips: true
+  root: path/to/datasets
+  shape:
+  - 3
+  - 32
+  - 32
+  shuffle: true
+  train: true
+device: cpu
+distributed: false
+experiment_name: cifar10
+init_model_path: null
+loss:
+  eps_ratio: 1.0e-09
+  min_time: 0.01
+  name: GenericAux
+  nll_weight: 0.001
+  one_forward_pass: true
+model:
+  Q_sigma: 512.0
+  ch: 128
+  ch_mult:
+  - 1
+  - 2
+  - 2
+  - 2
+  data_min_max:
+  - 0
+  - 255
+  dropout: 0.1
+  ema_decay: 0.9999
+  fix_logistic: false
+  input_channels: 3
+  name: GaussianTargetRateImageX0PredEMA
+  num_res_blocks: 2
+  num_scales: 4
+  rate_sigma: 6.0
+  scale_count_to_put_attn: 1
+  skip_rescale: true
+  time_base: 3.0
+  time_embed_dim: 128
+  time_exponential: 100.0
+  time_scale_factor: 1000
+num_gpus: 0
+optimizer:
+  lr: 0.0002
+  name: Adam
+save_location: path/to/output
+saving:
+  checkpoint_archive_freq: 200000
+  checkpoint_freq: 1000
+  enable_preemption_recovery: false
+  log_low_freq: 10000
+  low_freq_loggers:
+  - denoisingImages
+  num_checkpoints_to_keep: 2
+  preemption_start_day_YYYYhyphenMMhyphenDD: null
+  prepare_to_resume_after_timeout: false
+training:
+  clip_grad: true
+  n_iters: 2000000
+  train_step_name: Standard
+  warmup: 5000

@@ -1,8 +1,8 @@
 import ml_collections
 
 def get_config():
-    save_directory = 'SavedOutput' 
-    datasets_folder = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/lib/datasets'
+    save_directory = 'path/to/output' 
+    datasets_folder = 'path/to/datasets'
 
 
 

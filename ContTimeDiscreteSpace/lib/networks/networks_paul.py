@@ -1,9 +1,105 @@
-import math
 import torch
-from torch import nn
+import torch.nn as nn
+import math
+from torchtyping import TensorType, patch_typeguard
+import lib.networks.network_utils as network_utils
 import torch.nn.functional as F
 import numpy as np
-import utils
+
+
+class MiniUNet(nn.Module):
+    def __init__(self, dim, input_channels, output_channels):
+        super().__init__()
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, dim, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        
+        self.middle = nn.Sequential(
+            nn.Conv2d(dim, dim * 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(dim * 2, dim, kernel_size=3, padding=1),
+            nn.ReLU(),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode="nearest"),
+            nn.Conv2d(dim, output_channels, kernel_size=3, padding=1),
+        )
+
+
+    def forward(self, x):
+        encoder_output = self.encoder(x)
+        print('after encoder:', encoder_output.shape)
+        middle_output = self.middle(encoder_output)
+        print('after middle:', middle_output.shape)
+        decoder_input = self.decoder(middle_output)
+        return decoder_input
+    
+
+class MiniUNetDiscrete(nn.Module):
+    def __init__(self, dim, in_channel: int, out_channel: int, model_output: str, num_classes: int, x_min_max):
+        super().__init__()
+        self.out_channel = out_channel
+        self.num_classes = num_classes
+        self.model_output = model_output
+        self.x_min_max = x_min_max
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channel, dim, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        
+        self.middle = nn.Sequential(
+            nn.Conv2d(dim, dim * 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(dim * 2, dim, kernel_size=3, padding=1),
+            nn.ReLU(),
+        )
+
+        if self.model_output == 'logistic_pars':
+            # The output represents logits or the log scale and loc of a
+            # logistic distribution.
+            self.decoder = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="nearest"),
+                nn.Conv2d(dim, out_channel * 2, kernel_size=3, padding=1),
+            )
+        else:
+            self.decoder = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="nearest"),
+                nn.Conv2d(dim, out_channel * self.num_classes, kernel_size=3, padding=1),
+            ) 
+
+    def forward(self, x):
+        batch_size, _, img_size, _= x.shape
+        x_onehot = F.one_hot(x.to(torch.int64), num_classes=self.num_classes)
+        x = x_centered = network_utils.center_data(x, self.x_min_max)
+
+        encoder_output = self.encoder(x)
+        #print('after encoder:', encoder_output.shape)
+        middle_output = self.middle(encoder_output)
+        #print('after middle:', middle_output.shape)
+        out = self.decoder(middle_output)
+
+        #print('out after decode', out.shape)
+        if self.model_output == 'logistic_pars':
+            loc, log_scale = torch.chunk(out, 2, dim=1)
+            out = torch.tanh(loc + x_centered), log_scale # (B, C * 2, H, W)
+        else:
+            out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, img_size, img_size))
+            #print('out after reshape', out.shape)
+            out = out.permute(0, 1, 3, 4, 2).contiguous()
+            #print('out after cont', out.shape)
+            out = out + x_onehot # (B, C, H, W, num_classes)
+
+        return out
+
+    
+
+#----------------------------Unet from D3PM--------------------------------------------
 
 
 def swish(input):
@@ -293,13 +389,13 @@ class UNet(nn.Module):
             num_heads=1,
             dropout=0,
             model_output=str,  # 'logits' or 'logistic_pars'
-            num_pixel_vals=256,
+            num_classes=256,
             img_size=64
     ):
         super().__init__()
 
         self.model_output = model_output
-        self.num_pixel_vals = num_pixel_vals
+        self.num_classes = num_classes
         self.out_channel = out_channel
         time_dim = channel * 4
 
@@ -394,7 +490,7 @@ class UNet(nn.Module):
             self.out = nn.Sequential(
                 nn.GroupNorm(32, in_channel, eps=1e-06),
                 Swish(),
-                conv2d(in_channel, out_channel * self.num_pixel_vals, 3, padding=1, scale=1e-10),
+                conv2d(in_channel, out_channel * self.num_classes, 3, padding=1, scale=1e-10),
             )
 
     # difference to: https://github.com/rosinality/denoising-diffusion-pytorch/blob/master/model.py#L267
@@ -406,8 +502,8 @@ class UNet(nn.Module):
         #
         # out = spatial_fold(input, self.fold)
         batch_size, channels, height, width = input.shape
-        input_onehot = F.one_hot(input.to(torch.int64), num_classes=self.num_pixel_vals)
-        hid = input = utils.normalize_data(input)
+        input_onehot = F.one_hot(input.to(torch.int64), num_classes=self.num_classes)
+        hid = input = network_utils.center_data(input, self.x_min_max)
 
         for layer in self.down:
             if isinstance(layer, ResBlockWithAttention):
@@ -435,7 +531,7 @@ class UNet(nn.Module):
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
-            out = torch.reshape(out, (batch_size, self.out_channel, self.num_pixel_vals, height, width))
+            out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, height, width))
             print('out after reshape', out.shape)
             out = out.permute(0, 1, 3, 4, 2).contiguous()
             print('out after cont', out.shape)

@@ -1,13 +1,13 @@
 import ml_collections
 
 def get_config():
-    save_directory = 'SavedOutput' 
-    datasets_folder = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/lib/datasets'
+    save_directory = 'path/to/output' 
+    datasets_folder = 'path/to/datasets'
 
 
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = 'mnist'
+    config.experiment_name = 'cifar10'
     config.save_location = save_directory
 
     config.init_model_path = None
@@ -30,14 +30,14 @@ def get_config():
     training.warmup = 5000
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = 'DiscreteMNIST'
+    data.name = 'DiscreteCIFAR10'
     data.root = datasets_folder
     data.train = True
     data.download = True
     data.S = 256
-    data.batch_size = 32 # use 128 if you have enough memory or use distributed
+    data.batch_size = 128 # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.shape = [1,32,32]
+    data.shape = [3,32,32]
     data.random_flips = True
 
     config.model = model = ml_collections.ConfigDict()
@@ -45,11 +45,11 @@ def get_config():
 
     model.ema_decay = 0.9999 #0.9999
 
-    model.ch = 32 #128
+    model.ch = 128
     model.num_res_blocks = 2
     model.num_scales = 4
     model.ch_mult = [1, 2, 2, 2]
-    model.input_channels = 1 #3
+    model.input_channels = 3
     model.scale_count_to_put_attn = 1
     model.data_min_max = [0, 255]
     model.dropout = 0.1

@@ -133,6 +133,8 @@ class SinusoidalPosEmb(nn.Module):
         emb = x[:, None] * emb[None, :]
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
+    
+    
 
 
 class EmbedFC(nn.Module):
