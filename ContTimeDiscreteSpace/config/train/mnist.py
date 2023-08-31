@@ -1,8 +1,8 @@
 import ml_collections
 
 def get_config():
-    save_directory = 'path/to/output' 
-    datasets_folder = 'path/to/datasets'
+    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/SavedModels/MNIST' 
+    datasets_folder = 'ContTimeDiscreteSpace/lib/datasets/MNIST'
 
 
 
@@ -25,7 +25,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
-    training.n_iters = 2000000
+    training.n_iters = 10 #2000000
     training.clip_grad = True
     training.warmup = 5000
 
@@ -35,13 +35,13 @@ def get_config():
     data.train = True
     data.download = True
     data.S = 256
-    data.batch_size = 32 # use 128 if you have enough memory or use distributed
+    data.batch_size = 64 # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.shape = [1,32,32]
     data.random_flips = True
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = 'GaussianTargetRateImageX0PredEMA'
+    model.name = 'GaussianTargetRateImageX0PredEMAPaul'
 
     model.ema_decay = 0.9999 #0.9999
 

@@ -10,6 +10,7 @@ import sys
 import signal
 import argparse
 from config.train.mnist import get_config
+import matplotlib.pyplot as plt
 
 
 import lib.models.models as models
@@ -82,16 +83,20 @@ def main():
     }
 
 
-
+    training_loss = []
     while True:
         for minibatch, _ in tqdm(dataloader):
+            #print("minibatch", minibatch, minibatch.shape)
+            l = training_step.step(state, minibatch, loss, writer)
+            print('l', l, l.shape)
+            training_loss.append(l)
 
-            training_step.step(state, minibatch, loss, writer)
 
             # just to save model
             if state['n_iter'] % cfg.saving.checkpoint_freq == 0 or state['n_iter'] == cfg.training.n_iters-1:
                 bookkeeping.save_checkpoint(checkpoint_dir, state,
                     cfg.saving.num_checkpoints_to_keep)
+                
 
             state['n_iter'] += 1
             if state['n_iter'] > cfg.training.n_iters - 1:
@@ -101,6 +106,10 @@ def main():
         if exit_flag:
             break
 
+    plt.plot(training_loss)
+    plt.title("Training loss")
+    plt.savefig("/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/SavedModels/MNIST/PNGs/training_loss.png")
+    plt.close()
 
 
 

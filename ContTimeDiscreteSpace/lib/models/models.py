@@ -6,12 +6,105 @@ import torch.nn.functional as F
 import numpy as np
 import lib.models.model_utils as model_utils
 import lib.networks.networks as networks
+import lib.networks.networks_paul as networks_paul
 from torchtyping import patch_typeguard, TensorType
 import torch.autograd.profiler as profiler
 import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-#patch_typeguard()
+class ImageX0PredBasePaul(nn.Module):
+    def __init__(self, cfg, device, use_net: bool = True, rank=None):
+        super().__init__()
+
+        self.fix_logistic = cfg.model.fix_logistic
+        ch = cfg.model.ch
+        input_channels = cfg.model.input_channels
+        output_channels = cfg.model.input_channels  # * cfg.data.S
+        data_min_max = cfg.model.data_min_max
+
+        self.S = cfg.data.S
+        self.data_shape = cfg.data.shape
+        if use_net:
+            self.net = networks_paul.MiniUNetDiscrete(
+                dim=ch,
+                in_channel=input_channels,
+                out_channel=output_channels,
+                model_output="logistic_pars",
+                num_classes=self.S,
+                x_min_max=data_min_max,
+            ).to(device)
+        else:
+            self.net = networks_paul.UNet(
+                in_channel=input_channels,
+                out_channel=output_channels,
+                channel=ch,
+                channel_multiplier=cfg.model.ch_mult,
+                n_res_blocks=cfg.model.num_res_blocks,
+                attn_resolutions=[16],
+                num_heads=1,
+                dropout=cfg.model.dropout,
+                model_output="logistic_pars",  # 'logits' or 'logistic_pars'
+                num_classes=self.S,
+                img_size=self.data_shape[2],
+            ).to(device)
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space for each pixel
+        """
+        B, D = x.shape
+        C, H, W = self.data_shape
+        S = self.S
+        x = x.view(B, C, H, W)
+
+        # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution
+        # Truncated logistic output from https://arxiv.org/pdf/2107.03006.pdf
+        # wenden tanh auf beides an, d3pm nur auf mu
+        net_out = self.net(x, times)  # (B, 2*C, H, W)
+        mu = net_out[0].unsqueeze(-1)
+        log_scale = net_out[1].unsqueeze(-1)
+
+        # The probability for a state is then the integral of this continuous distribution between
+        # this state and the next when mapped onto the real line. To impart a residual inductive bias
+        # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
+        # is the normalized input into the model and μ′ is mean outputted from the network.
+        # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
+        inv_scale = torch.exp(-(log_scale - 2))
+
+        bin_width = 2.0 / self.S
+        bin_centers = torch.linspace(
+            start=-1.0 + bin_width / 2,
+            end=1.0 - bin_width / 2,
+            steps=self.S,
+            device=self.device,
+        ).view(1, 1, 1, 1, self.S)
+
+        sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
+        bin_left_logcdf = F.logsigmoid(sig_in_left)
+        sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
+        bin_right_logcdf = F.logsigmoid(sig_in_right)
+
+        logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
+        logits_2 = self._log_minus_exp(
+            -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
+        )
+        if self.fix_logistic:
+            logits = torch.min(logits_1, logits_2)
+        else:
+            logits = logits_1
+
+        logits = logits.view(B, D, S)
+
+        return logits
+
+    def _log_minus_exp(self, a, b, eps=1e-6):
+        """
+        Compute log (exp(a) - exp(b)) for (b<a)
+        From https://arxiv.org/pdf/2107.03006.pdf
+        """
+        return a + torch.log1p(-torch.exp(b - a) + eps)
 
 
 class ImageX0PredBase(nn.Module):
@@ -67,17 +160,17 @@ class ImageX0PredBase(nn.Module):
         S = self.S
         x = x.view(B, C, H, W)
 
-        # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution 
+        # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution
         # Truncated logistic output from https://arxiv.org/pdf/2107.03006.pdf
         # wenden tanh auf beides an, d3pm nur auf mu
         net_out = self.net(x, times)  # (B, 2*C, H, W)
         mu = net_out[:, 0:C, :, :].unsqueeze(-1)
         log_scale = net_out[:, C:, :, :].unsqueeze(-1)
 
-        # The probability for a state is then the integral of this continuous distribution between 
-        # this state and the next when mapped onto the real line. To impart a residual inductive bias 
-        # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt 
-        # is the normalized input into the model and μ′ is mean outputted from the network. 
+        # The probability for a state is then the integral of this continuous distribution between
+        # this state and the next when mapped onto the real line. To impart a residual inductive bias
+        # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
+        # is the normalized input into the model and μ′ is mean outputted from the network.
         # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
         inv_scale = torch.exp(-(log_scale - 2))
 
@@ -366,7 +459,7 @@ class ResidualMLP(nn.Module):
 
         self.S = cfg.data.S
         num_layers = cfg.model.num_layers
-        d_model = cfg.model.d_model # int
+        d_model = cfg.model.d_model  # int
         hidden_dim = cfg.model.hidden_dim
         time_scale_factor = cfg.model.time_scale_factor
         temb_dim = cfg.model.temb_dim
@@ -498,6 +591,15 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         ImageX0PredBase.__init__(self, cfg, device, rank)
+        GaussianTargetRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
+class GaussianTargetRateImageX0PredEMAPaul(EMA, ImageX0PredBasePaul, GaussianTargetRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()

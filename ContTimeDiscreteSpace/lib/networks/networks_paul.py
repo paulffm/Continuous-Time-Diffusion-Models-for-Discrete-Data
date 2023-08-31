@@ -73,7 +73,7 @@ class MiniUNetDiscrete(nn.Module):
                 nn.Conv2d(dim, out_channel * self.num_classes, kernel_size=3, padding=1),
             ) 
 
-    def forward(self, x):
+    def forward(self, x, t):
         batch_size, _, img_size, _= x.shape
         x_onehot = F.one_hot(x.to(torch.int64), num_classes=self.num_classes)
         x = x_centered = network_utils.center_data(x, self.x_min_max)
