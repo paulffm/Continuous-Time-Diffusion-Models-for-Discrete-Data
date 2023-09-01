@@ -40,6 +40,7 @@ def categorical_kl_logits(logits1, logits2, eps=1.e-6):
     Returns:
       KL(C(logits1) || C(logits2)): shape: logits1.shape[:-1]
     """
+    # L_T term in L_vb
     out = (F.softmax(logits1 + eps, dim=-1) * (
                 F.log_softmax(logits1 + eps, dim=-1) - F.log_softmax(logits2 + eps, dim=-1)))
     return torch.sum(out, dim=-1)

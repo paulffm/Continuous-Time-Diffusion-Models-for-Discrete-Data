@@ -48,12 +48,13 @@ def default(val, d):
         return val
     return d() if isfunction(d) else d
 
-
+# L_0? 
 def log_categorical(log_x_start, log_prob):
     return (log_x_start.exp() * log_prob).sum(dim=1)
 
 
 def index_to_log_onehot(x, num_classes):
+    # x to onehot and then take clipped logarithm
     assert x.max().item() < num_classes, f"Error: {x.max().item()} >= {num_classes}"
     x_onehot = F.one_hot(x, num_classes)
 
@@ -63,83 +64,11 @@ def index_to_log_onehot(x, num_classes):
 
     log_x = torch.log(x_onehot.float().clamp(min=1e-30))
 
-
-def log_add_exp(a, b):
-    maximum = torch.max(a, b)
-    return maximum + torch.log(torch.exp(a - maximum) + torch.exp(b - maximum))
-
-
-def exists(x):
-    return x is not None
-
-
-def extract(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
-def default(val, d):
-    if exists(val):
-        return val
-    return d() if isfunction(d) else d
-
-
-def log_categorical(log_x_start, log_prob):
-    return (log_x_start.exp() * log_prob).sum(dim=1)
-
-
-def index_to_log_onehot(x, num_classes):
-    assert x.max().item() < num_classes, f"Error: {x.max().item()} >= {num_classes}"
-    x_onehot = F.one_hot(x, num_classes)
-
-    permute_order = (0, -1) + tuple(range(1, len(x.size())))
-
-    x_onehot = x_onehot.permute(permute_order)
-
-    log_x = torch.log(x_onehot.float().clamp(min=1e-30))
-
-    return log_x
-
-
-def log_add_exp(a, b):
-    maximum = torch.max(a, b)
-    return maximum + torch.log(torch.exp(a - maximum) + torch.exp(b - maximum))
-
-
-def exists(x):
-    return x is not None
-
-
-def extract(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
-def default(val, d):
-    if exists(val):
-        return val
-    return d() if isfunction(d) else d
-
-
-def log_categorical(log_x_start, log_prob):
-    return (log_x_start.exp() * log_prob).sum(dim=1)
-
-
-def index_to_log_onehot(x, num_classes):
-    assert x.max().item() < num_classes, f"Error: {x.max().item()} >= {num_classes}"
-    x_onehot = F.one_hot(x, num_classes)
-
-    permute_order = (0, -1) + tuple(range(1, len(x.size())))
-
-    x_onehot = x_onehot.permute(permute_order)
-
-    log_x = torch.log(x_onehot.float().clamp(min=1e-30))
     return log_x
 
 
 def log_onehot_to_index(log_x):
+    # lo
     return log_x.argmax(1)
 
 
@@ -214,11 +143,15 @@ class MultinomialDiffusion(torch.nn.Module):
         self.register_buffer("Lt_history", torch.zeros(timesteps))
         self.register_buffer("Lt_count", torch.zeros(timesteps))
 
+    # equation (15) KL-Divergence => L_T
     def multinomial_kl(self, log_prob1, log_prob2):
         kl = (log_prob1.exp() * (log_prob1 - log_prob2)).sum(dim=1)
         return kl
 
     def q_pred_one_timestep(self, log_x_t, t):
+        # q(x_t | x_{t-1}) as log prob: p= (1-beta_t) * x_{t-1} + beta_t / K => in log space ..
+        # log_add_exp => for numerical stability in log space 
+
         log_alpha_t = extract(self.log_alpha, t, log_x_t.shape)
         log_1_min_alpha_t = extract(self.log_1_min_alpha, t, log_x_t.shape)
 
@@ -230,6 +163,7 @@ class MultinomialDiffusion(torch.nn.Module):
         return log_probs
 
     def q_pred(self, log_x_start, t):
+        # q(x_t | x_0) as log prob: p= alpha_bar * x_o + (1 -  alpha_bar) / K => in log space log(alpha_bar) + log(x_0) ...
         log_cumprod_alpha_t = extract(self.log_cumprod_alpha, t, log_x_start.shape)
         log_1_min_cumprod_alpha = extract(
             self.log_1_min_cumprod_alpha, t, log_x_start.shape
@@ -243,6 +177,7 @@ class MultinomialDiffusion(torch.nn.Module):
         return log_probs
 
     def predict_start(self, log_x_t, t):
+        # takes noisy image => converts to one hot 
         x_t = log_onehot_to_index(log_x_t)
 
         out = self._denoise_fn(t, x_t)
@@ -251,11 +186,14 @@ class MultinomialDiffusion(torch.nn.Module):
         assert out.size(1) == self.num_classes
         assert out.size()[2:] == x_t.size()[1:]
         log_pred = F.log_softmax(out, dim=1)
+        # makes positives
         return log_pred
 
     def q_posterior(self, log_x_start, log_x_t, t):
         # q(xt-1 | xt, x0) = q(xt | xt-1, x0) * q(xt-1 | x0) / q(xt | x0)
         # where q(xt | xt-1, x0) = q(xt | xt-1).
+        # q(xt-1 | xt, x0) = Cat(x_{t-1}| theta_post) => log probability 
+        # derivation complicated, but equation (13) in Argmax multidiff paper
 
         t_minus_1 = t - 1
         # Remove negative values, will not be used anyway for final decoder
@@ -277,11 +215,14 @@ class MultinomialDiffusion(torch.nn.Module):
         return log_EV_xtmin_given_xt_given_xstart
 
     def p_pred(self, log_x, t):
+
         if self.parametrization == "x0":
             log_x_recon = self.predict_start(log_x, t=t)
             log_model_pred = self.q_posterior(
                 log_x_start=log_x_recon, log_x_t=log_x, t=t
             )
+
+        # predict logits of p_theta(x_{t-1}|x_t)
         elif self.parametrization == "direct":
             log_model_pred = self.predict_start(log_x, t=t)
         else:
@@ -331,6 +272,7 @@ class MultinomialDiffusion(torch.nn.Module):
         return img
 
     def log_sample_categorical(self, logits):
+        # sample noisy image from probability with gumble 
         uniform = torch.rand_like(logits)
         gumbel_noise = -torch.log(-torch.log(uniform + 1e-30) + 1e-30)
         sample = (gumbel_noise + logits).argmax(dim=1)
@@ -375,8 +317,9 @@ class MultinomialDiffusion(torch.nn.Module):
         return sum_except_batch(kl_prior)
 
     def compute_Lt(self, log_x_start, log_x_t, t, detach_mean=False):
+        # true posterior
         log_true_prob = self.q_posterior(log_x_start=log_x_start, log_x_t=log_x_t, t=t)
-
+        # predict 
         log_model_prob = self.p_pred(log_x=log_x_t, t=t)
 
         if detach_mean:
@@ -426,6 +369,7 @@ class MultinomialDiffusion(torch.nn.Module):
 
             log_x_start = index_to_log_onehot(x_start, self.num_classes)
 
+            # q_sample => q(x_t | x_0) as log_probs => sample noisy image from probability => output is noisy image
             kl = self.compute_Lt(
                 log_x_start, self.q_sample(log_x_start=log_x_start, t=t), t
             )

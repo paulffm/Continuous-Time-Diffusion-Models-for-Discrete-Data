@@ -121,7 +121,7 @@ class CategoricalDiffusion(nn.Module):
                                              self.num_pixel_vals)
         logger.info('[trainsition matrix]: {}', self.q_onestep_mats.shape)
 
-        # Construct transition matrices for q(x_t|x_start)
+        # Construct transition matrices for q(x_t|x_start) = q(x_t|x_0) = Cat((x_t; p=x_{t-1} * quer Q_t))
         logger.info('[Construct transition matrices for q(x_t|x_start)]')
 
         q_mat_t = self.q_onestep_mats[0]
@@ -223,7 +223,7 @@ class CategoricalDiffusion(nn.Module):
         return torch.from_numpy(mat)
 
     def _get_gaussian_transition_mat(self, t):
-        r"""Computes transition matrix for q(x_t|x_{t-1}).
+        r"""Computes transition matrix for q(x_t|x_{t-1})=Cat(x_t; p=x_{t-1} * Q_t).
 
         This method constructs a transition matrix Q with
         decaying entries as a function of how far off diagonal the entry is.
@@ -302,6 +302,7 @@ class CategoricalDiffusion(nn.Module):
 
     def _at(self, a, t, x):
         """Extract coefficients at specified timesteps t and conditioning data x.
+        x_t * Q_t => for x_t * Q_t^T
         a = q_mats
         Args:
           a: np.ndarray: plain NumPy float64 array of constants indexed by time.
@@ -334,6 +335,7 @@ class CategoricalDiffusion(nn.Module):
 
     def _at_onehot(self, a, t, x):
         """Extract coefficients at specified timesteps t and conditioning data x.
+        x_0 * quer Q_t
 
         Args:
           a: np.ndarray: plain NumPy float64 array of constants indexed by time.
@@ -355,12 +357,13 @@ class CategoricalDiffusion(nn.Module):
         x = x.view(B, -1, self.num_pixel_vals)
         out = torch.matmul(x, a_t)
         out = out.view(B, C, H, W, self.num_pixel_vals)
+        # gives probability over 
         return out
 
     def q_probs(self, x_start, t):
         """Compute probabilities of q(x_t | x_start).
         über formel (3) in Paper
-        p = x_0 * quer Q_t 
+        q(x_t | x_0) = Cat(x_t; p = x_0 * quer Q_t) 
 
         Args:
           x_start: jnp.ndarray: jax array of shape (bs, ...) of int32 or int64 type.
@@ -372,10 +375,12 @@ class CategoricalDiffusion(nn.Module):
           probs: jnp.ndarray: jax array, shape (bs, x_start.shape[1:],
                                                 num_pixel_vals).
         """
+        # q(x_t | x_0) = Cat(x_t; p = x_0 * quer Q_t => probabilites where we sample from to get x_T
         return self._at(self.q_mats, t, x_start)
 
     def q_sample(self, x_start, t, noise):
-        """Sample from q(x_t | x_start) (i.e. add noise to the data).
+        """Sample from q(x_t | x_start) (i.e. add noise to the data). 
+        returns noisy data => sampled from prob distribution over categorical data with gumbel trick
 
         Args:
           x_start: jnp.array: original clean data, in integer form (not onehot).
@@ -446,6 +451,13 @@ class CategoricalDiffusion(nn.Module):
 
     def q_posterior_logits(self, x_start, x_t, t, x_start_logits):
         """Compute logits of q(x_{t-1} | x_t, x_start)."""
+        # q(x_{t-1} | x_t, x_start) = Cat(x_{t-1}|P = x_t * Q_t^T * x_0 quer * Q_{t-1} / x_0 * quer Q_t * x_t^T)
+        # => x_start_logits = True 
+        # => fact1 = log(x_t * Q_t^T )          ==> Term: q(x_t|x_{t-1})
+        # => fact2 = log(x_0 quer * Q_{t-1})    ==> Term: q(x_{t-1}|x_0)
+        # softmax to normalize
+        # => multiplication in log_space => thats why we add term
+
 
         if x_start_logits:
             assert x_start.shape == x_t.shape + (self.num_pixel_vals,), (
@@ -468,6 +480,7 @@ class CategoricalDiffusion(nn.Module):
 
         # At t=0 we need the logits of q(x_{-1}|x_0, x_start)
         # where x_{-1} == x_start. This should be equal the log of x_0.
+
         out = torch.log(fact1 + self.eps) + torch.log(fact2 + self.eps)
         # t_broadcast = np.expand_dims(t, tuple(range(1, out.ndim)))
         t_broadcast = torch.reshape(t, ([out.shape[0]] + [1] * (len(out.shape) - 1)))
@@ -626,6 +639,7 @@ class CategoricalDiffusion(nn.Module):
         # At the first timestep return the decoder NLL,
         # otherwise return KL(q(x_{t-1}|x_t,x_start) || p(x_{t-1}|x_t))
         assert kl.shape == decoder_nll.shape == t.shape == (x_start.shape[0],)
+        # if t ==0 take decoder_nll(L_0) else kl L_{t-1}=> 
         return torch.where(t == 0, decoder_nll, kl), pred_x_start_logits
 
     def prior_bpd(self, x_start):
@@ -693,6 +707,7 @@ class CategoricalDiffusion(nn.Module):
 
         # t starts at zero. so x_0 is the first noisy datapoint, not the datapoint
         # itself.
+        # probabilites 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
 
         # Calculate the loss
