@@ -25,7 +25,7 @@ import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
-from dataloader import create_train_mnist_dataloaders
+from lib.datasets.datasets import create_train_discrete_mnist_dataloader
 
 
 def main():
@@ -69,7 +69,7 @@ def main():
 
     #dataset = dataset_utils.get_dataset(cfg, device)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
-    dataloader = create_train_mnist_dataloaders(batch_size=32)
+    dataloader = create_train_discrete_mnist_dataloader(batch_size=32)
     loss = losses_utils.get_loss(cfg)
 
     training_step = training_utils.get_train_step(cfg)
