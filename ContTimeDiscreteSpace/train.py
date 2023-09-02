@@ -9,8 +9,10 @@ from tqdm import tqdm
 import sys
 import signal
 import argparse
-from config.train.mnist import get_config
+from config.train.cifar10 import get_config
 import matplotlib.pyplot as plt
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 import lib.models.models as models
@@ -25,7 +27,7 @@ import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
-from lib.datasets.datasets import create_train_discrete_mnist_dataloader
+from lib.datasets.datasets import create_train_discrete_mnist_dataloader, create_train_discrete_cifar10_dataloader
 
 
 def main():
@@ -62,14 +64,13 @@ def main():
 
     device = torch.device(cfg.device)
 
-    device = torch.device(cfg.device)
-
     model = model_utils.create_model(cfg, device)
     print("number of parameters: ", sum([p.numel() for p in model.parameters()]))
 
     #dataset = dataset_utils.get_dataset(cfg, device)
     #dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
     dataloader = create_train_discrete_mnist_dataloader(batch_size=32)
+    #dataloader = create_train_discrete_cifar10_dataloader(batch_size=32)
     loss = losses_utils.get_loss(cfg)
 
     training_step = training_utils.get_train_step(cfg)
@@ -85,7 +86,8 @@ def main():
 
     training_loss = []
     while True:
-        for minibatch, _ in tqdm(dataloader):
+        #for minibatch, _ in tqdm(dataloader):
+        for minibatch in tqdm(dataloader):
             #print("minibatch", minibatch, minibatch.shape)
             l = training_step.step(state, minibatch, loss, writer)
             print('l', l, l.shape)
