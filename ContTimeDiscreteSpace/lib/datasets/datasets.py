@@ -4,7 +4,7 @@ from . import dataset_utils
 import numpy as np
 import torchvision.datasets
 import torchvision.transforms
-from torchvision.datasets import MNIST
+from torchvision.datasets import MNIST, CIFAR10
 from torchvision import transforms
 from torch.utils.data import DataLoader, random_split
 import os
@@ -112,6 +112,11 @@ class LakhPianoroll(Dataset):
 
         return self.data[index]
     
+
+ 
+def denormalize_image(image):
+    return image * 255   
+
 # data 
 def create_train_discrete_mnist_dataloader(
     batch_size: int,
@@ -132,7 +137,7 @@ def create_train_discrete_mnist_dataloader(
         base_transforms.append(transforms.RandomRotation((-10, 10)))
 
     base_transforms.append(transforms.ToTensor())
-    base_transforms.append(lambda x: x * 255) 
+    base_transforms.append(denormalize_image) 
     base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
 
 
@@ -170,7 +175,7 @@ def create_discrete_mnist_dataloader(
         base_transforms.append(transforms.RandomRotation((-10, 10)))
 
     base_transforms.append(transforms.ToTensor())
-    base_transforms.append(lambda x: x * 255) 
+    base_transforms.append(denormalize_image) 
     base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
 
     preprocess = transforms.Compose(base_transforms)
@@ -202,3 +207,43 @@ def create_discrete_mnist_dataloader(
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     return train_loader, valid_loader, test_loader
+
+def create_train_discrete_cifar10_dataloader(
+    batch_size: int,
+    image_size: int = 32,
+    num_workers: int = 4,
+    use_augmentation: bool = False,
+) -> DataLoader:
+    """
+    preprocess=transforms.Compose([transforms.Resize((image_size,image_size)),\
+                                    transforms.ToTensor(),\
+                                    transforms.Normalize([0.5],[0.5])]) #[0,1] to [-1,1]
+    
+    """
+    base_transforms = [transforms.Resize((image_size, image_size))]
+
+    # Add augmentations if needed
+    if use_augmentation:
+        base_transforms.append(transforms.RandomRotation((-10, 10)))
+
+    base_transforms.append(transforms.ToTensor())
+    base_transforms.append(denormalize_image) 
+    base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
+
+
+    train_dataset = CIFAR10(
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/lib/datasets/CIFAR-10",
+        train=True,
+        download=True,
+        transform=base_transforms,
+    )
+    """
+    if use_subset:
+        subset_size = 5000
+        indices = torch.randperm(len(train_dataset))[:subset_size]  # Choose a random subset of specified size
+        train_dataset = Subset(train_dataset, indices)
+    """
+
+    return DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+    )
