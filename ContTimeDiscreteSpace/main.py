@@ -68,6 +68,7 @@ def main():
     sampler = sampling_utils.get_sampler(cfg)
 
     training_loss = []
+    exit_flag = False
     while True:
         # for minibatch, _ in tqdm(dataloader):
         for minibatch, _ in tqdm(dataloader):
