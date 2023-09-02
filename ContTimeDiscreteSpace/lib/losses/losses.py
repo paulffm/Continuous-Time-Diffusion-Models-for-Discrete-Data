@@ -18,7 +18,7 @@ class GenericAux:
         self.one_forward_pass = cfg.loss.one_forward_pass
         self.cross_ent = nn.CrossEntropyLoss()
 
-    def calc_loss(self, minibatch, state, writer):
+    def calc_loss(self, minibatch, state, writer=None):
         model = state["model"]
         S = self.cfg.data.S
         # if 4 Dim => like images: True
@@ -276,9 +276,10 @@ class GenericAux:
         sig_mean = torch.mean(-outer_sum_sig / sig_norm)
 
         reg_mean = torch.mean(reg_term)
-
-        writer.add_scalar("sig", sig_mean.detach(), state["n_iter"])
-        writer.add_scalar("reg", reg_mean.detach(), state["n_iter"])
+        
+        if writer is not None:
+            writer.add_scalar("sig", sig_mean.detach(), state["n_iter"])
+            writer.add_scalar("reg", reg_mean.detach(), state["n_iter"])
 
         neg_elbo = sig_mean + reg_mean
 

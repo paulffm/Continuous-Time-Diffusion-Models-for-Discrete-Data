@@ -599,7 +599,7 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
 class GaussianTargetRateImageX0PredEMAPaul(EMA, ImageX0PredBasePaul, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
+        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=True, rank=rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
