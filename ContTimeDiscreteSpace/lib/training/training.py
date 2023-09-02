@@ -10,7 +10,7 @@ class Standard():
         self.warmup = cfg.training.warmup
         self.lr = cfg.optimizer.lr
 
-    def step(self, state, minibatch, loss, writer):
+    def step(self, state, minibatch, loss, writer=None):
         state['optimizer'].zero_grad()
         l = loss.calc_loss(minibatch, state, writer)
 
@@ -33,7 +33,8 @@ class Standard():
 
         if self.do_ema:
             state['model'].update_ema()
-
-        writer.add_scalar('loss', l.detach(), state['n_iter'])
+            
+        if writer is not None:
+            writer.add_scalar('loss', l.detach(), state['n_iter'])
 
         return l.detach()
