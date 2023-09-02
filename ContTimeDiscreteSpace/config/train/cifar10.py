@@ -1,8 +1,8 @@
 import ml_collections
 
 def get_config():
-    save_directory = 'path/to/output' 
-    datasets_folder = 'path/to/datasets'
+    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/SavedModels/CIFAR-10' 
+    datasets_folder = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/lib/datasets/CIFAR-10'
 
 
 
