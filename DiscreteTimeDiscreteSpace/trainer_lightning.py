@@ -41,9 +41,7 @@ from config import get_config
 def samples_fn(model, diffusion, shape, num_timesteps=None):
     samples = diffusion.p_sample_loop(model, shape, num_timesteps)
 
-    return {
-        'samples': samples
-    }
+    return {"samples": samples}
 
 
 def accumulate(model1, model2, decay=0.9999):
@@ -63,7 +61,7 @@ class DiffusionModel(pl.LightningModule):
         self.config = config
         self.exp_dir = exp_dir
 
-        assert self.config.dataset.name in {'mnist'}
+        assert self.config.dataset.name in {"mnist"}
         self.num_bits = 8
 
         # Ensure that max_time in model and num_timesteps in the betas are the same.
@@ -72,7 +70,12 @@ class DiffusionModel(pl.LightningModule):
 
         assert self.config.train.num_train_steps is not None
         assert self.config.train.num_train_steps % self.config.train.substeps == 0
-        assert self.config.train.retain_checkpoint_every_steps % self.config.train.substeps == 0
+        assert (
+            self.config.train.retain_checkpoint_every_steps % self.config.train.substeps
+            == 0
+        )
+
+        self.validation_step_outputs = []
 
         # Build Unet Model
         self.model = networks.UNet(
@@ -86,7 +89,7 @@ class DiffusionModel(pl.LightningModule):
             dropout=self.config.model.args.dropout,
             model_output=self.config.model.args.model_output,
             num_pixel_vals=self.config.model.args.num_pixel_vals,
-            img_size=self.config.dataset.resolution
+            img_size=self.config.dataset.resolution,
         )
 
         self.ema = networks.UNet(
@@ -100,23 +103,23 @@ class DiffusionModel(pl.LightningModule):
             dropout=self.config.model.args.dropout,
             model_output=self.config.model.args.model_output,
             num_pixel_vals=self.config.model.args.num_pixel_vals,
-            img_size=self.config.dataset.resolution
+            img_size=self.config.dataset.resolution,
         )
 
         # Build Diffusion model
         self.diffusion = make_diffusion(self.config.model)
 
     def setup(self, stage):
-
         self.train_set, self.valid_set = datasets.get_train_data(self.config)
 
     def forward(self, x):
         return self.diffusion.p_sample_loop(self.model, x.shape)
 
     def configure_optimizers(self):
-
-        if self.config.train.optimizer == 'adam':
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.train.learning_rate)
+        if self.config.train.optimizer == "adam":
+            optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.config.train.learning_rate
+            )
         else:
             raise NotImplementedError
 
@@ -125,11 +128,18 @@ class DiffusionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img, _ = batch
         # t = np.random.randint(size=(img.shape[0],), low=0, high=self.num_timesteps, dtype=np.int32)
-        t = (torch.randint(low=0, high=(self.num_timesteps), size=(img.shape[0],))).to(img.device)
+        t = (torch.randint(low=0, high=(self.num_timesteps), size=(img.shape[0],))).to(
+            img.device
+        )
         loss = self.diffusion.training_losses(self.model, img, t).mean()
 
-        accumulate(self.ema, self.model.module if isinstance(self.model, nn.DataParallel) else self.model,
-                   self.ema_decay)
+        accumulate(
+            self.ema,
+            self.model.module
+            if isinstance(self.model, nn.DataParallel)
+            else self.model,
+            self.ema_decay,
+        )
 
         if self.global_step % self.config.train.log_loss_every_steps == 0:
             self.logger.log_metrics({"train_loss": loss}, step=self.global_step)
@@ -139,59 +149,70 @@ class DiffusionModel(pl.LightningModule):
             ckpt_path = os.path.join(self.exp_dir, "retain-checkpoint", filename)
             self.trainer.save_checkpoint(ckpt_path)
 
-        return {'loss': loss}
+        return {"loss": loss}
 
     def train_dataloader(self):
-
-        train_loader = DataLoader(self.train_set,
-                                  batch_size=self.config.train.batch_size,
-                                  shuffle=True,
-                                  pin_memory=True)
+        train_loader = DataLoader(
+            self.train_set,
+            batch_size=self.config.train.batch_size,
+            shuffle=True,
+            pin_memory=True,
+        )
 
         return train_loader
 
     def validation_step(self, batch, batch_nb):
         img, _ = batch
         # t = np.random.randint(size=(img.shape[0],), low=0, high=self.num_timesteps, dtype=np.int32)
-        t = (torch.randint(low=0, high=(self.num_timesteps), size=(img.shape[0],))).to(img.device)
+        t = (torch.randint(low=0, high=(self.num_timesteps), size=(img.shape[0],))).to(
+            img.device
+        )
         loss = self.diffusion.training_losses(self.ema, img, t).mean()
 
         bpd_dict = self.diffusion.calc_bpd_loop(self.ema, img)
-        total_bpd = bpd_dict['total'].mean()
-        prior_bpd = bpd_dict['prior'].mean()
+        total_bpd = bpd_dict["total"].mean()
+        prior_bpd = bpd_dict["prior"].mean()
+        self.validation_step_outputs.append(
+            {"val_loss": loss, "total_bpd": total_bpd, "prior_bpd": prior_bpd}
+        )
 
-        return {'val_loss': loss, "total_bpd": total_bpd, "prior_bpd": prior_bpd}
-        #return {'val_loss': loss}
+        return {"val_loss": loss, "total_bpd": total_bpd, "prior_bpd": prior_bpd}
+        # return {'val_loss': loss}
 
-    """
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+    def on_validation_epoch_end(self):
+        avg_loss = torch.stack([x['val_loss'] for x in self.validation_step_outputs]).mean()
         self.logger.log_metrics({"val_loss": avg_loss}, step=self.global_step)
 
-        avg_total_bpd = torch.stack([x['total_bpd'] for x in outputs]).mean()
+        avg_total_bpd = torch.stack(
+            [x["total_bpd"] for x in self.validation_step_outputs]
+        ).mean()
         self.logger.log_metrics({"total bpd": avg_total_bpd}, step=self.global_step)
 
-        avg_prior_bpd = torch.stack([x['prior_bpd'] for x in outputs]).mean()
+        avg_prior_bpd = torch.stack(
+            [x["prior_bpd"] for x in self.validation_step_outputs]
+        ).mean()
         self.logger.log_metrics({"prior bpd": avg_prior_bpd}, step=self.global_step)
 
+        self.validation_step_outputs.clear()
         # sample
-        shape = (64, 3, self.config.dataset.resolution, self.config.dataset.resolution)
+        shape = (9, 1, self.config.dataset.resolution, self.config.dataset.resolution)
         sample = samples_fn(self.ema, self.diffusion, shape)
 
-        grid = make_grid(sample['samples'], nrow=8)
-        ndarr = grid.permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+        grid = make_grid(sample["samples"], nrow=3)
+        ndarr = grid.permute(1, 2, 0).to("cpu", torch.uint8).numpy()
         im = Image.fromarray(ndarr)
-        self.logger.experiment.log_image(im, name='val-img-step' + str(self.global_step),
-                                         step=self.global_step)
+        self.logger.experiment.log_image(
+            im, name="val-img-step" + str(self.global_step), step=self.global_step
+        )
 
-        return {'val_loss': avg_loss}
-    """
+        return {"val_loss": avg_loss}
 
     def val_dataloader(self):
-        valid_loader = DataLoader(self.valid_set,
-                                  batch_size=self.config.train.batch_size,
-                                  shuffle=False,
-                                  pin_memory=True)
+        valid_loader = DataLoader(
+            self.valid_set,
+            batch_size=self.config.train.batch_size,
+            shuffle=False,
+            pin_memory=True,
+        )
 
         return valid_loader
-
