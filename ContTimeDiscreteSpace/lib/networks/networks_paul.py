@@ -386,11 +386,13 @@ class UNet(nn.Module):
             channel_multiplier: list[int],
             n_res_blocks: int,
             attn_resolutions: list,
+            x_min_max,
             num_heads=1,
             dropout=0,
             model_output=str,  # 'logits' or 'logistic_pars'
             num_classes=256,
-            img_size=64
+            img_size=32
+            
     ):
         super().__init__()
 
@@ -398,6 +400,8 @@ class UNet(nn.Module):
         self.num_classes = num_classes
         self.out_channel = out_channel
         time_dim = channel * 4
+
+        self.x_min_max = x_min_max
 
         attn_strides = []
         for res in attn_resolutions:
