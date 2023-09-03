@@ -10,7 +10,7 @@ def get_config():
         seed=0,
         dataset=config_dict(
             name='mnist',
-            path="datasets/",
+            path="/Users/paulheller/PythonRepositories/Master-Thesis/DiscreteTimeDiscreteSpace/datasets",
             resolution=32,
             args=config_dict(
                 class_conditional=False,
@@ -59,12 +59,12 @@ def get_config():
             ema_decay=0.9999,
             grad_clip=1.0,
             substeps=10,
-            num_train_steps=1500000,  # multiple of substeps
+            num_train_steps= 10, #1500000,  # multiple of substeps
             # logging
             log_loss_every_steps=1000,
             checkpoint_every_secs=900,  # 15 minutes
             retain_checkpoint_every_steps=100000,
-            eval_every_steps=50000,
+            eval_every_steps=2, #50000,
             log_img_dir="exp/mnist/images",
-            eval_every_epoch=50
+            eval_every_epoch=5 #50
         ))

@@ -3,20 +3,21 @@ import torchvision.transforms as T
 import torchvision.datasets
 import numpy as np
 from torch.utils.data import Subset
+from torchvision import transforms
 TRAINSUBSET = 0
 
 
 
 def get_train_data(conf):
-    if conf.dataset.name == 'cifar10':
+    if conf.dataset.name == 'mnist':
         transform = T.Compose(
-            [
+            [transforms.Resize((conf.dataset.resolution, conf.dataset.resolution)),
                 T.ToTensor(),
                 lambda x: x * 255
             ]
         )
         transform_test = T.Compose(
-            [
+            [transforms.Resize((conf.dataset.resolution, conf.dataset.resolution)),
                 T.ToTensor(),
                 lambda x: x * 255
             ]
