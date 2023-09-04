@@ -33,7 +33,7 @@ def get_diffusion_betas(spec, num_timesteps):
   else:
     raise NotImplementedError(spec.type)
 
-
+### transition and rate matrices
 class DTForwardModel(object):
   """Generic discrete time forward model."""
 

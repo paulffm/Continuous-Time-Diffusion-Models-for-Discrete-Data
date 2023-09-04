@@ -11,6 +11,12 @@ from sddm.model import forward_model
 from sddm.model import hollow_model
 from sddm.model import tauldr_model
 
+# Aufbau:
+# forward Model => Q matrices => x_0 to noisy image x_t
+# backward model => Loss calculation
+# DiffusionModel => specify forward model, how to calc loss, how to sample
+# CategoricalDiffusion => inherits from DiffusionModel => just specifiy BackwardsModel and Samples
+
 
 def lbjf_corrector_step(cls, params, rng, tau, xt, t, xt_target=None):
   """Categorical simulation with lbjf."""

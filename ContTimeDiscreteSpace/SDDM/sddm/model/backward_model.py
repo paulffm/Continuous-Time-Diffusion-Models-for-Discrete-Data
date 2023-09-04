@@ -5,7 +5,7 @@ from flax import linen as nn
 import jax
 import jax.numpy as jnp
 from sddm.common import utils
-from sddm.model import forward_model
+from sddm.model import torch_forward_model
 
 
 class BackwardModel(object):
@@ -72,7 +72,7 @@ class CondFactorizedBackwardModel(BackwardModel):
 
   def __init__(self, config):
     super(CondFactorizedBackwardModel, self).__init__(config)
-    self.fwd_model = forward_model.get_fwd_model(self.config)
+    self.fwd_model = torch_forward_model.get_fwd_model(self.config)
 
   def get_logits(self, params, xt, t):
     return self.net.apply({'params': params}, x=xt, t=t)

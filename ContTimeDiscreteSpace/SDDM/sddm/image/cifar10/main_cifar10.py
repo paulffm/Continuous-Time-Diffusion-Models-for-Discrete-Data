@@ -22,6 +22,7 @@ FLAGS = flags.FLAGS
 
 
 def main(argv: Sequence[str]) -> None:
+
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
   config = _CONFIG.value
@@ -39,9 +40,12 @@ def main(argv: Sequence[str]) -> None:
     model = cifar10_utils.CtCifar10(config)
   else:
     raise ValueError('Unknown model type %s' % config.model_type)
+  
   state = model.init_state(model_key)
   sample_fn = jax.pmap(model.sample_loop, axis_name='shard')
+
   fn_plot = functools.partial(model.plot, sample_fn=sample_fn, writer=writer)
+
   if config.phase == 'train':
     train_ds = utils.numpy_iter(data_loader.get_dataloader(config, 'train'))
     train_eval.train_loop(
@@ -51,6 +55,7 @@ def main(argv: Sequence[str]) -> None:
         fn_eval=fn_plot, fn_data_preprocess=model.encode_batch,
     )
   else:
+    # eval
     assert os.path.exists(config.model_init_folder)
     if config.phase == 'eval_score':
       evaluator = cifar10_utils.Cifar10FidIs(
