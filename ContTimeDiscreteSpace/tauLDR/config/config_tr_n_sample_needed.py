@@ -28,7 +28,7 @@ def get_config():
     training.n_iters = 5000 #2000 #2000000
     training.clip_grad = True
     training.warmup = 50 # 5000
-    training.resume = True 
+    training.resume = True
 
     config.data = data = ml_collections.ConfigDict()
     data.name = 'DiscreteMNIST'
@@ -70,15 +70,6 @@ def get_config():
     optimizer.lr = 2e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-
-    saving.enable_preemption_recovery = False
-    saving.preemption_start_day_YYYYhyphenMMhyphenDD = None
-    saving.checkpoint_freq = 1000
-    saving.num_checkpoints_to_keep = 2
-    saving.checkpoint_archive_freq = 3000 #200000
-    saving.log_low_freq = 10000
-    saving.low_freq_loggers = ['denoisingImages']
-    saving.prepare_to_resume_after_timeout = False
 
 
     config.sampler = sampler = ml_collections.ConfigDict()

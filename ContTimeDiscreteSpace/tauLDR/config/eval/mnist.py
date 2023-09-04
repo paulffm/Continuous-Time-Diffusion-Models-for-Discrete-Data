@@ -3,8 +3,8 @@ import ml_collections
 def get_config():
 
     datasets_folder = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/lib/datasets/MNIST'
-    model_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/2023-09-03/01-12-44_mnist/checkpoints/ckpt_0000001999.pt'
-    model_config_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/2023-09-03/01-12-44_mnist/config/config_001.yaml'
+    model_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/2023-09-03/19-50-13_mnist/checkpoints/ckpt_0000004999.pt'
+    model_config_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/2023-09-03/19-50-13_mnist/config/config_001.yaml'
 
     config = ml_collections.ConfigDict()
     config.eval_name = 'MNIST'
