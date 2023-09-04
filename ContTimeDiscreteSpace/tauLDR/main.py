@@ -1,18 +1,10 @@
 import torch
-import torch.nn as nn
-import ml_collections
-import yaml
 import lib.utils.bookkeeping as bookkeeping
-from pathlib import Path
-import torch.utils.tensorboard as tensorboard
 from tqdm import tqdm
-import sys
-import signal
-import argparse
 from config.config_train_sample import get_config
 import matplotlib.pyplot as plt
 import ssl
-
+import os 
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -26,46 +18,62 @@ import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
+import lib.sampling.sampling as sampling
+import lib.sampling.sampling_utils as sampling_utils
 from lib.datasets.datasets import (
     create_train_discrete_mnist_dataloader,
     create_train_discrete_cifar10_dataloader,
 )
-
-import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 
 
 def main():
-    cfg = get_config()
-    custom_name = None
+
+    train_resume = True
+
+    if not train_resume:
+        cfg = get_config()
+        bookkeeping.save_config(cfg, cfg.save_location)
+   
+    else:
+        path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/'
+        date = '2023-09-04'
+        config_name = 'config_001.yaml'
+        config_path = os.path.join(path, date, config_name)
+
+        cfg = bookkeeping.load_config(config_path)
+    
 
     device = torch.device(cfg.device)
-    save_dir, checkpoint_dir, config_dir = bookkeeping.create_experiment_folder(
-        cfg.save_location,
-        cfg.experiment_name if custom_name is None else custom_name,
-        custom_name is None,
-    )
-    bookkeeping.save_config_as_yaml(cfg, config_dir)
 
     model = model_utils.create_model(cfg, device)
     print("number of parameters: ", sum([p.numel() for p in model.parameters()]))
 
-    # dataset = dataset_utils.get_dataset(cfg, device)
-    # dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
-    dataloader = create_train_discrete_mnist_dataloader(batch_size=32)
-    # dataloader = create_train_discrete_cifar10_dataloader(batch_size=32)
     loss = losses_utils.get_loss(cfg)
 
     training_step = training_utils.get_train_step(cfg)
 
     optimizer = optimizers_utils.get_optimizer(model.parameters(), cfg)
 
+    sampler = sampling_utils.get_sampler(cfg)
+
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
-    n_samples = 9
+    dataloader = create_train_discrete_mnist_dataloader(batch_size=32)
 
-    sampler = sampling_utils.get_sampler(cfg)
+    if train_resume:
+        checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
+        model_name = 'ckpt_0000004999.pt'
+        checkpoint_path = os.path.join(path, date, model_name)
+        state = bookkeeping.load_state(state, checkpoint_path)
+        cfg.training.n_iters = 10000
+        cfg.sampler.sample_freq = 10000
+        
+
+
+    n_samples = 16
+
 
     training_loss = []
     exit_flag = False
@@ -82,9 +90,7 @@ def main():
                 state["n_iter"] + 1 % cfg.saving.checkpoint_freq == 0
                 or state["n_iter"] == cfg.training.n_iters - 1
             ):
-                bookkeeping.save_checkpoint(
-                    checkpoint_dir, state, cfg.saving.num_checkpoints_to_keep
-                )
+                bookkeeping.save_state(state, cfg.save_location)
 
             if (
                 state["n_iter"] + 1 % cfg.sampler.sample_freq == 0
@@ -102,9 +108,10 @@ def main():
                     plt.subplot(3, 3, 1 + i)
                     plt.axis("off")
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
+                n_iter = state["n_iter"]
                 
 
-                plt.savefig(f"/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/samples_epoch_.png")
+                plt.savefig(f"/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs/samples_epoch_{n_iter}.png")
                 #plt.show()
                 plt.close()
 
@@ -119,7 +126,7 @@ def main():
     plt.plot(training_loss)
     plt.title("Training loss")
     plt.savefig(
-        "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/training_loss.png"
+        "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs/training_loss.png"
     )
     plt.close()
 
