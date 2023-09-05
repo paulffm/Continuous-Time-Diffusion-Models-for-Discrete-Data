@@ -22,7 +22,8 @@ class BackwardModel(object):
             x=torch.zeros(input_shape, dtype=torch.int32),
             t=torch.zeros((1,), dtype=torch.float32),
         )
-        return self.net.init({"params": global_rng}, **init_kwargs)["params"]
+        # wahrscheinlich falsch
+        return self.net(**init_kwargs).state_dict()
 
     def get_lambda_t(self, t):
         """Get lambda schedule."""
@@ -50,14 +51,17 @@ def get_logprob_with_logits(cls, xt, t, logits, xt_target=None):
         qt0 = cls.fwd_model.transition(t)
         if cls.config.logit_type == "reverse_prob":
             p0t = F.softmax(logits, dim=-1)
-            qt0 = torch.gather(qt0, 1, xt.unsqueeze(-1)).squeeze(-1)
+            #
+
+            qt0 = torch_utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
             prob_all = p0t @ qt0
             log_prob = torch.log(prob_all + 1e-35)
         elif cls.config.logit_type == "reverse_logscale":
             log_p0t = F.log_softmax(logits, dim=-1)
             log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
-            log_qt0 = log_qt0.unsqueeze(list(range(1, xt.dim())))
+            log_qt0 = torch_utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
             log_p0t = log_p0t.unsqueeze(-1)
+
             log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
         else:
             raise ValueError("Unknown logit_type: %s" % cls.config.logit_type)
@@ -106,23 +110,25 @@ class CondFactorizedBackwardModel(BackwardModel):
                 - torch_utils.log1mexp(ll_xt)
             )
         elif self.config.loss_type == "elbo":
-            xt_onehot = F.one_hot(xt, self.config.vocab_size)
-            b = xt.unsqueeze(tuple(range(1, xt.dim())))
+            xt_onehot = F.one_hot(xt, num_classes=self.config.vocab_size)
+            b = torch_utils.expand_dims(
+                torch.arange(xt.shape[0]), tuple(range(1, xt.dim()))
+            )
             qt0_x2y = self.fwd_model.transition(t)
             qt0_y2x = qt0_x2y.permute(0, 2, 1)
-            qt0_y2x = torch.gather(qt0_y2x, 1, xt.unsqueeze(-1)).squeeze(-1)
+            qt0_y2x = qt0_y2x[b, xt]
             ll_xt = ll_xt.unsqueeze(-1)
             backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
             first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
 
-            qt0_x2y = torch.gather(qt0_x2y, 1, xt.unsqueeze(-1)).squeeze(-1)
+            qt0_x2y = qt0_x2y[b, xt]
             fwd = (ll_xt - ll_all) * qt0_x2y
             second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
             loss = first_term - second_term
         else:
             raise ValueError("Unknown loss_type: %s" % self.config.loss_type)
         weight = self.get_lambda_t(t)
-        weight = weight.unsqueeze(list(range(1, loss.dim())))
+        weight = torch_utils.expand_dims(weight, axis=list(range(1, loss.dim())))
         loss = loss * weight
         return loss
 

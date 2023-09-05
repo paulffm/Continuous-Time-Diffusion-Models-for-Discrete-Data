@@ -5,7 +5,9 @@ import math
 import functools
 import torch
 import torch.nn as nn
+from sddm.common import torch_utils
 import torch.nn.functional as F
+import torch.nn.init as init
 
 
 class MLP(nn.Module):
@@ -26,6 +28,7 @@ class MLP(nn.Module):
 
 
 def apply_film(film_params, x):
+    film_params = film_params.unsqueeze(1)
     assert film_params.dim() == 3 and x.dim() == 3
     a, b = torch.chunk(film_params, 2, dim=-1)
     x = a * x + b
@@ -37,12 +40,14 @@ class ConcatReadout(nn.Module):
         super(ConcatReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
+        out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
+        self.predictor = MLP([2 * self.config.embed_dim, out_dim], activation=nn.GELU())
 
     def forward(self, l2r_embed, r2l_embed, _):
         state = torch.cat([l2r_embed, r2l_embed], dim=-1)
-        out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
-        predictor = MLP([2 * self.config.embed_dim, out_dim], activation=nn.GELU())
-        logits = predictor(state)
+        #out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
+        #predictor = MLP([2 * self.config.embed_dim, out_dim], activation=nn.GELU())
+        logits = self.predictor(state)
         return logits
 
 
@@ -53,6 +58,17 @@ class ResidualReadout(nn.Module):
         self.readout_dim = readout_dim
         self.embed_dim = None  # To be set during forward
 
+        self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
+
+        
+        #self.dense_in = nn.Linear(temb.shape[1], 2 * embed_dim)
+        #self.mlp = MLP([self.config.mlp_dim, 4 * temb.shape[1]], activation=nn.GELU())
+        #self.lnorm = nn.LayerNorm(embed_dim)
+
+        #self.dense_out  = nn.Linear(embed_dim, self.out_dim)
+
+    # es fehlt temb.shape und embed_dim in config , dann könnte alles in __init_
+
     def forward(self, x, temb):
         embed_dim = x.shape[-1]
         temb = MLP([self.config.mlp_dim, 4 * temb.shape[1]], activation=nn.GELU())(temb)
@@ -61,8 +77,7 @@ class ResidualReadout(nn.Module):
             z = MLP([self.config.mlp_dim, embed_dim], activation=nn.GELU())(x)
             x = nn.LayerNorm(embed_dim)(x + z)
             x = apply_film(film_params, x)
-        out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
-        logits = nn.Linear(embed_dim, out_dim)(x)
+        logits = nn.Linear(embed_dim, self.out_dim)(x)
         return logits
 
 
@@ -71,10 +86,12 @@ class ConcatResidualReadout(nn.Module):
         super(ConcatResidualReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
+        self.model = ResidualReadout(self.config, readout_dim=self.readout_dim)
 
     def forward(self, l2r_embed, r2l_embed, temb):
         state = torch.cat([l2r_embed, r2l_embed], dim=-1)
-        return ResidualReadout(self.config, readout_dim=self.readout_dim)(state, temb)
+        #return ResidualReadout(self.config, readout_dim=self.readout_dim)(state, temb)
+        return self.model(state, temb)
 
 
 def transformer_timestep_embedding(timesteps, embedding_dim, max_positions=10000):
@@ -129,25 +146,6 @@ class TransformerMlpBlock(nn.Module):
         return self.layers(inputs)
 
 
-def sa_block(config, inputs, masks):
-    if config.transformer_norm_type == "prenorm":
-        x = nn.LayerNorm(inputs.shape[-1])(inputs)
-        x = nn.MultiheadAttention(
-            config.qkv_dim, config.num_heads, dropout=config.attention_dropout_rate
-        )(x, x, x, attn_mask=masks)
-        x = nn.Dropout(config.dropout_rate)(x)
-        x = x + inputs
-    elif config.transformer_norm_type == "postnorm":
-        x = nn.MultiheadAttention(
-            config.qkv_dim, config.num_heads, dropout=config.attention_dropout_rate
-        )(inputs, inputs, inputs, attn_mask=masks)
-        x = nn.Dropout(config.dropout_rate)(x)
-        x = x + inputs
-        x = nn.LayerNorm(inputs.shape[-1])(x)
-    else:
-        raise ValueError("unknown norm type %s" % config.transformer_norm_type)
-    return x
-
 
 def cross_attention(config, l2r_embed, r2l_embed, temb):
     seq_len = l2r_embed.shape[1]
@@ -167,8 +165,10 @@ def cross_attention(config, l2r_embed, r2l_embed, temb):
     logits = torch.einsum("bqhd,bkhd->bhqk", query, key)
 
     idx = torch.arange(seq_len, dtype=torch.int32)
+    # fehler hier
     att_l2r_mask = torch.ge(torch.unsqueeze(idx, 1), torch.unsqueeze(idx, 0))
     att_r2l_mask = torch.le(torch.unsqueeze(idx, 1), torch.unsqueeze(idx, 0))
+    # fehler
     att_t = torch.ones((1, seq_len, 1))
     joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1)
     joint_mask = joint_mask.unsqueeze(0)
@@ -184,6 +184,7 @@ class AttentionReadout(nn.Module):
         super(AttentionReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
+        self.model = ResidualReadout(self.config, self.readout_dim)
 
     def forward(self, l2r_embed, r2l_embed, temb):
         inputs = l2r_embed + r2l_embed
@@ -198,42 +199,50 @@ class AttentionReadout(nn.Module):
             x = nn.LayerNorm(inputs.shape[-1])(x)
         else:
             raise ValueError("unknown norm type %s" % self.config.transformer_norm_type)
-        return ResidualReadout(self.config, self.readout_dim)(x, temb)
-
-
-def ff_block(config, x):
-    if config.transformer_norm_type == "prenorm":
-        z = nn.LayerNorm(x.shape[-1])(x)
-        z = TransformerMlpBlock(
-            config.mlp_dim,
-            dtype=config.dtype,
-            dropout_rate=config.dropout_rate,
-            dropout_deterministic=config.dropout_deterministic,
-        )(z)
-        z = x + z
-    elif config.transformer_norm_type == "postnorm":
-        z = TransformerMlpBlock(
-            config.mlp_dim,
-            dtype=config.dtype,
-            dropout_rate=config.dropout_rate,
-            dropout_deterministic=config.dropout_deterministic,
-        )(x)
-        z = x + z
-        z = nn.LayerNorm(z.shape[-1])(z)
-    else:
-        raise ValueError("unknown norm type %s" % config.transformer_norm_type)
-    return z
+        #return ResidualReadout(self.config, self.readout_dim)(x, temb)
+        return self.model(x, temb)
 
 
 class TransformerBlock(nn.Module):
     def __init__(self, config):
         super(TransformerBlock, self).__init__()
         self.config = config
+        self.multi_head_attn = nn.MultiheadAttention(
+            config.qkv_dim, config.num_heads, dropout=config.attention_dropout_rate
+        )
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.trans_mlp_block = TransformerMlpBlock(
+            config.mlp_dim,
+            dtype=config.dtype,
+            dropout_rate=config.dropout_rate,
+            dropout_deterministic=config.dropout_deterministic,
+        )
 
     def forward(self, inputs, masks):
         assert inputs.ndim == 3
-        x = sa_block(self.config, inputs, masks)
-        z = ff_block(self.config, x)
+
+        if self.config.transformer_norm_type == "prenorm":
+            # sa
+            x = nn.LayerNorm(inputs.shape[-1])(inputs)
+            x = self.multi_head_attn(x, x, x, attn_mask=masks)
+            x = self.dropout(x)
+            x = x + inputs
+
+            # ff
+            z = nn.LayerNorm(x.shape[-1])(x)
+            z = self.trans_mlp_block(z)
+            z = x + z
+        else:
+            # sa
+            x = self.multi_head_attn(inputs, inputs, inputs, attn_mask=masks)
+            x = self.dropout(x)
+            x = x + inputs
+            x = nn.LayerNorm(inputs.shape[-1])(x)
+            # ff
+            z = self.trans_mlp_block(x)
+            z = x + z
+            z = nn.LayerNorm(z.shape[-1])(z)
+
         return z
 
 
@@ -243,6 +252,10 @@ class TransformerEncoder(nn.Module):
     def __init__(self, config):
         super(TransformerEncoder, self).__init__()
         self.config = config
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.transformer_block = TransformerBlock(config)
+
+
 
     def forward(self, x, temb, conditioner=None):
         assert x.ndim == 3 and temb.ndim == 2
@@ -253,13 +266,14 @@ class TransformerEncoder(nn.Module):
         else:
             conditioner = torch.cat([conditioner, temb], dim=1)
         x = torch.cat([conditioner, x], dim=1)
+        # könnte noch in init
         pos_embed = nn.Parameter(
             torch.empty(1, x.size(1), x.size(2)).uniform_(), requires_grad=True
         )
         x = x + pos_embed
-        x = nn.Dropout(config.dropout_rate)(x)
+        x = self.dropout(x)
         for layer_idx in range(config.num_layers):
-            x = TransformerBlock(config)(x, masks=None)
+            x = self.transformer_block(x, masks=None)
         x = x[:, 1:]
         return x
 
@@ -270,19 +284,24 @@ class MaskedTransformer(nn.Module):
     def __init__(self, config):
         super(MaskedTransformer, self).__init__()
         self.config = config
+        self.trans_encoder = TransformerEncoder(config)
+
+        if config.readout == "mlp":
+            self.model = MLP([2 * config.embed_dim, config.vocab_size], activation=nn.functional.gelu)
+        elif config.readout == "resnet":
+            self.model = ResidualReadout(config)
+        else:
+            raise ValueError("Unknown readout type %s" % config.readout)
 
     def forward(self, x, temb, pos):
         config = self.config
-        embed = TransformerEncoder(config)(x, temb)
+        embed = self.trans_encoder(x, temb)
         embed = embed[:, pos].unsqueeze(1)
         if config.readout == "mlp":
-            logits = MLP(
-                [2 * config.embed_dim, config.vocab_size], activation=nn.functional.gelu
-            )(embed)
+            logits = self.model(embed)
         elif config.readout == "resnet":
-            logits = ResidualReadout(config)(embed, temb)
-        else:
-            raise ValueError("Unknown readout type %s" % config.readout)
+            logits = self.model(embed, temb)
+
         return logits
 
 
@@ -293,6 +312,8 @@ class UniDirectionalTransformer(nn.Module):
         super(UniDirectionalTransformer, self).__init__()
         self.config = config
         self.direction = direction
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.trans_block = TransformerBlock(config)
 
     def forward(self, x, temb, conditioner=None):
         assert x.ndim == 3 and temb.ndim == 2
@@ -304,18 +325,21 @@ class UniDirectionalTransformer(nn.Module):
         config = self.config
         cond_dim = conditioner.size(1)
         concat_dim = x.size(1) + cond_dim - 1
-        pos_idx = torch.arange(concat_dim, dtype=torch.int32).unsqueeze(0)
+        pos_idx = torch_utils.expand_dims(torch.arange(concat_dim, dtype=torch.int32), axis=0)
+
+        # wahrscheinlich falsch
         if self.direction == "l2r":
             x = torch.cat([conditioner, x[:, :-1]], dim=1)
             mask = pos_idx >= pos_idx.transpose(1, 0)
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)
             mask = pos_idx <= pos_idx.transpose(1, 0)
-        pos_embed = nn.Parameter(
-            torch.empty(1, concat_dim, x.size(2)).uniform_(), requires_grad=True
-        )
+        pos_embed = nn.Parameter(init.xavier_uniform_(
+            torch.empty(1, concat_dim, x.size(2), dtype=config.dtype)
+        ))
+        #
         x = x + pos_embed
-        x = nn.Dropout(config.dropout_rate)(x)
+        x = self.dropout(x)
         for layer_idx in range(config.num_layers):
-            x = TransformerBlock(config)(x, masks=mask)
+            x = self.trans_block(x, masks=mask)
         return x

@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from sddm.common import torch_utils
+import functorch
 
 
 class ForwardModel:
@@ -28,10 +30,10 @@ class ForwardModel:
         t = torch.rand(bsize)
         t = t * time_duration
         qt = self.transition(t)
-        b = torch.arange(bsize).unsqueeze(tuple(range(1, x0.dim())))
+        b = torch_utils.expand_dims(torch.arange(bsize), (tuple(range(1, x0.dim()))))
         qt0 = qt[b, x0]
         logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.multinomial(torch.exp(logits), num_samples=1).squeeze()
+        xt = torch.distributions.categorical.Categorical(logits=logits).sample()
         return qt0, xt, t
 
     def sample_xt(self, x0, time_duration, rng):
@@ -47,9 +49,9 @@ def get_rate_matrix(rate):
     rate = rate - np.diag(np.sum(rate, axis=1))
     eigvals, eigvecs = np.linalg.eigh(rate)
     return (
-        torch.tensor(rate, dtype=torch.float32),
-        torch.tensor(eigvals, dtype=torch.float32),
-        torch.tensor(eigvecs, dtype=torch.float32),
+        torch.tensor(rate, dtype=torch.float32),  # (S, S)
+        torch.tensor(eigvals, dtype=torch.float32),  # (S, )
+        torch.tensor(eigvecs, dtype=torch.float32),  # (S,S)
     )
 
 
@@ -59,7 +61,7 @@ def usvt(eigvecs, inv_eigvecs, diag_embed):
     vt = inv_eigvecs.view(1, ns, ns)
     transitions = torch.matmul(torch.matmul(u, diag_embed), vt)
     transitions = transitions / torch.sum(transitions, dim=-1, keepdim=True)
-    return transitions
+    return transitions  # (1, S, S)
 
 
 class UniformForward(ForwardModel):
@@ -80,8 +82,13 @@ class UniformForward(ForwardModel):
 
     def transition(self, t):
         bsize = t.size(0)
-        diag_embed = torch.diag(torch.exp(self.eigvals.unsqueeze(0) * t.unsqueeze(1)))
-        transitions = usvt(self.eigvecs, self.eigvecs.t(), diag_embed)
+        diag_embed = functorch.vmap(torch.diag)(
+            torch.exp(
+                torch.reshape(self.eigvals, (1, self.num_states))
+                * torch.reshape(t, (bsize, 1))
+            )
+        )
+        transitions = usvt(self.eigvecs, self.eigvecs.transpose(0, 1), diag_embed)
         return transitions
 
     def transit_between(self, t1, t2):
@@ -120,27 +127,33 @@ class UniformVariantForward(UniformForward):
             raise ValueError("Unknown t_func %s" % self.t_func)
 
     def rate_mat(self, t):
-        rate_scalars = self._rate(t).unsqueeze(1)
-        base = self.rate_matrix.t().unsqueeze(0)
+        rate_scalars = self._rate(t).view(t.size(0), 1, 1)
+        base = self.rate_matrix.t().view(1, self.num_states, self.num_states)
         r = base * rate_scalars
         return r
 
     def rate(self, y, t):
         r = self.rate_mat(t)
-        bidx = torch.arange(t.size(0)).unsqueeze(tuple(range(1, y.dim())))
+        bidx = torch_utils.expand_dims(
+            torch.arange(t.size(0)), axis=tuple(range(1, y.dim()))
+        )
         result = r[bidx, y]
         return result
 
     def transit_between(self, t1, t2):
         bsize = t2.size(0)
         d_integral = self._integral(t2) - self._integral(t1)
-        diag_embed = torch.diag(
-            torch.exp(self.eigvals.unsqueeze(0) * d_integral.unsqueeze(1))
+        diag_embed = functorch.vmap(torch.diag)(
+            torch.exp(
+                torch.reshape(self.eigvals, (1, self.num_states))
+                * torch.reshape(d_integral, (bsize, 1))
+            )
         )
         transitions = usvt(self.eigvecs, self.eigvecs.t(), diag_embed)
         return transitions
 
     def transition(self, t):
+        # difference to jnp => they give only 0
         return self.transit_between(torch.zeros_like(t), t)
 
 

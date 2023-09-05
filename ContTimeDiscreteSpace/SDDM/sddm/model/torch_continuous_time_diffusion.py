@@ -16,7 +16,7 @@ def lbjf_corrector_step(cls, params, rng, tau, xt, t, xt_target=None):
     if xt_target is None:
         xt_target = xt
     ll_all, ll_xt = cls.backwd_model.get_logprob(params, xt, t, xt_target)
-    log_weight = ll_all - torch.unsqueeze(ll_xt, dim=-1)
+    log_weight = ll_all - ll_xt.unsqueeze(-1)
     fwd_rate = cls.fwd_model.rate(xt, t)
 
     xt_onehot = F.one_hot(xt_target, cls.config.vocab_size)
@@ -26,8 +26,11 @@ def lbjf_corrector_step(cls, params, rng, tau, xt, t, xt_target=None):
     posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
     posterior = posterior / torch.sum(posterior, dim=-1, keepdim=True)
     log_posterior = torch.log(posterior + 1e-35)
-    new_y = torch.multinomial(torch.exp(log_posterior), num_samples=1, replacement=True)
-    return new_y.squeeze()
+    # fix?
+    cat_dist = torch.distributions.categorical.Categorical(logits=log_posterior)
+    new_y = cat_dist.sample()
+    # new_y = torch.multinomial(log_posterior, num_samples=1, replacement=True)
+    return new_y  # .squeeze()
 
 
 class DiffusionModel(object):
@@ -44,10 +47,16 @@ class DiffusionModel(object):
         self.backwd_model = self.build_backwd_model(config)
         self.fwd_model = torch_forward_model.get_fwd_model(config)
 
+    # geht das überhaupt mit
     def init_state(self, model_key):
         state = torch_utils.init_host_state(
             self.backwd_model.make_init_params(model_key), self.optimizer
         )
+        return state
+
+    def init_state(self, model_key):
+        init_params = self.backwd_model.make_init_params(model_key)
+        state = torch_utils.init_host_state(init_params, self.optimizer)
         return state
 
     def build_loss_func(self, rng, x0):
@@ -168,8 +177,10 @@ def lbjf_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
     posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
     posterior = posterior / torch.sum(posterior, dim=-1, keepdim=True)
     log_posterior = torch.log(posterior + 1e-35)
-    new_y = torch.multinomial(torch.exp(log_posterior), num_samples=1)
-    return new_y.squeeze()
+    cat_dist = torch.distributions.categorical.Categorical(logits=log_posterior)
+    new_y = cat_dist.sample()
+    # new_y = torch.multinomial(torch.exp(log_posterior), num_samples=1)
+    return new_y  # .squeeze()
 
 
 def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
@@ -185,9 +196,10 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     posterior = posterior * (1 - xt_onehot)
 
     flips = torch.poisson(posterior)
-    choices = torch.arange(cls.config.vocab_size, dtype=torch.int32).unsqueeze(
-        *range(xt.dim())
+    choices = torch_utils.expand_dims(
+        torch.arange(cls.config.vocab_size, dtype=torch.int32), list(range(xt.dim()))
     )
+
     if not cls.config.get("is_ordinal", True):
         tot_flips = torch.sum(flips, dim=-1, keepdim=True)
         flip_mask = (tot_flips <= 1).to(torch.int32)
@@ -205,19 +217,21 @@ def exact_sampling(cls, params, rng, tau, xt, t, xt_target=None):
     log_p0t = F.log_softmax(logits, dim=-1)
     t_eps = t - tau
     q_teps_0 = cls.fwd_model.transition(t_eps)
-    q_teps_0 = q_teps_0.unsqueeze(*range(xt.dim()))
+    q_teps_0 = torch_utils.expand_dims(q_teps_0, axis=list(range(xt.dim())))
     q_t_teps = cls.fwd_model.transit_between(t_eps, t)
     q_t_teps = q_t_teps.permute(0, 2, 1)
 
-    b = torch.arange(xt.shape[0]).unsqueeze(*range(1, xt.dim()))
+    b = torch_utils.expand_dims(torch.arange(xt.shape[0]), list(range(1, xt.dim())))
     q_t_teps = q_t_teps[b, xt.unsqueeze(-1)]
 
     qt0 = q_teps_0 * q_t_teps
     log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
     log_p0t = log_p0t.unsqueeze(-1)
     log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-    new_y = torch.multinomial(torch.exp(log_prob), num_samples=1)
-    return new_y.squeeze()
+    cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
+    new_y = cat_dist.sample()
+    # new_y = torch.multinomial(torch.exp(log_prob), num_samples=1)
+    return new_y  # .squeeze()
 
 
 def get_sampler(config):
@@ -269,8 +283,9 @@ class CategoricalDiffusionModel(DiffusionModel):
     def sample_step(self, params, rng, tau, xt, t):
         return get_sampler(self.config)(self, params, rng, tau, xt, t)
 
-# DiffusionModel => gets forwardmodel, and backwardmodel and in Backwardmodel the Unet/../ is defined 
-# 
+
+# DiffusionModel => gets forwardmodel, and backwardmodel and in Backwardmodel the Unet/../ is defined
+#
 class DiffusionModelPaul(object):
     """Model interface."""
 
@@ -372,7 +387,8 @@ class DiffusionModelPaul(object):
                 x0 = sample_with_correct_body_fn(step, x0)
 
         return x0
-    
+
+
 class CategoricalDiffusionModelPaul(DiffusionModelPaul):
     """Categorical Model interface."""
 
