@@ -9,18 +9,14 @@ from collections import namedtuple
 import sys
 import pkg_resources
 from functools import wraps
-
 import pandas as pd
 import numpy as np
 import pyfaidx
 from cooltools.lib.numutils import adaptive_coarsegrain
 import cooler
 import pyranges
-
 from torch.utils.data import DataLoader
 import torch.utils.data as data
-
-
 from selene_sdk.sequences import Genome
 from selene_sdk.samplers import OnlineSampler
 from selene_sdk.utils import get_indices_and_probabilities
@@ -36,18 +32,18 @@ import tabix
 
 class MemmapGenome(Genome):
     """
-    Memmapped version of selene.sequence.Genome. Faster for sequence 
-    retrieval by storing all precomputed one-hot encodings in a memmapped 
-    file (~40G for human genome). 
-    
-    The memmapfile can be an exisiting memmapped file or a path where you 
-    want to create the memmapfile. If the specified memmapfile does not 
-    exist, it will be created the first time you call any method of 
-    MemmapGenome or if MemmapGenome is initialized with `init_unpickable=True`. 
+    Memmapped version of selene.sequence.Genome. Faster for sequence
+    retrieval by storing all precomputed one-hot encodings in a memmapped
+    file (~40G for human genome).
+
+    The memmapfile can be an exisiting memmapped file or a path where you
+    want to create the memmapfile. If the specified memmapfile does not
+    exist, it will be created the first time you call any method of
+    MemmapGenome or if MemmapGenome is initialized with `init_unpickable=True`.
     Therefore the first call will take some time for the
-    creation of memmapfile if it does not exist. Also,  if 
+    creation of memmapfile if it does not exist. Also,  if
     memmapfile has not been created, be careful not to run multiple
-    instances of MemmapGenome in parallel (such as with Dataloader), 
+    instances of MemmapGenome in parallel (such as with Dataloader),
     because as each process will try to create the file.
 
     Parameters
@@ -75,7 +71,7 @@ class MemmapGenome(Genome):
     len_chrs : dict
         A dictionary mapping the names of each chromosome in the file to
         the length of said chromosome.
- 
+
     """
 
     def __init__(
@@ -87,7 +83,9 @@ class MemmapGenome(Genome):
         memmapfile=None,
     ):
         super().__init__(
-            input_path, blacklist_regions=blacklist_regions, bases_order=bases_order,
+            input_path,
+            blacklist_regions=blacklist_regions,
+            bases_order=bases_order,
         )
         self.memmapfile = memmapfile
         if init_unpicklable:
@@ -117,11 +115,16 @@ class MemmapGenome(Genome):
 
             self.lens = np.array([self.len_chrs[c] for c in self.chrs])
             self.inds = {
-                c: ind for c, ind in zip(self.chrs, np.concatenate([[0], np.cumsum(self.lens)]))
+                c: ind
+                for c, ind in zip(
+                    self.chrs, np.concatenate([[0], np.cumsum(self.lens)])
+                )
             }
             if self.memmapfile is not None and os.path.isfile(self.memmapfile):
                 # load memmap file
-                self.sequence_data = np.memmap(self.memmapfile, dtype="float32", mode="r")
+                self.sequence_data = np.memmap(
+                    self.memmapfile, dtype="float32", mode="r"
+                )
                 self.sequence_data = np.reshape(
                     self.sequence_data, (4, int(self.sequence_data.shape[0] / 4))
                 )
@@ -137,11 +140,17 @@ class MemmapGenome(Genome):
                 if self.memmapfile is not None:
                     # create memmap file
                     mmap = np.memmap(
-                        self.memmapfile, dtype="float32", mode="w+", shape=self.sequence_data.shape
+                        self.memmapfile,
+                        dtype="float32",
+                        mode="w+",
+                        shape=self.sequence_data.shape,
                     )
                     mmap[:] = self.sequence_data
                     self.sequence_data = np.memmap(
-                        self.memmapfile, dtype="float32", mode="r", shape=self.sequence_data.shape
+                        self.memmapfile,
+                        dtype="float32",
+                        mode="r",
+                        shape=self.sequence_data.shape,
                     )
 
             self.initialized = True
@@ -210,13 +219,17 @@ class MemmapGenome(Genome):
             encoding = np.hstack(
                 [
                     np.ones((4, pad_left)) * 0.25,
-                    self.sequence_data[:, self.inds[chrom] + qstart : self.inds[chrom] + qend],
+                    self.sequence_data[
+                        :, self.inds[chrom] + qstart : self.inds[chrom] + qend
+                    ],
                     np.ones((4, pad_right)) * 0.25,
                 ]
             )
         else:
             assert end <= self.len_chrs[chrom] and start >= 0
-            encoding = self.sequence_data[:, self.inds[chrom] + start : self.inds[chrom] + end]
+            encoding = self.sequence_data[
+                :, self.inds[chrom] + start : self.inds[chrom] + end
+            ]
 
         if strand == "-":
             encoding = encoding[::-1, ::-1]
@@ -224,7 +237,9 @@ class MemmapGenome(Genome):
         return encoding.T
 
     @init
-    def get_encoding_from_coords_check_unk(self, chrom, start, end, strand="+", pad=False):
+    def get_encoding_from_coords_check_unk(
+        self, chrom, start, end, strand="+", pad=False
+    ):
         """Gets the one-hot encoding of the genomic sequence at the
         queried coordinates and check whether the sequence contains
         unknown base(s).
@@ -262,13 +277,15 @@ class MemmapGenome(Genome):
             If it cannot retrieve encoding that matches the length `L = end - start`
             such as when end > chromosome length and pad=False
         """
-        encoding = self.get_encoding_from_coords(chrom, start, end, strand=strand, pad=strand)
+        encoding = self.get_encoding_from_coords(
+            chrom, start, end, strand=strand, pad=strand
+        )
         return encoding, np.any(encoding[0, :] == 0.25)
 
 
 def _adaptive_coarsegrain(ar, countar, max_levels=12):
     """
-    Wrapper for cooltools adaptive coarse-graining to add support 
+    Wrapper for cooltools adaptive coarse-graining to add support
     for non-square input for interchromosomal predictions.
     """
     assert np.all(ar.shape == countar.shape)
@@ -290,13 +307,17 @@ def _adaptive_coarsegrain(ar, countar, max_levels=12):
         padding = np.empty((ar.shape[0], ar.shape[0] - ar.shape[1]))
         padding.fill(np.nan)
         return adaptive_coarsegrain(
-            np.hstack([ar, padding]), np.hstack([countar, padding]), max_levels=max_levels
+            np.hstack([ar, padding]),
+            np.hstack([countar, padding]),
+            max_levels=max_levels,
         )[:, : ar.shape[1]]
     elif ar.shape[0] < ar.shape[1]:
         padding = np.empty((ar.shape[1] - ar.shape[0], ar.shape[1]))
         padding.fill(np.nan)
         return adaptive_coarsegrain(
-            np.vstack([ar, padding]), np.vstack([countar, padding]), max_levels=max_levels
+            np.vstack([ar, padding]),
+            np.vstack([countar, padding]),
+            max_levels=max_levels,
         )[: ar.shape[0], :]
 
 
@@ -334,7 +355,9 @@ class Genomic2DFeatures(Target):
 
     """
 
-    def __init__(self, input_paths, features, shape, normmat=None, cg=False, shrinkage=False):
+    def __init__(
+        self, input_paths, features, shape, normmat=None, cg=False, shrinkage=False
+    ):
         """
         Constructs a new `Genomic2DFeatures` object.
         """
@@ -346,7 +369,9 @@ class Genomic2DFeatures(Target):
         self._initialized = False
 
         self.n_features = len(features)
-        self.feature_index_dict = dict([(feat, index) for index, feat in enumerate(features)])
+        self.feature_index_dict = dict(
+            [(feat, index) for index, feat in enumerate(features)]
+        )
         self.shape = shape
         self.cg = cg
         self.shrinkage = shrinkage
@@ -368,19 +393,26 @@ class Genomic2DFeatures(Target):
             for c in self.data:
                 rawmat = c.matrix(balance=False).fetch(*query)
                 balmat = c.matrix(balance=True).fetch(*query)
-                cgmat = _adaptive_coarsegrain(
-                        balmat, rawmat
-                    ).astype(np.float32)
+                cgmat = _adaptive_coarsegrain(balmat, rawmat).astype(np.float32)
 
                 if self.shrinkage:
                     if len(query) == 2:
-                        w1 = np.array(c.bins().fetch(query[0])['weight'].values)
-                        w2 = np.array(c.bins().fetch(query[1])['weight'].values)
+                        w1 = np.array(c.bins().fetch(query[0])["weight"].values)
+                        w2 = np.array(c.bins().fetch(query[1])["weight"].values)
                     else:
-                        w1 = w2 = np.array(c.bins().fetch(query[0])['weight'].values)
-                    shmat = (rawmat * rawmat + cgmat / w1[:,np.newaxis] / w2[np.newaxis, :] * float(self.shrinkage)) / \
-                            (rawmat+ float(self.shrinkage)) * \
-                             w1[:,np.newaxis] * w2[np.newaxis, :]
+                        w1 = w2 = np.array(c.bins().fetch(query[0])["weight"].values)
+                    shmat = (
+                        (
+                            rawmat * rawmat
+                            + cgmat
+                            / w1[:, np.newaxis]
+                            / w2[np.newaxis, :]
+                            * float(self.shrinkage)
+                        )
+                        / (rawmat + float(self.shrinkage))
+                        * w1[:, np.newaxis]
+                        * w2[np.newaxis, :]
+                    )
 
                     out.append(shmat)
                 else:
@@ -393,17 +425,29 @@ class Genomic2DFeatures(Target):
                     rawmat = c.matrix(balance=False).fetch(*query)
                     balmat = c.matrix(balance=True).fetch(*query).astype(np.float32)
                     if len(query) == 2:
-                        w1 = np.array(c.bins().fetch(query[0])['weight'].values)
-                        w2 = np.array(c.bins().fetch(query[1])['weight'].values)
+                        w1 = np.array(c.bins().fetch(query[0])["weight"].values)
+                        w2 = np.array(c.bins().fetch(query[1])["weight"].values)
                     else:
-                        w1 = w2 = np.array(c.bins().fetch(query[0])['weight'].values)
-                    shmat = (rawmat * rawmat + self.normmat / w1[:,np.newaxis] / w2[np.newaxis, :] * float(self.shrinkage)) / \
-                            (rawmat+ float(self.shrinkage)) * \
-                             w1[:,np.newaxis] * w2[np.newaxis, :]
-                    
+                        w1 = w2 = np.array(c.bins().fetch(query[0])["weight"].values)
+                    shmat = (
+                        (
+                            rawmat * rawmat
+                            + self.normmat
+                            / w1[:, np.newaxis]
+                            / w2[np.newaxis, :]
+                            * float(self.shrinkage)
+                        )
+                        / (rawmat + float(self.shrinkage))
+                        * w1[:, np.newaxis]
+                        * w2[np.newaxis, :]
+                    )
+
                     out.append(shmat)
             else:
-                out = [c.matrix(balance=True).fetch(*query).astype(np.float32) for c in self.data]
+                out = [
+                    c.matrix(balance=True).fetch(*query).astype(np.float32)
+                    for c in self.data
+                ]
         if len(out) == 1:
             out = out[0]
         else:
@@ -419,11 +463,11 @@ class MultibinGenomicFeatures(Target):
     in order:
     ::
         [chrom, start, end, strand, feature]
-    `start` and `end` is 0-based as in bed file format. 
-    
-    Note that unlike selene_sdk.targets.GenomicFeatures which queries 
-    the tabix data file out-of-core, MultibinGenomicFeatures requires 
-    more memory as it loads the entire bed file in memory as a pyranges 
+    `start` and `end` is 0-based as in bed file format.
+
+    Note that unlike selene_sdk.targets.GenomicFeatures which queries
+    the tabix data file out-of-core, MultibinGenomicFeatures requires
+    more memory as it loads the entire bed file in memory as a pyranges
     table for higher query speed.
 
     Parameters
@@ -442,7 +486,7 @@ class MultibinGenomicFeatures(Target):
     mode : str, optional
         For `mode=='any'`, any overlap will get 1, and no overlap will get 0.
         For `mode=='center', only overlap with the center basepair of each bin
-        will get 1, otherwise 0. 
+        will get 1, otherwise 0.
         For `mode=='proportion'`, the proportion of overlap will be returned.
 
     Attributes
@@ -465,10 +509,10 @@ class MultibinGenomicFeatures(Target):
     shape : tuple(int, int)
         The shape of the output array (n_features by n_bins).
     mode : str
-        - For `mode=='any'`, any overlap will get assigned 1, and no overlap will 
+        - For `mode=='any'`, any overlap will get assigned 1, and no overlap will
         get assigned 0.
         - For `mode=='center', only overlap with the center basepair of each bin
-        will get assigned 1, otherwise assigned 0. 
+        will get assigned 1, otherwise assigned 0.
         - For `mode=='proportion'`, the proportion of overlap will be assigned.
 
     """
@@ -480,7 +524,9 @@ class MultibinGenomicFeatures(Target):
         self.input_path = input_path
         self.n_features = len(features)
 
-        self.feature_index_dict = dict([(feat, index) for index, feat in enumerate(features)])
+        self.feature_index_dict = dict(
+            [(feat, index) for index, feat in enumerate(features)]
+        )
 
         self.index_feature_dict = dict(list(enumerate(features)))
 
@@ -506,15 +552,15 @@ class MultibinGenomicFeatures(Target):
     @init
     def get_feature_data(self, chrom, start, end):
         """
-        For a genomic region specified, return a `number of features` 
-        by `number of bins` array for overlap of each genomic bin and 
-        each feature. How the overlap is quantified depends on the 
-        `mode` attribute specified during initialization. 
+        For a genomic region specified, return a `number of features`
+        by `number of bins` array for overlap of each genomic bin and
+        each feature. How the overlap is quantified depends on the
+        `mode` attribute specified during initialization.
 
-        For `mode=='any'`, any overlap will get assigned 1, and no overlap will 
+        For `mode=='any'`, any overlap will get assigned 1, and no overlap will
         get assigned 0.
         For `mode=='center', only overlap with the center basepair of each bin
-        will get assigned 1, otherwise assigned 0. 
+        will get assigned 1, otherwise assigned 0.
         For `mode=='proportion'`, the proportion of overlap will be assigned.
 
         Parameters
@@ -558,7 +604,8 @@ class MultibinGenomicFeatures(Target):
                 pd.DataFrame(
                     dict(
                         Chromosome=chrom,
-                        Start=start + np.linspace(0, n_bins * self.bin_size, n_bins + 1)[:-1],
+                        Start=start
+                        + np.linspace(0, n_bins * self.bin_size, n_bins + 1)[:-1],
                         End=start
                         + np.linspace(0, n_bins * self.bin_size, n_bins + 1)[:-1]
                         + self.bin_size,
@@ -575,12 +622,14 @@ class MultibinGenomicFeatures(Target):
                 rows_start = np.array(rows.Start)
                 rows_end = np.array(rows.End)
                 for i in range(len(rows)):
-                    targets[self.feature_index_dict[rows_featurename[i]], rows_index[i]] += (
-                        rows_end[i] - rows_start[i]
-                    ) / self.bin_size
+                    targets[
+                        self.feature_index_dict[rows_featurename[i]], rows_index[i]
+                    ] += (rows_end[i] - rows_start[i]) / self.bin_size
             else:
                 for i in range(len(rows)):
-                    targets[self.feature_index_dict[rows_featurename[i]], rows_index[i]] = 1
+                    targets[
+                        self.feature_index_dict[rows_featurename[i]], rows_index[i]
+                    ] = 1
 
         return targets.astype(np.float32)
 
@@ -596,19 +645,19 @@ class RandomPositionsSamplerHiC(OnlineSampler):
     reference_sequence : selene_sdk.sequences.Genome
         A genome to retrieve sequence from.
     target : Genomic2DFeatures
-        Genomic2DFeatures object that loads the cooler files. 
+        Genomic2DFeatures object that loads the cooler files.
     features : list(str)
         List of names that correspond to the cooler files.
     target_1d : MultibinGenomicFeatures or None, optional
         MultibinGenomicFeatures object that loads 1D genomic feature data.
     background_cis_file : str or None, optional
-        Path to the numpy file that stores the distance-based 
-        expected background balanced scores for cis-interactions. If 
+        Path to the numpy file that stores the distance-based
+        expected background balanced scores for cis-interactions. If
         specified with background_trans_file, the sampler will
         return corresponding background array that matches with
         the 2D feature retrieved.
     background_trans_file : str or None, optional
-        Path to the numpy file that stores the expected background 
+        Path to the numpy file that stores the expected background
         balanced scores for trans-interactions. See doc for
         `background_cis_file` for more detail.
     seed : int, optional
@@ -623,15 +672,15 @@ class RandomPositionsSamplerHiC(OnlineSampler):
         Default is `['chr8', 'chr9']`. See documentation for
         `validation_holdout` for additional information.
     sequence_length : int, optional
-        Default is 1000000. Model is trained on sequences of size 
+        Default is 1000000. Model is trained on sequences of size
         `sequence_length` where genomic features are retreived
         for the same regions as the sequences.
     max_seg_length : int or None, optional
-        Default is None. If specified and cross_chromosome is True, 
-        bound the maximum length of each sequence segment. 
+        Default is None. If specified and cross_chromosome is True,
+        bound the maximum length of each sequence segment.
     length_schedule : list(float, list(int, int)) or None, optional
-        Default is None. If specified and cross_chromosome is True, 
-        decide the sequence segment length to sample according to the 
+        Default is None. If specified and cross_chromosome is True,
+        decide the sequence segment length to sample according to the
         length schedule (before trimming to fit in the sequence length).
         The length schedule is in the format of `[p, [min_len, max_len]]`,
         which means, with probability `p`, decide the length by randomly
@@ -642,16 +691,16 @@ class RandomPositionsSamplerHiC(OnlineSampler):
         `start = start - start % position_resolution`. Useful for binned
         data.
     random_shift : int, optional
-        Default is 0. Shift the coordinates to retrieve 
+        Default is 0. Shift the coordinates to retrieve
         sequence by a random integer in the range of [-random_shift, random_shift).
     random_strand : bool, optional
-        Default is True. If True, randomly select the strand of the 
+        Default is True. If True, randomly select the strand of the
         sequence, otherwise alway use the '+' strand.
     cross_chromosome : bool, optional
-        Default is True. If True, allows sampling multiple segments of 
+        Default is True. If True, allows sampling multiple segments of
         sequences and the corresponding features. The default is sampling
         the maximum length allowed by sequence_length, thus multiple segments
-        will only be sampled if `sequence_length` is larger than the minimum 
+        will only be sampled if `sequence_length` is larger than the minimum
         chromosome length or when max_seg_length and length_schedule is specified
         to limit the sequence segment length.
     permute_segments : bool, optional
@@ -671,8 +720,8 @@ class RandomPositionsSamplerHiC(OnlineSampler):
     target_1d : MultibinGenomicFeatures or None, optional
         MultibinGenomicFeatures object that loads 1D genomic feature data.
     background_cis : numpy.ndarray
-        One-dimensional numpy.ndarray that stores the distance-based 
-        expected background balanced scores for cis-interactions. 
+        One-dimensional numpy.ndarray that stores the distance-based
+        expected background balanced scores for cis-interactions.
     background_trans : float
         The expected background balanced score for trans-interactions.
     bg : bool
@@ -684,19 +733,19 @@ class RandomPositionsSamplerHiC(OnlineSampler):
         match those specified in the first column of the tabix-indexed
         BED file. If proportional, this is the fraction of total samples
         that will be held out.
-    test_holdout : list(str) 
+    test_holdout : list(str)
         The samples to hold out for testing model performance. See the
         documentation for `validation_holdout` for more details.
     sequence_length : int
-        Model is trained on sequences of size 
+        Model is trained on sequences of size
         `sequence_length` where genomic features are retreived
         for the same regions as the sequences.
     max_seg_length : int or None
-        Default is None. If specified and cross_chromosome is True, 
-        bound the maximum length of each sequence segment. 
+        Default is None. If specified and cross_chromosome is True,
+        bound the maximum length of each sequence segment.
     length_schedule : list(float, list(int, int)) or None
-        Default is None. If specified and cross_chromosome is True, 
-        decide the sequence segment length to sample according to the 
+        Default is None. If specified and cross_chromosome is True,
+        decide the sequence segment length to sample according to the
         length schedule (before trimming to fit in the sequence length).
         The length schedule is in the format of `[p, [min_len, max_len]]`,
         which means, with probability `p`, decide the length by randomly
@@ -707,16 +756,16 @@ class RandomPositionsSamplerHiC(OnlineSampler):
         `start = start - start % position_resolution`. Useful for binned
         data.
     random_shift : int
-        Default is 0. Shift the coordinates to retrieve 
+        Default is 0. Shift the coordinates to retrieve
         sequence by a random integer in the range of [-random_shift, random_shift).
     random_strand : bool
-        Default is True. If True, randomly select the strand of the 
+        Default is True. If True, randomly select the strand of the
         sequence, otherwise alway use the '+' strand.
     cross_chromosome : bool
-        Default is True. If True, allows sampling multiple segments of 
+        Default is True. If True, allows sampling multiple segments of
         sequences and the corresponding features. The default is sampling
         the maximum length allowed by sequence_length, thus multiple segments
-        will only be sampled if `sequence_length` is larger than the minimum 
+        will only be sampled if `sequence_length` is larger than the minimum
         chromosome length or when max_seg_length and length_schedule is specified
         to limit the sequence segment length.
     permute_segments : bool
@@ -807,7 +856,9 @@ class RandomPositionsSamplerHiC(OnlineSampler):
     def _partition_genome_by_chromosome(self):
         for mode in self.modes:
             self._sample_from_mode[mode] = SampleIndices([], [])
-        for index, (chrom, len_chrom) in enumerate(self.reference_sequence.get_chr_lens()):
+        for index, (chrom, len_chrom) in enumerate(
+            self.reference_sequence.get_chr_lens()
+        ):
             if chrom in self.validation_holdout:
                 self._sample_from_mode["validate"].indices.append(index)
             elif self.test_holdout and chrom in self.test_holdout:
@@ -820,7 +871,9 @@ class RandomPositionsSamplerHiC(OnlineSampler):
 
         for mode in self.modes:
             sample_indices = self._sample_from_mode[mode].indices
-            indices, weights = get_indices_and_probabilities(self.interval_lengths, sample_indices)
+            indices, weights = get_indices_and_probabilities(
+                self.interval_lengths, sample_indices
+            )
             self._sample_from_mode[mode] = self._sample_from_mode[mode]._replace(
                 indices=indices, weights=weights
             )
@@ -871,13 +924,21 @@ class RandomPositionsSamplerHiC(OnlineSampler):
                 )
                 if self.bg:
                     if chrom2 != chrom:
-                        background_target = np.full_like(retrieved_target, self.background_trans)
+                        background_target = np.full_like(
+                            retrieved_target, self.background_trans
+                        )
                     else:
                         binsize = (end - start) / retrieved_target.shape[-2]
-                        acoor = np.linspace(start, end, retrieved_target.shape[-2] + 1)[:-1]
-                        bcoor = np.linspace(start2, end2, retrieved_target.shape[-1] + 1)[:-1]
+                        acoor = np.linspace(start, end, retrieved_target.shape[-2] + 1)[
+                            :-1
+                        ]
+                        bcoor = np.linspace(
+                            start2, end2, retrieved_target.shape[-1] + 1
+                        )[:-1]
                         background_target = self.background_cis[
-                            (np.abs(acoor[:, None] - bcoor[None, :]) / binsize).astype(int)
+                            (np.abs(acoor[:, None] - bcoor[None, :]) / binsize).astype(
+                                int
+                            )
                         ]
 
                 if strand == "-":
@@ -897,7 +958,12 @@ class RandomPositionsSamplerHiC(OnlineSampler):
 
         if self.bg:
             if self.target_1d:
-                return (retrieved_seqs, retrieved_targets, background_targets, retrieved_1ds)
+                return (
+                    retrieved_seqs,
+                    retrieved_targets,
+                    background_targets,
+                    retrieved_1ds,
+                )
             else:
                 return (retrieved_seqs, retrieved_targets, background_targets)
         else:
@@ -932,7 +998,7 @@ class RandomPositionsSamplerHiC(OnlineSampler):
             Default is None. The operating mode that the object should run in.
             If None, will use the current mode `self.mode`.
         coordinate_only : bool, optional
-            Default is False. If True, only return the coordinates. 
+            Default is False. If True, only return the coordinates.
 
         Returns
         -------
@@ -940,7 +1006,7 @@ class RandomPositionsSamplerHiC(OnlineSampler):
             A tuple containing the numeric representation of the
             sequence examples, their corresponding 2D targets, and optionally 1D targets
             (if target_1d were specified) and background
-            matrices (if background_cis_file and background_trans_file were 
+            matrices (if background_cis_file and background_trans_file were
             specified). The shape of `sequences` will be
             :math:`B \\times L \\times N`, where :math:`B` is
             `batch_size`, :math:`L` is the sequence length, and
@@ -977,10 +1043,14 @@ class RandomPositionsSamplerHiC(OnlineSampler):
                         self._update_randcache()
                         sample_index = 0
 
-                    rand_interval_index = self._randcache[mode]["cache_indices"][sample_index]
+                    rand_interval_index = self._randcache[mode]["cache_indices"][
+                        sample_index
+                    ]
                     self._randcache[mode]["sample_next"] += 1
 
-                    chrom, cstart, cend = self.sample_from_intervals[rand_interval_index]
+                    chrom, cstart, cend = self.sample_from_intervals[
+                        rand_interval_index
+                    ]
 
                 next_length = self.sequence_length - current_length
                 if self.length_schedule is not None and self.cross_chromosome:
@@ -995,7 +1065,9 @@ class RandomPositionsSamplerHiC(OnlineSampler):
                 if self.max_seg_length is not None and self.cross_chromosome:
                     next_length = np.fmin(next_length, self.max_seg_length)
 
-                start_position = np.random.randint(cstart, np.fmax(cstart + 1, cend - next_length))
+                start_position = np.random.randint(
+                    cstart, np.fmax(cstart + 1, cend - next_length)
+                )
                 start_position -= start_position % self.position_resolution
 
                 if start_position + next_length > cend:
@@ -1043,7 +1115,12 @@ class RandomPositionsSamplerHiC(OnlineSampler):
                 retrieve_output = self._retrieve_multi(chroms, starts, ends, strands)
                 if self.bg:
                     if self.target_1d:
-                        seq, seq_targets, seq_background, seq_target_1ds = retrieve_output
+                        (
+                            seq,
+                            seq_targets,
+                            seq_background,
+                            seq_target_1ds,
+                        ) = retrieve_output
                     else:
                         seq, seq_targets, seq_background = retrieve_output
                 else:

@@ -33,18 +33,17 @@ def bs(x, df=None, knots=None, degree=3, intercept=False):
         n_inner_knots = df - order + (1 - intercept)
         if n_inner_knots < 0:
             n_inner_knots = 0
-            print("df was too small; have used %d"
-                  % (order - (1 - intercept)))
+            print("df was too small; have used %d" % (order - (1 - intercept)))
 
         if n_inner_knots > 0:
             inner_knots = np.percentile(
-                x, 100 * np.linspace(0, 1, n_inner_knots + 2)[1:-1])
+                x, 100 * np.linspace(0, 1, n_inner_knots + 2)[1:-1]
+            )
 
     elif knots is not None:
         inner_knots = knots
 
-    all_knots = np.concatenate(
-        ([np.min(x), np.max(x)] * order, inner_knots))
+    all_knots = np.concatenate(([np.min(x), np.max(x)] * order, inner_knots))
 
     all_knots.sort()
 
@@ -63,21 +62,17 @@ def bs(x, df=None, knots=None, degree=3, intercept=False):
 
 def spline_factory(n, df, log=False):
     if log:
-        dist = np.array(np.arange(n) - n/2.0)
-        dist = np.log(np.abs(dist) + 1) * ( 2*(dist>0)-1)
+        dist = np.array(np.arange(n) - n / 2.0)
+        dist = np.log(np.abs(dist) + 1) * (2 * (dist > 0) - 1)
         n_knots = df - 4
-        knots = np.linspace(np.min(dist),np.max(dist),n_knots+2)[1:-1]
-        return torch.from_numpy(bs(
-            dist, knots=knots, intercept=True)).float()
+        knots = np.linspace(np.min(dist), np.max(dist), n_knots + 2)[1:-1]
+        return torch.from_numpy(bs(dist, knots=knots, intercept=True)).float()
     else:
         dist = np.arange(n)
-        return torch.from_numpy(bs(
-            dist, df=df, intercept=True)).float()
-
+        return torch.from_numpy(bs(dist, df=df, intercept=True)).float()
 
 
 class BSplineTransformation(nn.Module):
-
     def __init__(self, degrees_of_freedom, log=False, scaled=False):
         super(BSplineTransformation, self).__init__()
         self._spline_tr = None
@@ -93,34 +88,50 @@ class BSplineTransformation(nn.Module):
                 self._spline_tr = self._spline_tr / spatial_dim
             if input.is_cuda:
                 self._spline_tr = self._spline_tr.cuda()
-        
-        return  torch.matmul(input, self._spline_tr)
 
+        return torch.matmul(input, self._spline_tr)
 
 
 class BSplineConv1D(nn.Module):
-
-    def __init__(self, in_channels, out_channels, kernel_size, degrees_of_freedom, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True, log=False, scaled = True):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        degrees_of_freedom,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        bias=True,
+        log=False,
+        scaled=True,
+    ):
         super(BSplineConv1D, self).__init__()
         self._df = degrees_of_freedom
         self._log = log
         self._scaled = scaled
 
-        self.spline = nn.Conv1d(1, degrees_of_freedom, kernel_size, stride, padding, dilation,
-            bias=False)
-        self.spline.weight = spline_factory(kernel_size, self._df, log=log).view(self._df, 1, kernel_size)
+        self.spline = nn.Conv1d(
+            1, degrees_of_freedom, kernel_size, stride, padding, dilation, bias=False
+        )
+        self.spline.weight = spline_factory(kernel_size, self._df, log=log).view(
+            self._df, 1, kernel_size
+        )
         if scaled:
-            self.spline.weight = self.spline.weight / kernel_size            
+            self.spline.weight = self.spline.weight / kernel_size
         self.spline.weight = nn.Parameter(self.spline.weight)
         self.spline.weight.requires_grad = False
-        self.conv1d = nn.Conv1d(in_channels * degrees_of_freedom, out_channels, 1, 
-            groups = groups, bias=bias)
+        self.conv1d = nn.Conv1d(
+            in_channels * degrees_of_freedom, out_channels, 1, groups=groups, bias=bias
+        )
 
     def forward(self, input):
         batch_size, n_channels, length = input.size()
-        spline_out = self.spline(input.view(batch_size * n_channels,1,length))
-        conv1d_out = self.conv1d(spline_out.view(batch_size, n_channels * self._df,  length))
+        spline_out = self.spline(input.view(batch_size * n_channels, 1, length))
+        conv1d_out = self.conv1d(
+            spline_out.view(batch_size, n_channels * self._df, length)
+        )
         return conv1d_out
 
 
@@ -136,77 +147,86 @@ class Sei(nn.Module):
 
         self.lconv1 = nn.Sequential(
             nn.Conv1d(4, 480, kernel_size=9, padding=4),
-            nn.Conv1d(480, 480, kernel_size=9, padding=4))
+            nn.Conv1d(480, 480, kernel_size=9, padding=4),
+        )
 
         self.conv1 = nn.Sequential(
             nn.Conv1d(480, 480, kernel_size=9, padding=4),
             nn.ReLU(inplace=True),
             nn.Conv1d(480, 480, kernel_size=9, padding=4),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
 
         self.lconv2 = nn.Sequential(
             nn.MaxPool1d(kernel_size=4, stride=4),
             nn.Dropout(p=0.2),
             nn.Conv1d(480, 640, kernel_size=9, padding=4),
-            nn.Conv1d(640, 640, kernel_size=9, padding=4))
+            nn.Conv1d(640, 640, kernel_size=9, padding=4),
+        )
 
         self.conv2 = nn.Sequential(
             nn.Dropout(p=0.2),
-            nn.Conv1d(640, 640, kernel_size=9,padding=4),
+            nn.Conv1d(640, 640, kernel_size=9, padding=4),
             nn.ReLU(inplace=True),
-            nn.Conv1d(640, 640, kernel_size=9,padding=4),
-            nn.ReLU(inplace=True))
+            nn.Conv1d(640, 640, kernel_size=9, padding=4),
+            nn.ReLU(inplace=True),
+        )
 
         self.lconv3 = nn.Sequential(
             nn.MaxPool1d(kernel_size=4, stride=4),
             nn.Dropout(p=0.2),
             nn.Conv1d(640, 960, kernel_size=9, padding=4),
-            nn.Conv1d(960, 960, kernel_size=9, padding=4))
+            nn.Conv1d(960, 960, kernel_size=9, padding=4),
+        )
 
         self.conv3 = nn.Sequential(
             nn.Dropout(p=0.2),
-            nn.Conv1d(960, 960, kernel_size=9,padding=4),
+            nn.Conv1d(960, 960, kernel_size=9, padding=4),
             nn.ReLU(inplace=True),
-            nn.Conv1d(960, 960, kernel_size=9,padding=4),
-            nn.ReLU(inplace=True))
+            nn.Conv1d(960, 960, kernel_size=9, padding=4),
+            nn.ReLU(inplace=True),
+        )
 
         self.dconv1 = nn.Sequential(
             nn.Dropout(p=0.10),
             nn.Conv1d(960, 960, kernel_size=5, dilation=2, padding=4),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
         self.dconv2 = nn.Sequential(
             nn.Dropout(p=0.10),
             nn.Conv1d(960, 960, kernel_size=5, dilation=4, padding=8),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
         self.dconv3 = nn.Sequential(
             nn.Dropout(p=0.10),
             nn.Conv1d(960, 960, kernel_size=5, dilation=8, padding=16),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
         self.dconv4 = nn.Sequential(
             nn.Dropout(p=0.10),
             nn.Conv1d(960, 960, kernel_size=5, dilation=16, padding=32),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
         self.dconv5 = nn.Sequential(
             nn.Dropout(p=0.10),
             nn.Conv1d(960, 960, kernel_size=5, dilation=25, padding=50),
-            nn.ReLU(inplace=True))
+            nn.ReLU(inplace=True),
+        )
 
-        self._spline_df = int(128/8)        
+        self._spline_df = int(128 / 8)
         self.spline_tr = nn.Sequential(
-            nn.Dropout(p=0.5),
-            BSplineTransformation(self._spline_df, scaled=False))
+            nn.Dropout(p=0.5), BSplineTransformation(self._spline_df, scaled=False)
+        )
 
         self.classifier = nn.Sequential(
             nn.Linear(960 * self._spline_df, n_genomic_features),
             nn.ReLU(inplace=True),
             nn.Linear(n_genomic_features, n_genomic_features),
-            nn.Sigmoid())
-
-
+            nn.Sigmoid(),
+        )
 
     def forward(self, x):
-        """Forward propagation of a batch.
-        """
+        """Forward propagation of a batch."""
         lout1 = self.lconv1(x)
         out1 = self.conv1(lout1)
 
@@ -226,17 +246,19 @@ class Sei(nn.Module):
         cat_out4 = cat_out3 + dconv_out4
         dconv_out5 = self.dconv5(cat_out4)
         out = cat_out4 + dconv_out5
-        
+
         spline_out = self.spline_tr(out)
         reshape_out = spline_out.view(spline_out.size(0), 960 * self._spline_df)
         predict = self.classifier(reshape_out)
         return predict
+
 
 def criterion():
     """
     The criterion the model aims to minimize.
     """
     return nn.BCELoss()
+
 
 def get_optimizer(lr):
     """
@@ -245,5 +267,4 @@ def get_optimizer(lr):
     parameters (`model.parameters()`). We cannot initialize the optimizer
     until the model has been initialized.
     """
-    return (torch.optim.SGD,
-            {"lr": lr, "weight_decay": 1e-7, "momentum": 0.9})
+    return (torch.optim.SGD, {"lr": lr, "weight_decay": 1e-7, "momentum": 0.9})

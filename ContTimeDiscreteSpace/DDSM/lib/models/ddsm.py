@@ -29,9 +29,9 @@ def beta_logp(alpha, beta, x):
 def dirichlet_logp(concentration, x):
     x = torch.stack([x, 1.0 - x], -1)
     return (
-            (torch.log(x) * (concentration - 1.0)).sum(-1)
-            + torch.lgamma(concentration.sum(-1))
-            - torch.lgamma(concentration).sum(-1)
+        (torch.log(x) * (concentration - 1.0)).sum(-1)
+        + torch.lgamma(concentration.sum(-1))
+        - torch.lgamma(concentration).sum(-1)
     )
 
 
@@ -46,12 +46,10 @@ def jacobi(x, alpha, beta, order=100):
     a = alpha
     b = beta
     recur_fun = lambda p_n, p_n_minus1, n, x: (
-                                                      torch.mul(
-                                                          x * (2 * n + a + b + 2) * (2 * n + a + b) + (a ** 2 - b ** 2),
-                                                          p_n)
-                                                      * (2 * n + a + b + 1)
-                                                      - p_n_minus1 * (n + a) * (n + b) * (2 * n + a + b + 2) * 2
-                                              ) / (2 * (n + 1) * (n + a + b + 1) * (2 * n + a + b))
+        torch.mul(x * (2 * n + a + b + 2) * (2 * n + a + b) + (a**2 - b**2), p_n)
+        * (2 * n + a + b + 1)
+        - p_n_minus1 * (n + a) * (n + b) * (2 * n + a + b + 2) * 2
+    ) / (2 * (n + 1) * (n + a + b + 1) * (2 * n + a + b))
 
     if order == 0:
         return torch.ones_like(x)[:, None]
@@ -72,26 +70,26 @@ def jacobi_diffusion_density(x0, xt, t, a, b, order=100, speed_balanced=True):
     else:
         s = torch.ones_like(a)
     eigenvalues = (
-            -0.5 * s.unsqueeze(-1) * n * (n - 1 + a.unsqueeze(-1) + b.unsqueeze(-1))
+        -0.5 * s.unsqueeze(-1) * n * (n - 1 + a.unsqueeze(-1) + b.unsqueeze(-1))
     )
 
     logdn = (
-            log_rising_factorial(a.unsqueeze(-1), n)
-            + log_rising_factorial(b.unsqueeze(-1), n)
-            - log_rising_factorial((a + b).unsqueeze(-1), n - 1)
-            - torch.log(2 * n + (a + b).unsqueeze(-1) - 1)
-            - torch.lgamma(n + 1)
+        log_rising_factorial(a.unsqueeze(-1), n)
+        + log_rising_factorial(b.unsqueeze(-1), n)
+        - log_rising_factorial((a + b).unsqueeze(-1), n - 1)
+        - torch.log(2 * n + (a + b).unsqueeze(-1) - 1)
+        - torch.lgamma(n + 1)
     )
 
     return (
-            torch.exp(beta_logp(a, b, xt).unsqueeze(-1) + (eigenvalues * t - logdn))
-            * jacobi(x0 * 2 - 1, alpha=b - 1, beta=a - 1, order=order)
-            * jacobi(xt * 2 - 1, alpha=b - 1, beta=a - 1, order=order)
+        torch.exp(beta_logp(a, b, xt).unsqueeze(-1) + (eigenvalues * t - logdn))
+        * jacobi(x0 * 2 - 1, alpha=b - 1, beta=a - 1, order=order)
+        * jacobi(xt * 2 - 1, alpha=b - 1, beta=a - 1, order=order)
     ).sum(-1)
 
 
 def Jacobi_Euler_Maruyama_sampler(
-        x0, a, b, t, num_steps, speed_balanced=True, device="cuda", eps=1e-5
+    x0, a, b, t, num_steps, speed_balanced=True, device="cuda", eps=1e-5
 ):
     """
     Generate Jacobi diffusion samples with the Euler-Maruyama solver.
@@ -107,9 +105,9 @@ def Jacobi_Euler_Maruyama_sampler(
     def step(x, step_size):
         g = torch.sqrt(s * x * (1 - x))
         return (
-                x
-                + 0.5 * s * (a * (1 - x) - b * x) * step_size
-                + torch.sqrt(step_size) * g * torch.randn_like(x)
+            x
+            + 0.5 * s * (a * (1 - x) - b * x) * step_size
+            + torch.sqrt(step_size) * g * torch.randn_like(x)
         )
 
     time_steps = torch.linspace(0, t, num_steps, device=device)
@@ -123,9 +121,19 @@ def Jacobi_Euler_Maruyama_sampler(
     return x
 
 
-def noise_factory(N, n_time_steps, a, b, total_time=4, order=100,
-                  time_steps=1000, speed_balanced=True, logspace=False,
-                  mode="independent", device="cuda"):
+def noise_factory(
+    N,
+    n_time_steps,
+    a,
+    b,
+    total_time=4,
+    order=100,
+    time_steps=1000,
+    speed_balanced=True,
+    logspace=False,
+    mode="independent",
+    device="cuda",
+):
     """
     Generate Jacobi diffusion samples and compute score of transition density function.
     """
@@ -141,29 +149,63 @@ def noise_factory(N, n_time_steps, a, b, total_time=4, order=100,
     if mode == "independent":
         for i, t in enumerate(timepoints):
             noise_factory_one[:, i, :] = Jacobi_Euler_Maruyama_sampler(
-                noise_factory_one[:, i, :], a, b, t, time_steps,
-                speed_balanced=speed_balanced, device=device)
+                noise_factory_one[:, i, :],
+                a,
+                b,
+                t,
+                time_steps,
+                speed_balanced=speed_balanced,
+                device=device,
+            )
             noise_factory_zero[:, i, :] = Jacobi_Euler_Maruyama_sampler(
-                noise_factory_zero[:, i, :], a, b, t, time_steps,
-                speed_balanced=speed_balanced, device=device)
+                noise_factory_zero[:, i, :],
+                a,
+                b,
+                t,
+                time_steps,
+                speed_balanced=speed_balanced,
+                device=device,
+            )
     elif mode == "path":
         for i, t in enumerate(timepoints):
             if i == 0:
                 noise_factory_one[:, i, :] = Jacobi_Euler_Maruyama_sampler(
-                    noise_factory_one[:, i, :], a, b, timepoints[i], time_steps,
-                    speed_balanced=speed_balanced, device=device)
+                    noise_factory_one[:, i, :],
+                    a,
+                    b,
+                    timepoints[i],
+                    time_steps,
+                    speed_balanced=speed_balanced,
+                    device=device,
+                )
                 noise_factory_zero[:, i, :] = Jacobi_Euler_Maruyama_sampler(
-                    noise_factory_zero[:, i, :], a, b, timepoints[i], time_steps,
-                    speed_balanced=speed_balanced, device=device)
+                    noise_factory_zero[:, i, :],
+                    a,
+                    b,
+                    timepoints[i],
+                    time_steps,
+                    speed_balanced=speed_balanced,
+                    device=device,
+                )
             else:
                 noise_factory_one[:, i, :] = Jacobi_Euler_Maruyama_sampler(
                     noise_factory_one[:, i - 1, :],
-                    a, b, timepoints[i] - timepoints[i - 1], time_steps,
-                    speed_balanced=speed_balanced, device=device)
+                    a,
+                    b,
+                    timepoints[i] - timepoints[i - 1],
+                    time_steps,
+                    speed_balanced=speed_balanced,
+                    device=device,
+                )
                 noise_factory_zero[:, i, :] = Jacobi_Euler_Maruyama_sampler(
                     noise_factory_zero[:, i - 1, :],
-                    a, b, timepoints[i] - timepoints[i - 1], time_steps,
-                    speed_balanced=speed_balanced, device=device)
+                    a,
+                    b,
+                    timepoints[i] - timepoints[i - 1],
+                    time_steps,
+                    speed_balanced=speed_balanced,
+                    device=device,
+                )
     else:
         raise ValueError
 
@@ -176,7 +218,11 @@ def noise_factory(N, n_time_steps, a, b, total_time=4, order=100,
         xt.requires_grad = True
         p = jacobi_diffusion_density(
             torch.ones(xt.size(), device=device),
-            xt.to(device), t, a.to(device), b.to(device), order=order,
+            xt.to(device),
+            t,
+            a.to(device),
+            b.to(device),
+            order=order,
             speed_balanced=speed_balanced,
         )
         p.log().sum().backward()
@@ -188,7 +234,10 @@ def noise_factory(N, n_time_steps, a, b, total_time=4, order=100,
         xt.requires_grad = True
         p = jacobi_diffusion_density(
             torch.zeros(xt.size(), device=device),
-            xt.to(device), t, a.to(device), b.to(device),
+            xt.to(device),
+            t,
+            a.to(device),
+            b.to(device),
             order=order,
             speed_balanced=speed_balanced,
         )
@@ -246,14 +295,14 @@ class UnitStickBreakingTransform(Transform):
     def log_abs_det_jacobian(self, x, y=None):
         # log det of the inverse transform
         detJ = -(
-                (1 - x).log() * torch.arange(x.shape[-1] - 1, -1, -1, device=x.device)
+            (1 - x).log() * torch.arange(x.shape[-1] - 1, -1, -1, device=x.device)
         ).sum(-1)
         return detJ
 
     def log_abs_det_jacobian_forward(self, x, y=None):
         # log det of the forward transform
         detJ = (
-                (1 - x).log() * torch.arange(x.shape[-1] - 1, -1, -1, device=x.device)
+            (1 - x).log() * torch.arange(x.shape[-1] - 1, -1, -1, device=x.device)
         ).sum(-1)
         return detJ
 
@@ -313,9 +362,18 @@ def gv_to_gx(gv, v, create_graph=False, compute_gradlogdet=True):
 ## DIFFUSION FACTORIES - FAST and NON-FAST ##
 #############################################
 def diffusion_factory(
-        x, time_ind, noise_factory_one, noise_factory_zero,
-        noise_factory_one_loggrad, noise_factory_zero_loggrad,
-        alpha=None, beta=None, device="cuda", return_v=False, eps=1e-5, ):
+    x,
+    time_ind,
+    noise_factory_one,
+    noise_factory_zero,
+    noise_factory_one_loggrad,
+    noise_factory_zero_loggrad,
+    alpha=None,
+    beta=None,
+    device="cuda",
+    return_v=False,
+    eps=1e-5,
+):
     """
     Generate multivariate Jacobi diffusion samples and scores
     by sampling from noise factory for k-1 Jacobi diffusion processes.
@@ -341,23 +399,26 @@ def diffusion_factory(
         if torch.sum(inds[..., i]) != 0:
             v_samples[..., i][inds[..., i]] = (
                 noise_factory_one[sample_inds[inds[..., i]], time_ind[inds[..., i]], i]
-                    .to(device).float()
+                .to(device)
+                .float()
             )
             v_samples_grad[..., i][inds[..., i]] = (
                 noise_factory_one_loggrad[
                     sample_inds[inds[..., i]], time_ind[inds[..., i]], i
-                ].to(device).float()
+                ]
+                .to(device)
+                .float()
             )
             if i + 1 < alpha.shape[0]:
                 B = Beta(
-                    alpha[i + 1:].float().to(device), beta[i + 1:].float().to(device)
+                    alpha[i + 1 :].float().to(device), beta[i + 1 :].float().to(device)
                 )
                 v = B.sample((inds[..., i].sum(),)).clip(eps, 1 - eps)
                 v = v.detach()
                 v.requires_grad = True
                 B.log_prob(v).sum().backward()
-                v_samples[..., i + 1:][inds[..., i]] = v.detach()
-                v_samples_grad[..., i + 1:][inds[..., i]] = v.grad
+                v_samples[..., i + 1 :][inds[..., i]] = v.detach()
+                v_samples_grad[..., i + 1 :][inds[..., i]] = v.grad
 
     if return_v:
         return v_samples, v_samples_grad
@@ -370,7 +431,7 @@ def diffusion_factory(
 
 
 def diffusion_fast_flatdirichlet(
-        x, time_inds, noise_factory_one, noise_factory_one_loggrad, symmetrize=False
+    x, time_inds, noise_factory_one, noise_factory_one_loggrad, symmetrize=False
 ):
     """
     Fast multivariate Jacobi diffusion sampling assuming the stationary
@@ -384,10 +445,11 @@ def diffusion_fast_flatdirichlet(
         x_samples = torch.zeros(x.size()).to(x.device)
         x_samples_grad = torch.zeros(x.size()).to(x.device)
         x_samples[..., 0] = noise_factory_one[
-            sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0]
+            sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0
+        ]
         x_samples_grad[..., 0] = noise_factory_one_loggrad[
-                                     sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0
-                                 ] + (k - 2) / (1 - x_samples[..., 0])
+            sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0
+        ] + (k - 2) / (1 - x_samples[..., 0])
 
         D = Dirichlet(torch.ones(k - 1))
         d = D.sample((x.size()[:-1]))
@@ -420,7 +482,7 @@ class GaussianFourierProjection(nn.Module):
     Gaussian random features for encoding time steps.
     """
 
-    def __init__(self, embed_dim, scale=30.):
+    def __init__(self, embed_dim, scale=30.0):
         super().__init__()
         # Randomly sample weights during initialization. These weights are fixed
         # during optimization and are not trainable.
@@ -435,24 +497,24 @@ class GaussianFourierProjection(nn.Module):
 ############### Samplers ####################
 #############################################
 def Euler_Maruyama_sampler(
-        score_model,
-        sample_shape,
-        init=None,
-        mask=None,
-        alpha=None,
-        beta=None,
-        max_time=4,
-        min_time=0.01,
-        time_dilation=1,
-        time_dilation_start_time=None,
-        batch_size=64,
-        num_steps=100,
-        device="cuda",
-        random_order=False,
-        speed_balanced=True,
-        speed_factor=None,
-        concat_input=None,
-        eps=1e-5,
+    score_model,
+    sample_shape,
+    init=None,
+    mask=None,
+    alpha=None,
+    beta=None,
+    max_time=4,
+    min_time=0.01,
+    time_dilation=1,
+    time_dilation_start_time=None,
+    batch_size=64,
+    num_steps=100,
+    device="cuda",
+    random_order=False,
+    speed_balanced=True,
+    speed_factor=None,
+    concat_input=None,
+    eps=1e-5,
 ):
     """
     Generate samples from score-based models with the Euler-Maruyama solver
@@ -547,7 +609,7 @@ def Euler_Maruyama_sampler(
     v = init_v.detach()
 
     if mask is not None:
-        assert mask.shape[-1] == v.shape[-1]+1
+        assert mask.shape[-1] == v.shape[-1] + 1
 
     if random_order:
         order = np.arange(sample_shape[-1])
@@ -574,22 +636,34 @@ def Euler_Maruyama_sampler(
                 batch_time_step = torch.ones(batch_size, device=device) * time_step
 
                 with torch.enable_grad():
-
                     if concat_input is None:
                         score = score_model(x, batch_time_step)
                     else:
-                        score = score_model(torch.cat([x, concat_input], -1), batch_time_step)
+                        score = score_model(
+                            torch.cat([x, concat_input], -1), batch_time_step
+                        )
 
                     mean_v = (
-                            v + s[(None,) * (v.ndim - 1)] * (
-                            (0.5 * (alpha[(None,) * (v.ndim - 1)] * (1 - v)
-                                    - beta[(None,) * (v.ndim - 1)] * v)) - (1 - 2 * v)
-                            - (g ** 2) * gx_to_gv(score, x)
-                    ) * (-step_size) * c
+                        v
+                        + s[(None,) * (v.ndim - 1)]
+                        * (
+                            (
+                                0.5
+                                * (
+                                    alpha[(None,) * (v.ndim - 1)] * (1 - v)
+                                    - beta[(None,) * (v.ndim - 1)] * v
+                                )
+                            )
+                            - (1 - 2 * v)
+                            - (g**2) * gx_to_gv(score, x)
+                        )
+                        * (-step_size)
+                        * c
                     )
 
-                next_v = mean_v + torch.sqrt(step_size * c) * \
-                         torch.sqrt(s[(None,) * (v.ndim - 1)]) * g * torch.randn_like(v)
+                next_v = mean_v + torch.sqrt(step_size * c) * torch.sqrt(
+                    s[(None,) * (v.ndim - 1)]
+                ) * g * torch.randn_like(v)
 
                 if mask is not None:
                     next_v[~torch.isnan(mask_v)] = mask_v[~torch.isnan(mask_v)]
@@ -612,15 +686,26 @@ def Euler_Maruyama_sampler(
                     if concat_input is None:
                         score = score_model(x, batch_time_step)
                     else:
-                        score = score_model(torch.cat([x, concat_input], -1), batch_time_step)
-                    mean_v = (v + s[(None,) * (v.ndim - 1)] * (
-                            (0.5 * (alpha[(None,) * (v.ndim - 1)] * (1 - v)
-                                    - beta[(None,) * (v.ndim - 1)] * v))
-                            - (1 - 2 * v) - (g ** 2) * (gx_to_gv(
-                        score[..., order],
-                        x[..., order]))
-                    ) * (-step_size) * c
-                              )
+                        score = score_model(
+                            torch.cat([x, concat_input], -1), batch_time_step
+                        )
+                    mean_v = (
+                        v
+                        + s[(None,) * (v.ndim - 1)]
+                        * (
+                            (
+                                0.5
+                                * (
+                                    alpha[(None,) * (v.ndim - 1)] * (1 - v)
+                                    - beta[(None,) * (v.ndim - 1)] * v
+                                )
+                            )
+                            - (1 - 2 * v)
+                            - (g**2) * (gx_to_gv(score[..., order], x[..., order]))
+                        )
+                        * (-step_size)
+                        * c
+                    )
                 next_v = mean_v + torch.sqrt(step_size * c) * torch.sqrt(
                     s[(None,) * (v.ndim - 1)]
                 ) * g * torch.randn_like(v)
@@ -643,25 +728,27 @@ def Euler_Maruyama_sampler(
 #############################################
 ########## Likelihood estimations ###########
 #############################################
-def prior_likelihood(v, alpha, beta, device='cuda'):
+def prior_likelihood(v, alpha, beta, device="cuda"):
     alpha = alpha.to(device)
     beta = beta.to(device)
     v = v.to(device)
     return beta_logp(alpha, beta, v).sum(dim=tuple(range(1, v.ndim)))
 
 
-def ode_likelihood(v,
-                   score_model,
-                   max_time=4,
-                   min_time=1e-2,
-                   time_dilation=1,
-                   device='cuda',
-                   eps=1e-6,
-                   alpha=None,
-                   beta=None,
-                   speed_balanced=True,
-                   concat_input=None,
-                   verbose=False):
+def ode_likelihood(
+    v,
+    score_model,
+    max_time=4,
+    min_time=1e-2,
+    time_dilation=1,
+    device="cuda",
+    eps=1e-6,
+    alpha=None,
+    beta=None,
+    speed_balanced=True,
+    concat_input=None,
+    verbose=False,
+):
     # Draw the random Gaussian sample for Skilling-Hutchinson's estimator.
     shape = v.shape
     epsilon = torch.randn(shape).to(device)
@@ -675,7 +762,7 @@ def ode_likelihood(v,
     beta = beta.to(device)
 
     if speed_balanced:
-        s = 2. / (alpha + beta)
+        s = 2.0 / (alpha + beta)
     else:
         s = torch.ones(shape[-1]).to(device)
 
@@ -690,7 +777,9 @@ def ode_likelihood(v,
     def divergence_eval_wrapper(sample, time_steps):
         # epsilon = torch.randn(shape).to(device)
         sample = torch.tensor(sample, device=device, dtype=torch.float32).reshape(shape)
-        time_steps = torch.tensor(time_steps, device=device, dtype=torch.float32).reshape((sample.shape[0],))
+        time_steps = torch.tensor(
+            time_steps, device=device, dtype=torch.float32
+        ).reshape((sample.shape[0],))
         with torch.enable_grad():
             sample.requires_grad_(True)
             x = sb(sample)
@@ -699,32 +788,51 @@ def ode_likelihood(v,
             gradlogdet = grad(logdet.sum(), sample, create_graph=True)[0]
 
             if concat_input is not None:
-                score_x = score_model(torch.cat([x, concat_input], -1), time_steps * time_dilation)
+                score_x = score_model(
+                    torch.cat([x, concat_input], -1), time_steps * time_dilation
+                )
             else:
                 score_x = score_model(x, time_steps * time_dilation)
             score_v = grad(x, sample, score_x, create_graph=True)[0] - gradlogdet
 
-            f_tilde = s[(None,) * (sample.ndim - 1)] * (0.5 * (alpha[(None,) * (sample.ndim - 1)] * (1 - sample) - beta[
-                (None,) * (sample.ndim - 1)] * sample) - 0.5 * (1 - 2 * sample) - 0.5 * (g ** 2) * (score_v))
+            f_tilde = s[(None,) * (sample.ndim - 1)] * (
+                0.5
+                * (
+                    alpha[(None,) * (sample.ndim - 1)] * (1 - sample)
+                    - beta[(None,) * (sample.ndim - 1)] * sample
+                )
+                - 0.5 * (1 - 2 * sample)
+                - 0.5 * (g**2) * (score_v)
+            )
             score_e = torch.sum(f_tilde * epsilon)
             grad_score_e = grad(score_e, sample)[0]
-        div = torch.sum(grad_score_e * epsilon, dim=tuple(range(1, grad_score_e.ndim))).cpu().numpy().astype(np.float64)
+        div = (
+            torch.sum(grad_score_e * epsilon, dim=tuple(range(1, grad_score_e.ndim)))
+            .cpu()
+            .numpy()
+            .astype(np.float64)
+        )
         return div, f_tilde.cpu().detach().numpy().reshape((-1,)).astype(np.float64)
 
     def ode_func(t, ode_x):
         time_steps = np.ones((shape[0],)) * t
-        v = inverse_logodds(ode_x[:-shape[0]])
+        v = inverse_logodds(ode_x[: -shape[0]])
         logp_grad, f_tilde = divergence_eval_wrapper(v, time_steps)
         sample_grad = f_tilde * (1 / (np.fmax(v, eps)) + 1 / np.fmax(1 - v, eps))
 
         return np.concatenate([sample_grad, logp_grad], axis=0)
 
-    init = np.concatenate([logodds(v.detach().cpu().numpy().reshape((-1,))), np.zeros((shape[0],))], axis=0)
-    res = integrate.solve_ivp(ode_func, (min_time, max_time), init, rtol=1e-4, atol=1e-4, method='RK23')
+    init = np.concatenate(
+        [logodds(v.detach().cpu().numpy().reshape((-1,))), np.zeros((shape[0],))],
+        axis=0,
+    )
+    res = integrate.solve_ivp(
+        ode_func, (min_time, max_time), init, rtol=1e-4, atol=1e-4, method="RK23"
+    )
     zp = res.y[:, -1]
-    z = torch.Tensor(inverse_logodds(zp[:-shape[0]])).to(device).reshape(shape)
+    z = torch.Tensor(inverse_logodds(zp[: -shape[0]])).to(device).reshape(shape)
 
-    delta_logp = torch.Tensor(zp[-shape[0]:]).to(device).reshape(shape[0])
+    delta_logp = torch.Tensor(zp[-shape[0] :]).to(device).reshape(shape[0])
     prior_logp = prior_likelihood(z, alpha, beta)
     sb_delta_logp = sb.log_abs_det_jacobian(v.to(device))
     if v.ndim - 1 > 1:
