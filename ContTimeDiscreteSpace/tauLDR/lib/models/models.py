@@ -275,7 +275,7 @@ class BirthDeathForwardBase:
         # is probably inaccurate and should be zero anyway
         transitions[transitions < 1e-8] = 0.0
 
-        return transitions
+        return transitions # [B, S, S] 
 
 
 class UniformRate:
