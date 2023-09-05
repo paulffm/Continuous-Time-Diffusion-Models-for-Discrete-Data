@@ -353,7 +353,7 @@ def save_state(state: dict, save_dir) -> None:
     checkpoint_dict = {
         "model": state["model"].state_dict(),
         "optimizer": state["optimizer"].state_dict(),
-        "epoch": state["n_iter"],
+        "n_iter": state["n_iter"],
         # "ema_model_state": self.ema_model.state_dict() if self.use_ema else None,
     }
     torch.save(checkpoint_dict, model_path)
