@@ -1,4 +1,6 @@
 import torch
+import ml_collections
+import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 from config.config_train_sample import get_config
@@ -67,14 +69,16 @@ def main():
         model_name = 'ckpt_0000004999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 10000
-        cfg.sampler.sample_freq = 10000
+        cfg.training.n_iters = 15000
+        cfg.sampler.sample_freq = 15000
+        cfg.saving.checkpoint_freq = 1000
+    
         
-
+    print(state["n_iter"])
 
     n_samples = 16
 
-
+    print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
     while True:
@@ -84,16 +88,18 @@ def main():
             l = training_step.step(state, minibatch, loss)
             print("Loss:", l.item())
             training_loss.append(l.item())
-
+            #print('ter', state["n_iter"])
+            #print(state["n_iter"] % cfg.saving.checkpoint_freq)
             # just to save model
             if (
-                state["n_iter"] + 1 % cfg.saving.checkpoint_freq == 0
+                (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0
                 or state["n_iter"] == cfg.training.n_iters - 1
             ):
                 bookkeeping.save_state(state, cfg.save_location)
+                print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (
-                state["n_iter"] + 1 % cfg.sampler.sample_freq == 0
+                (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0
                 or state["n_iter"] == cfg.training.n_iters - 1
             ):
                 state["model"].eval()
@@ -105,7 +111,7 @@ def main():
 
                 fig = plt.figure(figsize=(9, 9))  
                 for i in range(n_samples):
-                    plt.subplot(3, 3, 1 + i)
+                    plt.subplot(4, 4, 1 + i)
                     plt.axis("off")
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
                 n_iter = state["n_iter"]
