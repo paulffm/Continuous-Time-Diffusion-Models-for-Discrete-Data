@@ -10,4 +10,5 @@ MNISTDiffusionModel/MNIST
 **/MNIST
 **/CIFAR-10
 **/SavedModels
+**/bin-mnist
 # git filter-branch -f --index-filter 'git rm --cached --ignore-unmatch checkpoints/saved_epoch_1_model.pt'
