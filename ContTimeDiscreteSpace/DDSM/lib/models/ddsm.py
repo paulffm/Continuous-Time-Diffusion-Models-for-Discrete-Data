@@ -36,6 +36,7 @@ def dirichlet_logp(concentration, x):
 
 
 def log_rising_factorial(a, n):
+    # a_{(n)} = gamma(a + n) / gamma(a)
     return torch.lgamma(a + n) - torch.lgamma(a)
 
 
@@ -62,13 +63,15 @@ def jacobi(x, alpha, beta, order=100):
 
 def jacobi_diffusion_density(x0, xt, t, a, b, order=100, speed_balanced=True):
     """
-    Compute Jacobi diffusion transition density function.
+    Compute Jacobi diffusion transition density function. 
     """
+    # p_{a, b}(x^t|x^0)
     n = torch.arange(order, device=x0.device).double().expand(*x0.shape, order)
     if speed_balanced:
         s = 2 / (a + b)
     else:
         s = torch.ones_like(a)
+    # lambda_n
     eigenvalues = (
         -0.5 * s.unsqueeze(-1) * n * (n - 1 + a.unsqueeze(-1) + b.unsqueeze(-1))
     )
@@ -80,7 +83,7 @@ def jacobi_diffusion_density(x0, xt, t, a, b, order=100, speed_balanced=True):
         - torch.log(2 * n + (a + b).unsqueeze(-1) - 1)
         - torch.lgamma(n + 1)
     )
-
+    
     return (
         torch.exp(beta_logp(a, b, xt).unsqueeze(-1) + (eigenvalues * t - logdn))
         * jacobi(x0 * 2 - 1, alpha=b - 1, beta=a - 1, order=order)

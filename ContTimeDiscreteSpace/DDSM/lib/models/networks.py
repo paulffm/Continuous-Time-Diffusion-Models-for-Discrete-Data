@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 import sys
 
 sys.path.append("../")
-from ddsm import *
+from lib.models.ddsm import *
 
 
 class Swish(nn.Module):
@@ -253,7 +253,8 @@ class MNISTScoreNet(nn.Module):
         init.zeros_(self.tail[-1].bias)
 
     def forward(self, x, t):
-        x = x.permute(0, 3, 1, 2)
+        # x shape: B, C, H, W
+        x = x.permute(0, 3, 1, 2) # torch.Size([64, 28, 1, 28]) B, W, C, H Why?
         # Timestep embedding
         temb = self.time_embedding(t / self.max_time)
         # Downsampling

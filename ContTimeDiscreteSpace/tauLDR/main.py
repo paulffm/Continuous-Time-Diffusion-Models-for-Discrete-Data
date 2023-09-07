@@ -40,7 +40,7 @@ def main():
    
     else:
         path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/'
-        date = '2023-09-04'
+        date = '2023-09-07'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)
 
@@ -66,12 +66,12 @@ def main():
 
     if train_resume:
         checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
-        model_name = 'ckpt_0000004999.pt'
+        model_name = 'model_26999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 15000
-        cfg.sampler.sample_freq = 15000
-        cfg.saving.checkpoint_freq = 1000
+        cfg.training.n_iters = 27000
+        cfg.sampler.sample_freq = 27000
+        cfg.saving.checkpoint_freq = 1500
     
         
     print(state["n_iter"])

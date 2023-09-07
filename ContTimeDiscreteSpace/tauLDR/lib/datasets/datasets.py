@@ -142,7 +142,7 @@ def create_train_discrete_mnist_dataloader(
 
 
     train_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/lib/datasets",
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
         train=True,
         download=True,
         transform=base_transforms,
@@ -182,7 +182,7 @@ def create_discrete_mnist_dataloader(
 
     # Load the training dataset
     train_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/MNISTDiffusionModel",
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
         train=True,
         download=True,
         transform=preprocess
@@ -196,7 +196,7 @@ def create_discrete_mnist_dataloader(
 
     # Load the test dataset
     test_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/MNISTDiffusionModel",
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
         train=False,
         download=True,
         transform=preprocess

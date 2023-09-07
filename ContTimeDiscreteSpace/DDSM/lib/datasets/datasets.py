@@ -7,11 +7,20 @@ from urllib.request import urlretrieve
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from sei.selene_utils import MemmapGenome
-from utils.dna import GenomicSignalFeatures
+from lib.sei.selene_utils import MemmapGenome
+from lib.utils.dna import GenomicSignalFeatures
 import pandas as pd
+import torch
+from torch.utils.data import Dataset
+import numpy as np
+import torchvision.datasets
+import torchvision.transforms
+from torchvision.datasets import MNIST, CIFAR10
+from torchvision import transforms
+from torch.utils.data import DataLoader, random_split
+import os
 
-
+# torch.Size([64, 1, 28, 28])
 def load_mnist_binarized(root):
     datapath = os.path.join(root, "bin-mnist")
     if not os.path.exists(datapath):
@@ -138,3 +147,92 @@ class TSSDatasetS(Dataset):
 
     def reset(self):
         np.random.seed(0)
+
+
+def denormalize_image(image):
+    return image * 255
+
+
+def create_train_discrete_mnist_dataloader(
+    batch_size: int,
+    image_size: int = 32,
+    num_workers: int = 4,
+    use_augmentation: bool = False,
+) -> DataLoader:
+    """
+    preprocess=transforms.Compose([transforms.Resize((image_size,image_size)),\
+                                    transforms.ToTensor(),\
+                                    transforms.Normalize([0.5],[0.5])]) #[0,1] to [-1,1]
+    
+    """
+    base_transforms = [transforms.Resize((image_size, image_size))]
+
+    # Add augmentations if needed
+    if use_augmentation:
+        base_transforms.append(transforms.RandomRotation((-10, 10)))
+
+    base_transforms.append(transforms.ToTensor())
+    base_transforms.append(denormalize_image)
+    base_transforms = transforms.Compose(
+        base_transforms
+    )  # Add random rotation of 10 degrees
+
+    train_dataset = MNIST(
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
+        train=True,
+        download=True,
+        transform=base_transforms,
+    )
+
+    return DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+    )
+
+
+def create_discrete_mnist_dataloader(
+    batch_size: int,
+    image_size: int = 32,
+    num_workers: int = 4,
+    valid_split: float = 0.1,  # fraction of training data used for validation
+    use_augmentation: bool = False
+):
+    # Define base transformations
+    base_transforms = [transforms.Resize((image_size, image_size))]
+    test_transforms = [transforms.Resize((image_size, image_size))]
+
+    # Add augmentations if needed
+    if use_augmentation:
+        base_transforms.append(transforms.RandomRotation((-10, 10)))
+
+    base_transforms.append(transforms.ToTensor())
+    base_transforms.append(denormalize_image) 
+    preprocess = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
+
+
+    # Load the training dataset
+    train_dataset = MNIST(
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
+        train=True,
+        download=True,
+        transform=preprocess
+    )
+
+    # Split the training dataset into training and validation subsets
+    num_train = len(train_dataset)
+    num_valid = int(valid_split * num_train)
+    num_train = num_train - num_valid
+    train_subset, valid_subset = random_split(train_dataset, [num_train, num_valid])
+
+    # Load the test dataset
+    test_dataset = MNIST(
+        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
+        train=False,
+        download=True,
+        transform=preprocess
+    )
+
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    valid_loader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    return train_loader, valid_loader, test_loader
