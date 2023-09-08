@@ -178,7 +178,7 @@ class MNISTScoreNet(nn.Module):
         attn,
         num_res_blocks,
         dropout,
-        time_dependent_weights,
+        time_dependent_weights=None,
         time_step=0.01,
         max_time=4,
     ):
@@ -253,7 +253,7 @@ class MNISTScoreNet(nn.Module):
         init.zeros_(self.tail[-1].bias)
 
     def forward(self, x, t):
-        # x shape: B, C, H, W
+        # x shape: B, C, H, W, num_Cat
         x = x.permute(0, 3, 1, 2) # torch.Size([64, 28, 1, 28]) B, W, C, H Why?
         # Timestep embedding
         temb = self.time_embedding(t / self.max_time)
@@ -274,13 +274,16 @@ class MNISTScoreNet(nn.Module):
         h = self.tail(h)
         h = h.permute(0, 2, 3, 1)[:, 2:-2, 2:-2, :]
         assert len(hs) == 0
+
         h = h - h.mean(axis=-1, keepdims=True)
-        t_step = (t / self.time_step) - 1
-        w0 = self.time_dependent_weights[t_step.long()]
-        w1 = self.time_dependent_weights[
-            torch.clip(t_step + 1, max=len(self.time_dependent_weights) - 1).long()
-        ]
-        h = h * (w0 + (t_step - t_step.floor()) * (w1 - w0))[:, None, None, None]
+        # in dna: first h = h * and then h = h - h.mean
+        if self.time_dependent_weights is not None:
+            t_step = (t / self.time_step) - 1
+            w0 = self.time_dependent_weights[t_step.long()]
+            w1 = self.time_dependent_weights[
+                torch.clip(t_step + 1, max=len(self.time_dependent_weights) - 1).long()
+            ]
+            h = h * (w0 + (t_step - t_step.floor()) * (w1 - w0))[:, None, None, None]
 
         return h
 
