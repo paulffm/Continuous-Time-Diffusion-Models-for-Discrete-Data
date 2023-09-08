@@ -2,22 +2,17 @@ import torch
 import numpy as np
 from lib.models.ddsm import *
 from matplotlib import pyplot as plt
+import torch.nn.functional as F
 
 
-
-def importance_sampling(config, data_loader,  diffuser_func, sb):
+def importance_sampling(config, data_loader,  diffuser_func, sb, s):
     time_dependent_cums = torch.zeros(config.n_time_steps).to(config.device)
     time_dependent_counts = torch.zeros(config.n_time_steps).to(config.device)
 
-    if config.speed_balanced:
-        s = 2 / (torch.ones(config.data.num_cat - 1, device=config.device) + torch.arange(config.data.num_cat - 1, 0, -1,
-                                                                                    device=config.device).float())
-    else:
-        s = torch.ones(config.data.num_cat - 1, device=config.device)
-
     for i, x in enumerate(data_loader):
         # x = binary_to_onehot(x.squeeze())
-        x = x[..., :4]
+        #x = x[..., :4]
+        x = F.one_hot(x.long(), num_classes=config.data.num_cat)
         random_t = torch.randint(0, config.n_time_steps, (x.shape[0],))
 
         if config.random_order:
