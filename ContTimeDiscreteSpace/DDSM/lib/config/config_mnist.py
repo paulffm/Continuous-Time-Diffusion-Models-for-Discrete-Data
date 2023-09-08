@@ -8,17 +8,28 @@ def get_config():
     config = ml_collections.ConfigDict()
     config.experiment_name = "mnist"
     config.save_location = save_directory
-    config.num_cat = 256
+    config.num_cat = 2
+    config.diffusion_weights_path = diffusion_weights_path
+    config.num_time_steps = 400 #?
+    config.random_order = False
+    config.device = 'cpu'
+    config.speed_balanced = False
+
 
     config.loss = loss = ml_collections.ConfigDict()
 
     config.training = training = ml_collections.ConfigDict()
+    training.n_iter = 100
 
     config.data = data = ml_collections.ConfigDict()
     data.batch_size = 64
     data.image_size = 32
+    data.num_cat = 2
+    data.shape = (28, 28, 2)
     data.use_augmentation = True
     data.num_workers = 4
+
+    config.sampler = sampler = ml_collections.ConfigDict()
     
 
     config.noise_sample = noise_sample = ml_collections.ConfigDict()
