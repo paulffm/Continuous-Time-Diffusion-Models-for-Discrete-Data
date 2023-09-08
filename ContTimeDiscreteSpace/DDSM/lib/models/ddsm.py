@@ -63,7 +63,7 @@ def jacobi(x, alpha, beta, order=100):
 
 def jacobi_diffusion_density(x0, xt, t, a, b, order=100, speed_balanced=True):
     """
-    Compute Jacobi diffusion transition density function. 
+    Compute Jacobi diffusion transition density function.
     """
     # p_{a, b}(x^t|x^0)
     n = torch.arange(order, device=x0.device).double().expand(*x0.shape, order)
@@ -83,7 +83,7 @@ def jacobi_diffusion_density(x0, xt, t, a, b, order=100, speed_balanced=True):
         - torch.log(2 * n + (a + b).unsqueeze(-1) - 1)
         - torch.lgamma(n + 1)
     )
-    
+
     return (
         torch.exp(beta_logp(a, b, xt).unsqueeze(-1) + (eigenvalues * t - logdn))
         * jacobi(x0 * 2 - 1, alpha=b - 1, beta=a - 1, order=order)
@@ -135,7 +135,7 @@ def noise_factory(
     speed_balanced=True,
     logspace=False,
     mode="independent",
-    device="cuda",
+    device="cpu",
 ):
     """
     Generate Jacobi diffusion samples and compute score of transition density function.
@@ -428,13 +428,17 @@ def diffusion_factory(
     else:
         v_samples.requires_grad = True
         samples = sb(v_samples)
+        # one fork added this:
+        #logdet = sb.log_abs_det_jacobian(v_samples, samples)
+        # samples_grad = gv_to_gx(v_samples_grad + grad(logdet.sum(), v_samples)[0], v_samples)
+
         samples_grad = gv_to_gx(v_samples_grad, v_samples)
         samples_grad -= samples_grad.mean(-1, keepdims=True)
         return samples, samples_grad
 
 
 def diffusion_fast_flatdirichlet(
-    x, time_inds, noise_factory_one, noise_factory_one_loggrad, symmetrize=False
+    x, time_ind, noise_factory_one, noise_factory_one_loggrad, symmetrize=False
 ):
     """
     Fast multivariate Jacobi diffusion sampling assuming the stationary
@@ -448,10 +452,10 @@ def diffusion_fast_flatdirichlet(
         x_samples = torch.zeros(x.size()).to(x.device)
         x_samples_grad = torch.zeros(x.size()).to(x.device)
         x_samples[..., 0] = noise_factory_one[
-            sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0
+            sample_inds, time_ind[(...,) + (None,) * (x.ndim - 2)], 0
         ]
         x_samples_grad[..., 0] = noise_factory_one_loggrad[
-            sample_inds, time_inds[(...,) + (None,) * (x.ndim - 2)], 0
+            sample_inds, time_ind[(...,) + (None,) * (x.ndim - 2)], 0
         ] + (k - 2) / (1 - x_samples[..., 0])
 
         D = Dirichlet(torch.ones(k - 1))
@@ -499,233 +503,6 @@ class GaussianFourierProjection(nn.Module):
 #############################################
 ############### Samplers ####################
 #############################################
-def Euler_Maruyama_sampler(
-    score_model,
-    sample_shape,
-    init=None,
-    mask=None,
-    alpha=None,
-    beta=None,
-    max_time=4,
-    min_time=0.01,
-    time_dilation=1,
-    time_dilation_start_time=None,
-    batch_size=64,
-    num_steps=100,
-    device="cuda",
-    random_order=False,
-    speed_balanced=True,
-    speed_factor=None,
-    concat_input=None,
-    eps=1e-5,
-):
-    """
-    Generate samples from score-based models with the Euler-Maruyama solver
-    for (multivariate) Jacobi diffusion processes with stick-breaking
-    construction.
-
-    Parameters
-    ----------
-    score_model : torch.nn.Module
-        A PyTorch time-dependent score model.
-    sample_shape : tuple
-        Shape of all dimensions of sample tensor without the batch dimension.
-    init: torch.Tensor, default is None
-        If specified, use as initial values instead of sampling from stationary distribution.
-    alpha :  torch.Tensor, default is None
-        Jacobi Diffusion parameters. If None, use default choices of alpha, beta =
-        (1, k-1), (1, k-2), (1, k-3), ..., (1, 1) where k is the number of categories.
-    beta : torch.Tensor, default is None
-        See above `for alpha`.
-    max_time : float, default is 4
-        Max time of reverse diffusion sampling.
-    min_time : float, default is 0.01
-        Min time of reverse diffusion sampling.
-    time_dilation : float, default is 1
-        Use `time_dilation > 1` to bias samples toward high density areas.
-    time_dilation_start_time : float, default is None
-        If specified, start time dilation from this timepoint to min_time.
-    batch_size : int, default is 64
-        Number of samples to generate
-    num_steps: int, default is 100
-        Total number of steps for reverse diffusion sampling.
-    device: str, default is 'cuda'
-        Use 'cuda' to run on GPU or 'cpu' to run on CPU
-    random_order : bool, default is False
-        Whether to convert x to v space with randomly ordered stick-breaking transform.
-    speed_balanced : bool, default is True
-        If True use speed factor `s=(a+b)/2`, otherwise use `s=1`.
-    eps: float, default is 1e-5
-        All state values are clamped to (eps, 1-eps) for numerical stability.
-
-
-    Returns
-    -------
-    Samples : torch.Tensor
-        Samples in x space.
-    """
-    sb = UnitStickBreakingTransform()
-    if alpha is None:
-        alpha = torch.ones(sample_shape[-1] - 1, dtype=torch.float, device=device)
-    if beta is None:
-        beta = torch.arange(
-            sample_shape[-1] - 1, 0, -1, dtype=torch.float, device=device
-        )
-
-    if speed_balanced:
-        if speed_factor is None:
-            s = 2.0 / (alpha + beta)
-        else:
-            s = speed_factor * 2.0 / (alpha + beta)
-    else:
-        s = torch.ones(sample_shape[-1] - 1).to(device)
-
-    if init is None:
-        init_v = Beta(alpha, beta).sample((batch_size,) + sample_shape[:-1]).to(device)
-    else:
-        init_v = sb._inverse(init).to(device)
-
-    if time_dilation_start_time is None:
-        time_steps = torch.linspace(
-            max_time, min_time, num_steps * time_dilation + 1, device=device
-        )
-    else:
-        time_steps = torch.cat(
-            [
-                torch.linspace(
-                    max_time,
-                    time_dilation_start_time,
-                    round(num_steps * (max_time - time_dilation_start_time) / max_time)
-                    + 1,
-                )[:-1],
-                torch.linspace(
-                    time_dilation_start_time,
-                    min_time,
-                    round(num_steps * (time_dilation_start_time - min_time) / max_time)
-                    * time_dilation
-                    + 1,
-                ),
-            ]
-        )
-    step_sizes = time_steps[:-1] - time_steps[1:]
-    time_steps = time_steps[:-1]
-    v = init_v.detach()
-
-    if mask is not None:
-        assert mask.shape[-1] == v.shape[-1] + 1
-
-    if random_order:
-        order = np.arange(sample_shape[-1])
-    else:
-        if mask is not None:
-            mask_v = sb.inv(mask)
-
-    with torch.no_grad():
-        for i_step in tqdm.tqdm(range(len(time_steps))):
-            time_step = time_steps[i_step]
-            step_size = step_sizes[i_step]
-            x = sb(v)
-
-            if time_dilation_start_time is not None:
-                if time_step < time_dilation_start_time:
-                    c = time_dilation
-                else:
-                    c = 1
-            else:
-                c = time_dilation
-
-            if not random_order:
-                g = torch.sqrt(v * (1 - v))
-                batch_time_step = torch.ones(batch_size, device=device) * time_step
-
-                with torch.enable_grad():
-                    if concat_input is None:
-                        score = score_model(x, batch_time_step)
-                    else:
-                        score = score_model(
-                            torch.cat([x, concat_input], -1), batch_time_step
-                        )
-
-                    mean_v = (
-                        v
-                        + s[(None,) * (v.ndim - 1)]
-                        * (
-                            (
-                                0.5
-                                * (
-                                    alpha[(None,) * (v.ndim - 1)] * (1 - v)
-                                    - beta[(None,) * (v.ndim - 1)] * v
-                                )
-                            )
-                            - (1 - 2 * v)
-                            - (g**2) * gx_to_gv(score, x)
-                        )
-                        * (-step_size)
-                        * c
-                    )
-
-                next_v = mean_v + torch.sqrt(step_size * c) * torch.sqrt(
-                    s[(None,) * (v.ndim - 1)]
-                ) * g * torch.randn_like(v)
-
-                if mask is not None:
-                    next_v[~torch.isnan(mask_v)] = mask_v[~torch.isnan(mask_v)]
-
-                v = torch.clamp(next_v, eps, 1 - eps).detach()
-            else:
-                x = x[..., np.argsort(order)]
-                order = np.random.permutation(np.arange(sample_shape[-1]))
-
-                if mask is not None:
-                    mask_v = sb.inv(mask[..., order])
-
-                v = sb._inverse(x[..., order], prevent_nan=True)
-                v = torch.clamp(v, eps, 1 - eps).detach()
-
-                g = torch.sqrt(v * (1 - v))
-                batch_time_step = torch.ones(batch_size, device=device) * time_step
-
-                with torch.enable_grad():
-                    if concat_input is None:
-                        score = score_model(x, batch_time_step)
-                    else:
-                        score = score_model(
-                            torch.cat([x, concat_input], -1), batch_time_step
-                        )
-                    mean_v = (
-                        v
-                        + s[(None,) * (v.ndim - 1)]
-                        * (
-                            (
-                                0.5
-                                * (
-                                    alpha[(None,) * (v.ndim - 1)] * (1 - v)
-                                    - beta[(None,) * (v.ndim - 1)] * v
-                                )
-                            )
-                            - (1 - 2 * v)
-                            - (g**2) * (gx_to_gv(score[..., order], x[..., order]))
-                        )
-                        * (-step_size)
-                        * c
-                    )
-                next_v = mean_v + torch.sqrt(step_size * c) * torch.sqrt(
-                    s[(None,) * (v.ndim - 1)]
-                ) * g * torch.randn_like(v)
-
-                if mask is not None:
-                    next_v[~torch.isnan(mask_v)] = mask_v[~torch.isnan(mask_v)]
-
-                v = torch.clamp(next_v, eps, 1 - eps).detach()
-
-    if mask is not None:
-        mean_v[~torch.isnan(mask_v)] = mask_v[~torch.isnan(mask_v)]
-
-    # Do not include any noise in the last sampling step.
-    if not random_order:
-        return sb(torch.clamp(mean_v, eps, 1 - eps))
-    else:
-        return sb(torch.clamp(mean_v, eps, 1 - eps))[..., np.argsort(order)]
 
 
 #############################################
@@ -848,3 +625,44 @@ def ode_likelihood(
         print("sb_delta_logp", sb_delta_logp)
 
     return z, prior_logp + delta_logp + sb_delta_logp
+
+
+def elbo(x, score_model, diffusion_factory_fn, min_time, max_time, sb, alpha, beta, speed_balanced, device="cpu", elbo_only=True):
+    perturbed_x, _ = diffusion_factory_fn(x.cpu(), torch.zeros(x.shape[0]).long())
+    perturbed_x = perturbed_x.to(device)
+    x = x.to(device)
+    v = sb._inverse(x, prevent_nan=False)
+    perturbed_v = sb._inverse(perturbed_x, prevent_nan=False)
+
+    z, loglik = ode_likelihood(
+        perturbed_v, score_model,
+        eps=1e-5, min_time=min_time, max_time=max_time, device=device,
+        alpha=None, beta=None, speed_balanced=speed_balanced)
+    N = np.prod(x.shape[1:-1])
+    loglik = loglik / N
+
+    loglikx = (torch.log(perturbed_x) * (x == 1)).sum(-1).mean()
+
+    torch.set_default_dtype(torch.float64)
+
+    qlog = jacobi_diffusion_density(
+        v.double(), perturbed_v.double(), min_time,
+        alpha.to(device), beta.to(device),
+        order=1000,
+        speed_balanced=speed_balanced,
+    ).log()
+    
+    for i, (a, b) in enumerate(zip(alpha.to(device), beta.to(device))):
+        B = Beta(a, b)
+        nanmask = torch.isnan(qlog[..., i])
+        qlog[..., i][nanmask] = B.log_prob(perturbed_v[..., i][nanmask].double())
+        
+    qlog = (qlog.sum(-1) + sb.log_abs_det_jacobian(perturbed_v)).mean().float()
+    torch.set_default_dtype(torch.float32)
+
+    elbo = loglik + loglikx - qlog
+    if elbo_only:
+        return elbo
+    else:
+        return elbo, loglik, loglikx, qlog
+    

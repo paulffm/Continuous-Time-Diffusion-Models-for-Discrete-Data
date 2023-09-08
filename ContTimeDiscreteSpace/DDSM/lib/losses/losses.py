@@ -1,8 +1,8 @@
 import torch
 
 
-def loss_fn(score, perturbed_x_grad, perturbed_x, important_sampling_weights=None):
-    perturbed_v = sb._inverse(perturbed_x, prevent_nan=True).detach()
+def loss_fn(x, perturbed_x, perturbed_x_grad, perturbed_v, score, s, important_sampling_weights=None):
+    
     if important_sampling_weights is not None:
         important_sampling_weights = 1/important_sampling_weights[
                     (...,) + (None,) * (x.ndim - 1)]
