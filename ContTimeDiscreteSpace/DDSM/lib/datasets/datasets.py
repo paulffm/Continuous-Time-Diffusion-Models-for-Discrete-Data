@@ -86,18 +86,18 @@ class TSSDatasetS(Dataset):
         self.shuffle = False
 
         self.genome = MemmapGenome(
-            input_path=config.ref_file,
-            memmapfile=config.ref_file_mmap,
+            input_path=config.data.ref_file,
+            memmapfile=config.data.ref_file_mmap,
             blacklist_regions="hg38",
         )
         self.tfeature = GenomicSignalFeatures(
-            config.fantom_files,
+            config.data.fantom_files,
             ["cage_plus", "cage_minus"],
             (2000,),
             config.fantom_blacklist_files,
         )
 
-        self.tsses = pd.read_table(config.tsses_file, sep="\t")
+        self.tsses = pd.read_table(config.data.tsses_file, sep="\t")
         self.tsses = self.tsses.iloc[:n_tsses, :]
 
         self.chr_lens = self.genome.get_chr_lens()
@@ -148,6 +148,34 @@ class TSSDatasetS(Dataset):
     def reset(self):
         np.random.seed(0)
 
+def prepare_dna_valid_dataset(config, sei, sei_features):
+    valid_set = TSSDatasetS(config, split='valid', n_tsses=40000, rand_offset=0)
+    valid_data_loader = DataLoader(valid_set, batch_size=config.data.batch_size, shuffle=False, num_workers=0)
+    valid_datasets = []
+
+    for x in valid_data_loader:
+        valid_datasets.append(x)
+
+    validseqs = []
+    for seq in valid_datasets:
+        validseqs.append(seq[:, :, :4])
+    validseqs = np.concatenate(validseqs, axis=0)
+
+    with torch.no_grad():
+        validseqs_pred = np.zeros((2915, 21907))
+        for i in range(int(validseqs.shape[0] / 128)):
+            validseq = validseqs[i * 128:(i + 1) * 128]
+            validseqs_pred[i * 128:(i + 1) * 128] = sei(
+                torch.cat([torch.ones((validseq.shape[0], 4, 1536)) * 0.25, torch.FloatTensor(validseq).transpose(1, 2),
+                           torch.ones((validseq.shape[0], 4, 1536)) * 0.25], 2).cuda()).cpu().detach().numpy()
+        validseq = validseqs[-128:]
+        validseqs_pred[-128:] = sei(
+            torch.cat([torch.ones((validseq.shape[0], 4, 1536)) * 0.25, torch.FloatTensor(validseq).transpose(1, 2),
+                       torch.ones((validseq.shape[0], 4, 1536)) * 0.25], 2).cuda()).cpu().detach().numpy()
+    validseqs_predh3k4me3 = validseqs_pred[:, sei_features[1].str.strip().values == 'H3K4me3'].mean(axis=1)
+
+    print("Validation dataset prepared")
+    return valid_datasets, validseqs_predh3k4me3
 
 def denormalize_image(image):
     return image * 255
