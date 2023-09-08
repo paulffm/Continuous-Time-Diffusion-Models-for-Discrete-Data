@@ -4,7 +4,7 @@ import ml_collections
 def get_config():
     save_directory = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/DNA"
     datasets_folder = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/lib/datasets/DNA"
-    diffusion_weights_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/DNA/presampled_noise.pt'
+    diffusion_weights_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/DNA/presampled_noise_dna.pt'
 
     config = ml_collections.ConfigDict()
     config.experiment_name = "dna"
