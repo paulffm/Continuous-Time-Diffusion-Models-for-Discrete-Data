@@ -14,7 +14,7 @@ from lib.losses.losses import loss_fn
 
 class Trainer:
     def __init__(self, config):
-        self.config = self.config
+        self.config = config
         self.device = config.device
 
         self.sb = UnitStickBreakingTransform()
@@ -34,7 +34,7 @@ class Trainer:
         else: 
             self.diffuser_func = partial(diffusion_fast_flatdirichlet(v_one=v_one, v_one_loggrad=v_one_loggrad))
         
-        if self.config.speed_balanced:
+        if config.speed_balanced:
             self.s = 2 / (torch.ones(self.config.data.num_cat - 1, device=self.config.device) + torch.arange(self.config.data.num_cat - 1, 0, -1,
                                                                                             device=self.config.device).float())
         else:

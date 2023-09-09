@@ -40,7 +40,7 @@ def main():
    
     else:
         path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/'
-        date = '2023-09-07'
+        date = '2023-09-08'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)
 
@@ -62,16 +62,16 @@ def main():
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
-    dataloader = create_train_discrete_mnist_dataloader(batch_size=32)
+    dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
 
     if train_resume:
         checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
-        model_name = 'model_26999.pt'
+        model_name = 'model_32999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 27000
-        cfg.sampler.sample_freq = 27000
-        cfg.saving.checkpoint_freq = 1500
+        cfg.training.n_iters = 36000
+        cfg.sampler.sample_freq = 36000
+        cfg.saving.checkpoint_freq = 1000
     
         
     print(state["n_iter"])

@@ -3,6 +3,7 @@ import numpy as np
 from lib.models.ddsm import *
 from matplotlib import pyplot as plt
 import torch.nn.functional as F
+import os
 
 
 def importance_sampling(config, data_loader,  diffuser_func, sb, s):
@@ -49,9 +50,19 @@ def importance_sampling(config, data_loader,  diffuser_func, sb, s):
     time_dependent_weights = time_dependent_cums / time_dependent_counts
     time_dependent_weights = time_dependent_weights / time_dependent_weights.mean()
     plt.plot(np.arange(1, config.n_time_steps + 1), time_dependent_weights.cpu())
-    print("Importance Sampling done")
 
+    print("Importance Sampling done")
     return time_dependent_weights
+
+"""
+if not os.path.exists(config.saving.time_dep_weights_path):
+    os.makedirs(config.saving.time_dep_weights_path)
+str_speed = ".speed_balance" if config.speed_balanced  else ""
+str_random_order = ".random_order" if config.random_order else ""
+filename = (f"time_depend_weights_steps{config.n_time_steps}.cat{config.data.num_cat}{str_speed}{str_random_order}")
+filepath = os.path.join(config.saving.time_dep_weights_path, filename + ".pth")
+torch.save(time_dependent_weights, filepath)
+"""
 
 
 def dna_sampler(config, sampler, score_model, sei, seifeatures, valid_datasets):

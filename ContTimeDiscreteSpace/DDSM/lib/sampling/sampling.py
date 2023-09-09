@@ -18,7 +18,7 @@ def Euler_Maruyama_sampler(
     num_steps=100,
     device="cuda",
     random_order=False,
-    speed_balanced=True,
+    speed_balanced=False,
     speed_factor=None,
     concat_input=None,
     eps=1e-5,
@@ -125,7 +125,7 @@ def Euler_Maruyama_sampler(
             mask_v = sb.inv(mask)
 
     with torch.no_grad():
-        for i_step in tqdm.tqdm(range(len(time_steps))):
+        for i_step in tqdm(range(len(time_steps)), desc="Sampling"):
             time_step = time_steps[i_step]
             step_size = step_sizes[i_step]
             x = sb(v)
@@ -239,7 +239,8 @@ import numpy as np
 from tqdm import tqdm
 from scipy import integrate
 ## The number of sampling steps.
-def Euler_Maruyama_sampler(score_model, 
+
+def Euler_Maruyama_sampler2(score_model, 
                            marginal_prob_std,
                            diffusion_coeff, 
                            num_steps, 

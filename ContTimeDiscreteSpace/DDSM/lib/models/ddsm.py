@@ -16,7 +16,7 @@ from scipy import integrate
 
 import tqdm
 from numbers import Real
-
+from tqdm import tqdm
 
 def beta_logp(alpha, beta, x):
     if isinstance(alpha, Real) and isinstance(beta, Real):
@@ -148,9 +148,9 @@ def noise_factory(
         timepoints = np.logspace(np.log10(0.01), np.log10(total_time), n_time_steps)
     else:
         timepoints = np.linspace(0, total_time, n_time_steps + 1)[1:]
-
+    print("started first")
     if mode == "independent":
-        for i, t in enumerate(timepoints):
+        for i, t in (enumerate(timepoints)):
             noise_factory_one[:, i, :] = Jacobi_Euler_Maruyama_sampler(
                 noise_factory_one[:, i, :],
                 a,
@@ -170,7 +170,7 @@ def noise_factory(
                 device=device,
             )
     elif mode == "path":
-        for i, t in enumerate(timepoints):
+        for i, t in enumerate(tqdm(timepoints)):
             if i == 0:
                 noise_factory_one[:, i, :] = Jacobi_Euler_Maruyama_sampler(
                     noise_factory_one[:, i, :],
@@ -211,11 +211,11 @@ def noise_factory(
                 )
     else:
         raise ValueError
-
+    print("first finished")
     noise_factory_one_loggrad = torch.zeros(N, n_time_steps, a.size(-1))
     noise_factory_zero_loggrad = torch.zeros(N, n_time_steps, a.size(-1))
 
-    for i, t in enumerate(timepoints):
+    for i, t in enumerate(tqdm(timepoints)):
         xt = noise_factory_one[:, i, :].detach().clone()
 
         xt.requires_grad = True
