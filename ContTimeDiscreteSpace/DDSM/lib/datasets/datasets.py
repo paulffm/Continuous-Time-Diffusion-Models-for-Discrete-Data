@@ -219,6 +219,7 @@ def create_train_discrete_mnist_dataloader(
 
 def create_discrete_mnist_dataloader(
     batch_size: int,
+    path: str,
     image_size: int = 32,
     num_workers: int = 4,
     valid_split: float = 0.1,  # fraction of training data used for validation
@@ -239,7 +240,7 @@ def create_discrete_mnist_dataloader(
 
     # Load the training dataset
     train_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
+        root=path,
         train=True,
         download=True,
         transform=preprocess
@@ -253,7 +254,7 @@ def create_discrete_mnist_dataloader(
 
     # Load the test dataset
     test_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",
+        root=path,
         train=False,
         download=True,
         transform=preprocess
@@ -264,3 +265,19 @@ def create_discrete_mnist_dataloader(
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     return train_loader, valid_loader, test_loader
+
+
+def get_mnist_dataset(config):
+
+    if config.data.name == "bin_mnist":
+        train_set, valid_set, test_set = get_binmnist_datasets(config.loading.dataset_path) # torch.Size([64, 1, 28, 28])
+        train_dataloader = DataLoader(train_set, batch_size=config.data.batch_size, shuffle=True, num_workers=4)
+        valid_dataloader = DataLoader(valid_set, batch_size=config.data.batch_size, shuffle=False, num_workers=4)
+        test_dataloader = DataLoader(test_set, batch_size=config.data.batch_size, shuffle=True, num_workers=4)
+        
+    elif config.data.name == "mnist":
+        train_dataloader, valid_dataloader, test_dataloader  = create_discrete_mnist_dataloader(batch_size=config.data.batch_size, image_size=config.data.image_size, path=config.loading.dataset_path)
+    else:
+        raise ValueError(f"No dataset with name {config.data.name}")
+    
+    return train_dataloader, valid_dataloader, test_dataloader 
