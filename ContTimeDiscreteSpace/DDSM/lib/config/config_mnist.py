@@ -29,6 +29,7 @@ def get_config():
     data.shape = (32, 32, 2)
     data.use_augmentation = True # del
     data.num_workers = 4
+    data.name = "mnist"
 
     config.model = model = ml_collections.ConfigDict()
     model.ch = 32 #128

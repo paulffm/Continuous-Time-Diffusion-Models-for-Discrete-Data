@@ -19,8 +19,8 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
 
     config.training = training = ml_collections.ConfigDict()
-    training.n_iter = 10 # num_epochs = 50
-    training.validation_freq = 5 # 10
+    training.n_iter = 5000 # num_epochs = 50 * 938
+    training.validation_freq = 6000 # 10 * 938
 
     config.data = data = ml_collections.ConfigDict()
     data.batch_size = 64
@@ -29,6 +29,7 @@ def get_config():
     data.shape = (28, 28, 2)
     data.use_augmentation = True # del
     data.num_workers = 4
+    data.name = "bin_mnist"
 
     config.model = model = ml_collections.ConfigDict()
     model.ch = 32 #128
@@ -42,11 +43,11 @@ def get_config():
     optimizer.weight_decay = 1e-10
     
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.sampler_freq = 10
+    sampler.sampler_freq = 5000
     sampler.n_samples = 16
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.checkpoint_freq = 5
+    saving.checkpoint_freq = 1000
     saving.checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/'
     saving.time_dep_weights_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/"
     saving.sample_plot_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/PNGs/"
