@@ -13,7 +13,7 @@ def importance_sampling(config, data_loader,  diffuser_func, sb, s):
     for i, x in enumerate(data_loader):
         # x = binary_to_onehot(x.squeeze())
         #x = x[..., :4]
-        x = F.one_hot(x.long(), num_classes=config.data.num_cat)
+        x = F.one_hot(x.squeeze().long(), num_classes=config.data.num_cat)
         random_t = torch.randint(0, config.n_time_steps, (x.shape[0],))
 
         if config.random_order:
