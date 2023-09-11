@@ -3,7 +3,7 @@ import ml_collections
 
 def get_config():
     save_directory = '../../SavedModels/MNIST/'
-    dataset_path = "../"
+    dataset_path = "../datasets/"
     sample_plot_path = "../../SavedModels/MNIST/PNGs/"
     diffusion_weights_path = '../../SavedModels/MNIST/diff_weights_steps400.cat256.time4.0.samples10000.pth'
     time_dep_weights_path = '../../SavedModels/MNIST/time_depend_weights_steps400.cat256.pth'
