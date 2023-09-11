@@ -39,7 +39,7 @@ def main():
         bookkeeping.save_config(cfg, cfg.save_location)
    
     else:
-        path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/'
+        path = 'SavedModels/MNIST/'
         date = '2023-09-08'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)
@@ -65,7 +65,7 @@ def main():
     dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
 
     if train_resume:
-        checkpoint_path = '/SavedModels/MNIST'
+        checkpoint_path = 'SavedModels/MNIST/'
         model_name = 'model_32999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
@@ -131,9 +131,7 @@ def main():
 
     plt.plot(training_loss)
     plt.title("Training loss")
-    plt.savefig(
-        "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs/training_loss.png"
-    )
+    plt.savefig("SavedModels/MNIST/PNGs/training_loss.png")
     plt.close()
 
 
