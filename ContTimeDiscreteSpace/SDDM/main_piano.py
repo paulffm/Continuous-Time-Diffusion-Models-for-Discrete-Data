@@ -13,7 +13,7 @@ from ml_collections import config_flags
 from sddm.common import train_eval
 from sddm.common import utils
 from sddm.model import continuous_time_diffusion
-from sddm.sequence.piano import data_loader
+import sddm.sequence.piano.data_loader as data_loader
 
 
 _CONFIG = config_flags.DEFINE_config_file("config", lock_config=False)
@@ -22,7 +22,8 @@ flags.DEFINE_integer("seed", 1023, "random seed")
 FLAGS = flags.FLAGS
 
 
-class PianoModel(continuous_time_diffusion.PrefixCondCategoricalDiffusionModel):
+# class PianoModel(continuous_time_diffusion.PrefixCondCategoricalDiffusionModel):
+class PianoModel(continuous_time_diffusion.CategoricalDiffusionModel):
     """Model Categorical Music."""
 
     @functools.partial(jax.pmap, static_broadcasted_argnums=(0,))
@@ -91,6 +92,7 @@ class PianoModel(continuous_time_diffusion.PrefixCondCategoricalDiffusionModel):
 def main(argv: Sequence[str]) -> None:
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
+    
     config = _CONFIG.value
     config.data_folder = os.path.join(FLAGS.data_root, config.data_folder)
     global_key = jax.random.PRNGKey(FLAGS.seed)

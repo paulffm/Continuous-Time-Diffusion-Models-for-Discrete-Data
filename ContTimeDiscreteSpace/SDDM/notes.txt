@@ -1,0 +1,5 @@
+Aufbau:
+forward Model => Q matrices => x_0 to noisy image x_t 
+backward model => Loss calculation: Possibilites: Hollow, EBM, TauLDRBackward => inherits from backward model
+DiffusionModel => specify forward model, how to calc loss, how to sample: 'exact', 'tau_leaping', 
+CategoricalDiffusion => inherits from DiffusionModel => just specifiy BackwardsModel and Samples
