@@ -85,7 +85,7 @@ def Euler_Maruyama_sampler(
         s = torch.ones(sample_shape[-1] - 1).to(device)
 
     if init is None:
-        init_v = Beta(alpha, beta).sample((batch_size,) + sample_shape[:-1]).to(device)
+        init_v = Beta(alpha, beta).sample((batch_size,) + tuple(sample_shape[:-1])).to(device)
     else:
         init_v = sb._inverse(init).to(device)
 

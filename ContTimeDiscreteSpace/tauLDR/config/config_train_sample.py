@@ -1,8 +1,8 @@
 import ml_collections
 
 def get_config():
-    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST' 
-    datasets_folder = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/lib/datasets/MNIST'
+    save_directory = '../../SavedModels/MNIST/'
+    dataset_path = '../lib/datasets'
 
 
 
@@ -32,7 +32,7 @@ def get_config():
 
     config.data = data = ml_collections.ConfigDict()
     data.name = 'DiscreteMNIST'
-    data.root = datasets_folder
+    data.root = dataset_path
     data.train = True
     data.download = True
     data.S = 256
@@ -79,6 +79,7 @@ def get_config():
     saving.log_low_freq = 10000
     saving.low_freq_loggers = ['denoisingImages']
     saving.prepare_to_resume_after_timeout = False
+    saving.sample_plot_path = '../../SavedModels/MNIST/PNGs'
 
 
     config.sampler = sampler = ml_collections.ConfigDict()

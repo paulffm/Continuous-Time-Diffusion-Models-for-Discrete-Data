@@ -2,13 +2,13 @@ import ml_collections
 
 
 def get_config():
-    save_directory = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST"
-    datasets_folder = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/lib/datasets/Bin_MNIST"
-    diffusion_weights_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/diff_weights_steps400.cat2.time4.0.samples10000.pth'
-    time_dep_weights_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/time_depend_weights_steps400.cat2.pth'
+    save_directory = "../../SavedModels/Bin_MNIST"
+    dataset_path = "../lib/datasets"
+    sample_plot_path = "../../SavedModels/Bin_MNIST/PNGs/"
+    diffusion_weights_path = '../../SavedModels/Bin_MNIST/diff_weights_steps400.cat2.time4.0.samples10000.pth'
+    time_dep_weights_path = '../../SavedModels/Bin_MNIST/time_depend_weights_steps400.cat2.pth'
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
     config.num_cat = 2
     config.n_time_steps = 400 #?
     config.random_order = False
@@ -48,15 +48,15 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.checkpoint_freq = 1000
-    saving.checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/'
-    saving.time_dep_weights_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/"
-    saving.sample_plot_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/PNGs/"
+    saving.checkpoint_path = save_directory
+    saving.time_dep_weights_path = save_directory
+    saving.sample_plot_path = sample_plot_path
     saving.save_location = save_directory 
 
     config.loading = loading = ml_collections.ConfigDict()
     loading.diffusion_weights_path = diffusion_weights_path
     loading.time_dep_weights_path = time_dep_weights_path
-    loading.dataset_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/lib/datasets/"
+    loading.dataset_path = dataset_path
 
     config.noise_sample = noise_sample = ml_collections.ConfigDict()
     noise_sample.n_samples = 10000
@@ -64,7 +64,7 @@ def get_config():
     noise_sample.n_time_steps = 400
     noise_sample.speed_balance = False  # ohne angabe false
     noise_sample.max_time = 4.0
-    noise_sample.out_path = "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/DDSM/SavedModels/Bin_MNIST/"
+    noise_sample.out_path = save_directory
     noise_sample.order = 1000
     noise_sample.steps_per_tick = 200
     noise_sample.mode = "path"  # 'path', 'independent'

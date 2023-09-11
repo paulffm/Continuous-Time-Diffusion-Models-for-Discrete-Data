@@ -65,7 +65,7 @@ def main():
     dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
 
     if train_resume:
-        checkpoint_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
+        checkpoint_path = '/SavedModels/MNIST'
         model_name = 'model_32999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
@@ -116,8 +116,8 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
                 n_iter = state["n_iter"]
                 
-
-                plt.savefig(f"/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs/samples_epoch_{n_iter}.png")
+                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"samples_epoch_{state['n_iter']}.png")
+                plt.savefig(saving_plot_path)
                 #plt.show()
                 plt.close()
 
