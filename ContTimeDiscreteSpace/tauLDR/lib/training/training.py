@@ -2,6 +2,7 @@ import torch
 import lib.training.training_utils as training_utils
 import numpy as np
 
+
 @training_utils.register_train_step
 class Standard():
     def __init__(self, cfg):

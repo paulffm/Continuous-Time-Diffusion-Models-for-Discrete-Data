@@ -5,7 +5,6 @@ import numpy as np
 import scipy.integrate
 import math
 from tqdm import tqdm
-
 import lib.sampling.sampling_utils as sampling_utils
 
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
@@ -25,6 +24,53 @@ def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     else:
         raise NotImplementedError('Unrecognized initial dist ' + initial_dist)
     return x
+
+# hier müsste ich für dna sequenzen noch von den werten 0 bis 3 mappen auf A, C, G, T für initial samples
+# mit diesem x gehe ich ja dann in model(x, t) => dort one-hot 
+# Problem: benutze x zum shapen von  qt0_denom, forward rates usw.
+# Möglichkeit: könnte schauen, ob SDDM mit 3 Dim input umgehen kann => 
+#   =>  deiniere transformer neu => one hot außerhalb
+
+class ExactSampling():
+    def __init__(self, cfg):
+        self.cfg = cfg
+    def sample(self, model, N, num_intermediates):
+        t = 1.0
+        C,H,W = self.cfg.data.shape
+        D = C*H*W
+        S = self.cfg.data.S
+        scfg = self.cfg.sampler
+        num_steps = scfg.num_steps
+        min_t = scfg.min_t
+        eps_ratio = scfg.eps_ratio
+        initial_dist = scfg.initial_dist
+        if initial_dist == 'gaussian':
+            initial_dist_std  = model.Q_sigma
+        else:
+            initial_dist_std = None
+        device = model.device
+
+        with torch.no_grad():
+            x = get_initial_samples(N, D, device, S, initial_dist,initial_dist_std)
+            tau = 1 / num_steps
+            ts = np.concatenate((np.linspace(1.0, min_t, num_steps), np.array([0])))
+            save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
+
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx+1]
+
+                # p_theta(x_0|x_t) ?
+                # in HollowModel: get_logits = model()
+                # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
+
+                # stellt sich frage:
+                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
+                log_p0t = F.log_softmax(model(x, t * torch.ones((N,), device=device)), dim=2) # (N, D, S)
+                t_eps = t - h #tau
+                q_teps_0 = model.transition(t_eps * torch.ones((N,), device=device)) # (N, S, S)
+                q_t_teps = model.transit_between(t_eps * torch.ones((N,), device=device), t * torch.ones((N,), device=device))  # (N, S, S)
+
+                rate = model.rate(t_eps * torch.ones((N,), device=device)) # (N, S, S)
 
 
 @sampling_utils.register_sampler
@@ -49,10 +95,7 @@ class TauLeaping():
         device = model.device
 
         with torch.no_grad():
-            x = get_initial_samples(N, D, device, S, initial_dist,
-                initial_dist_std)
-
-
+            x = get_initial_samples(N, D, device, S, initial_dist,initial_dist_std) # sample from prior
             ts = np.concatenate((np.linspace(1.0, min_t, num_steps), np.array([0])))
             save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
 
@@ -101,10 +144,12 @@ class TauLeaping():
                     torch.arange(D, device=device).repeat(N),
                     x.long().flatten()
                 ] = 0.0
-
-                diffs = torch.arange(S, device=device).view(1,1,S) - x.view(N,D,1)
+                # ll_all = torch.where(ll_all < 1e-35, -1e9, torch.log(ll_all)) => berechnen log
+                # reverse_rates = log_weight * forward_rate hier schon 
+                # h = tau
+                diffs = torch.arange(S, device=device).view(1,1,S) - x.view(N,D,1) # choices - 
                 poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)
-                jump_nums = poisson_dist.sample()
+                jump_nums = poisson_dist.sample() # wv flips
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump

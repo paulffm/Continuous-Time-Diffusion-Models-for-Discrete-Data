@@ -292,13 +292,15 @@ class UniformRate:
         self.rate_matrix = torch.from_numpy(rate).float().to(self.device)
         self.eigvals = torch.from_numpy(eigvals).float().to(self.device)
         self.eigvecs = torch.from_numpy(eigvecs).float().to(self.device)
+        # above same as get_rate_matrix from ForwardModel
 
+    # rate_mat
     def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]
         S = self.S
 
         return torch.tile(self.rate_matrix.view(1, S, S), (B, 1, 1))
-
+    # func usvt from forward model
     def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]
         S = self.S
@@ -316,6 +318,9 @@ class UniformRate:
         transitions[transitions < 1e-8] = 0.0
 
         return transitions
+    
+    def transit_between(self, t1, t2):
+        return self.transition(t2 - t1)
 
 
 class GaussianTargetRate:
@@ -399,6 +404,9 @@ class GaussianTargetRate:
         transitions[transitions < 1e-8] = 0.0
 
         return transitions
+    
+    def transit_between(self, t1, t2):
+        return self.transition(t2 - t1)
 
 
 class SequenceTransformer(nn.Module):

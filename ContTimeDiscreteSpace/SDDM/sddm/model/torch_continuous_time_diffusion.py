@@ -66,7 +66,8 @@ class DiffusionModel(object):
             self.backwd_model.loss, rng=loss_rng, x0=x0, xt=xt, t=t
         )
         return loss_fn
-
+    
+    # same to training step:
     def step_fn(self, state, rng, batch):
         """Single gradient update step."""
         params, opt_state = state.params, state.opt_state
@@ -195,7 +196,7 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     posterior = tau * torch.exp(log_weight) * fwd_rate
     posterior = posterior * (1 - xt_onehot)
 
-    flips = torch.poisson(posterior)
+    flips = torch.distributions.poisson.Poisson(posterior).sample()
     choices = torch_utils.expand_dims(
         torch.arange(cls.config.vocab_size, dtype=torch.int32), list(range(xt.dim()))
     )
@@ -213,8 +214,10 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
 
 def exact_sampling(cls, params, rng, tau, xt, t, xt_target=None):
     """Exact categorical simulation."""
+    # model.forward() quasi
     logits = cls.backwd_model.get_logits(params, xt, t)
     log_p0t = F.log_softmax(logits, dim=-1)
+    
     t_eps = t - tau
     q_teps_0 = cls.fwd_model.transition(t_eps)
     q_teps_0 = torch_utils.expand_dims(q_teps_0, axis=list(range(xt.dim())))

@@ -54,7 +54,7 @@ def get_rate_matrix(rate):
         torch.tensor(eigvecs, dtype=torch.float32),  # (S,S)
     )
 
-
+# multiplication in transitions
 def usvt(eigvecs, inv_eigvecs, diag_embed):
     ns = eigvecs.shape[0]
     u = eigvecs.view(1, ns, ns)
@@ -98,7 +98,7 @@ class UniformForward(ForwardModel):
         xt = torch.randint(0, self.num_states, shape, dtype=torch.int32)
         return xt
 
-
+# theoretisch übertragbar in tauLDR
 class UniformVariantForward(UniformForward):
     """Variants of uniform."""
 

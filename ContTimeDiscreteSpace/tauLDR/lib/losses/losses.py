@@ -6,6 +6,7 @@ import numpy as np
 import torch.autograd.profiler as profiler
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import lib.utils.utils as utils
 
 
 @losses_utils.register_loss
@@ -114,6 +115,7 @@ class GenericAux:
         # For (B, D, S, S) first S is x_0 second S is x'
 
         # was wird ab hier gemacht???
+        # mask_reg = 
         mask_reg = torch.ones((B, D, S), device=device)
         mask_reg[
             torch.arange(B, device=device).repeat_interleave(D),
@@ -532,3 +534,111 @@ class ConditionalAux:
         nll = self.cross_ent(perm_x_logits, data.long())
 
         return neg_elbo + self.nll_weight * nll
+    
+
+def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
+    """Get logprob with logits."""
+
+    if xt_target is None:
+        xt_target = xt
+    xt_onehot = F.one_hot(xt_target, cfg.data.S)
+    if cfg.logit_type == "direct":
+        log_prob = F.log_softmax(logits, dim=-1)
+    else:
+        qt0 = model.transition(t)
+        if cfg.logit_type == "reverse_prob":
+            p0t = F.softmax(logits, dim=-1)
+            qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
+            prob_all = p0t @ qt0
+            log_prob = torch.log(prob_all + 1e-35)
+        elif cfg.logit_type == "reverse_logscale":
+            log_p0t = F.log_softmax(logits, dim=-1)
+            log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
+            log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
+            log_p0t = log_p0t.unsqueeze(-1)
+
+            log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
+        else:
+            raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
+    log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+    return log_prob, log_xt
+
+
+class HollowAux:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.nll_weight = cfg.loss.nll_weight
+        self.min_time = cfg.loss.min_time
+
+    def calc_loss(self, minibatch, state, writer=None):
+        model = state["model"]
+        S = self.cfg.data.S
+        # if 4 Dim => like images: True
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+        # hollow xt, t, l_all, l_xt geht rein 
+        device = self.cfg.device
+        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+
+        
+        qt0 = model.transition(ts)  # (B, S, S)
+
+        rate = model.rate(ts)  # (B, S, S)
+
+        b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
+        qt0 = qt0[b, minibatch]
+        # log loss
+        logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = torch.distributions.categorical.Categorical(logits=logits).sample()
+        # get logits from CondFactorizedBackwardModel 
+        logits = model(xt, ts)
+
+        # ce_coeff < 0
+        # ce_coeff neu bestimmen
+        if self.cfg.ce_coeff > 0:
+            x0_onehot = F.one_hot(minibatch, self.config.data.S)
+            ll = F.log_softmax(logits, dim=-1)
+            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff
+        else:
+            ll_all, log_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits)
+            # loss type new param
+            if self.cfg.loss_type == "rm":
+                loss = -ll_xt
+            elif self.config.loss_type == "mle":
+                loss = -(
+                    (self.config.vocab_size - 1) * ll_xt
+                    + torch.sum(utils.log1mexp(ll_all), dim=-1)
+                    - utils.log1mexp(ll_xt)
+                )
+            elif self.cfg.loss_type == "elbo":
+                xt_onehot = F.one_hot(xt, num_classes=self.config.vocab_size)
+                b = utils.expand_dims(
+                    torch.arange(xt.shape[0]), tuple(range(1, xt.dim()))
+                )
+                qt0_x2y = self.fwd_model.transition(ts)
+                qt0_y2x = qt0_x2y.permute(0, 2, 1)
+                qt0_y2x = qt0_y2x[b, xt]
+                ll_xt = ll_xt.unsqueeze(-1)
+                backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
+                first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
+
+                qt0_x2y = qt0_x2y[b, xt]
+                fwd = (ll_xt - ll_all) * qt0_x2y
+                second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
+                loss = first_term - second_term
+            else:
+                raise ValueError("Unknown loss_type: %s" % self.config.loss_type)
+            #weight = self.get_lambda_t(ts)
+            #weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
+            loss = loss #* weight
+
+            # calc loss from CondFactorizedBackwardModel
+
+
+
+
+
+
+    

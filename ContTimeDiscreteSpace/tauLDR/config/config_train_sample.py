@@ -40,6 +40,7 @@ def get_config():
     data.shuffle = True
     data.shape = [1,32,32]
     data.random_flips = True
+    data.image_size = 32
 
     config.model = model = ml_collections.ConfigDict()
     model.name = 'GaussianTargetRateImageX0PredEMAPaul'
@@ -79,7 +80,7 @@ def get_config():
     saving.log_low_freq = 10000
     saving.low_freq_loggers = ['denoisingImages']
     saving.prepare_to_resume_after_timeout = False
-    saving.sample_plot_path = '../../SavedModels/MNIST/PNGs'
+    saving.sample_plot_path = 'SavedModels/MNIST/PNGs'
 
 
     config.sampler = sampler = ml_collections.ConfigDict()

@@ -39,7 +39,7 @@ def main():
         bookkeeping.save_config(cfg, cfg.save_location)
    
     else:
-        path = 'SavedModels/MNIST/'
+        path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
         date = '2023-09-08'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)
@@ -66,11 +66,11 @@ def main():
 
     if train_resume:
         checkpoint_path = 'SavedModels/MNIST/'
-        model_name = 'model_32999.pt'
+        model_name = 'model_33999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 36000
-        cfg.sampler.sample_freq = 36000
+        cfg.training.n_iters = 37000
+        cfg.sampler.sample_freq = 37000
         cfg.saving.checkpoint_freq = 1000
     
         

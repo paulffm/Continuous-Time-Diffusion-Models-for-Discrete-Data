@@ -139,7 +139,7 @@ def create_train_discrete_mnist_dataloader(
     base_transforms.append(transforms.ToTensor())
     base_transforms.append(denormalize_image) 
     base_transforms = transforms.Compose(base_transforms) # Add random rotation of 10 degrees
-
+# change path here
 
     train_dataset = MNIST(
         root="/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/",

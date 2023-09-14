@@ -511,11 +511,13 @@ class FFResidual(nn.Module):
         x = film_params[:, None, 0:K] * x + film_params[:, None, K:]
         return x
     
+   # used for music example with: use_one_input = True => X shape (B, D, S)
 class TransformerEncoder(nn.Module):
     def __init__(self, num_layers, d_model, num_heads, dim_feedforward,
         dropout, num_output_FFresiduals, time_scale_factor, S, max_len,
         temb_dim, use_one_hot_input, device):
         super().__init__()
+        #d_model = 128
 
         self.temb_dim = temb_dim
         self.use_one_hot_input = use_one_hot_input
@@ -566,6 +568,7 @@ class TransformerEncoder(nn.Module):
         one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, L, S)
 
         if self.use_one_hot_input:
+            # wird gemacht, weil: 
             x = self.input_embedding(one_hot_x.float()) # (B, L, K)
         else:
             x = self.normalize_input(x)
@@ -583,7 +586,7 @@ class TransformerEncoder(nn.Module):
 
         x = self.output_linear(x) # (B, L, S)
 
-        x = x + one_hot_x
+        x = x + one_hot_x #  addition to instill a residual bias into the network
 
         return x
 
@@ -644,13 +647,13 @@ class ResidualMLP(nn.Module):
     ):
         B, D= x.shape
         S = self.S
-
+        # temb shape: (B, embedding_dim)
         temb = self.temb_net(
             network_utils.transformer_timestep_embedding(
                 times*self.time_scale_factor, self.temb_dim
             )
         )
-
+        # wenn dna sequenzen hier: eigene one hot kodierung 
         one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, D, S)
 
         h = self.normalize_input(x)

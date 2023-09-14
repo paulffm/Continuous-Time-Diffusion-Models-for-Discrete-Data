@@ -84,9 +84,10 @@ class TauLDRBackward(torch_backward_model.BackwardModel):
         p0t_reg = F.softmax(x_logits, dim=2)
 
         reg_x_onehot = F.one_hot(reg_x, num_classes=s).to(torch.float32)
-
+        # rate2xt = rate_vals_reg
         rate2xt = rate_mat.permute(0, 2, 1)[b, reg_x]
         rate2xt = rate2xt * (1 - reg_x_onehot)
+        # rate2xt = (mask_reg * rate_vals_reg)
         reg_tmp = rate2xt @ (qt0.permute(0, 2, 1))
         qt0_denom_reg = qt0.permute(0, 2, 1)[b, reg_x]
 

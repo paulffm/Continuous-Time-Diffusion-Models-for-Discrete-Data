@@ -17,7 +17,7 @@ class MLP(nn.Module):
     for feat in self.features[:-1]:
       x = self.activation(nn.Dense(feat)(x))
     x = nn.Dense(self.features[-1])(x)
-    return x
+    return x # shape: , outdim = readout_dim = S
 
 
 def apply_film(film_params, x):
@@ -25,7 +25,7 @@ def apply_film(film_params, x):
   assert film_params.ndim == 3 and x.ndim == 3
   a, b = jnp.split(film_params, 2, axis=-1)
   x = a * x + b
-  return x
+  return x 
 
 
 class ConcatReadout(nn.Module):
@@ -44,7 +44,7 @@ class ConcatReadout(nn.Module):
     predictor = MLP([2 * config.embed_dim, out_dim],
                     activation=nn.gelu)
     logits = predictor(state)
-    return logits
+    return logits # B, D + Emb_dim - 1, S.
 
 
 class ResidualReadout(nn.Module):
@@ -88,6 +88,7 @@ class ConcatResidualReadout(nn.Module):
 def transformer_timestep_embedding(timesteps, embedding_dim,
                                    max_positions=10000):
   """Get time embedding for timesteps."""
+  # timesteps shape: (B, )
   assert embedding_dim % 2 == 0
   assert len(timesteps.shape) == 1
   half_dim = embedding_dim // 2
@@ -97,12 +98,14 @@ def transformer_timestep_embedding(timesteps, embedding_dim,
   emb = timesteps[:, None] * emb[None, :]
   emb = jnp.concatenate([jnp.sin(emb), jnp.cos(emb)], axis=1)
   assert emb.shape == (timesteps.shape[0], embedding_dim)
-  return emb
+  return emb# shape: (B, embedding_dim)
 
 
 class TransformerMlpBlock(nn.Module):
   """Transformer MLP block."""
-
+  # input shape: B, D, S 
+  # output: B, D, S oder B, D, out_dim
+  # D = D + concat_dim - 1
   mlp_dim: int
   out_dim: Optional[int] = None
   dtype: Any = jnp.float32
@@ -138,6 +141,8 @@ class TransformerMlpBlock(nn.Module):
 
 def sa_block(config, inputs, masks):
   """Self-attention block."""
+  # shape von x bleibt gleich:
+  # shape: (B, D + cond_dim - 1, S)
   if config.transformer_norm_type == 'prenorm':
     x = nn.LayerNorm(dtype=config.dtype)(inputs)
     x = nn.SelfAttention(
@@ -168,7 +173,7 @@ def sa_block(config, inputs, masks):
     x = nn.LayerNorm(dtype=config.dtype)(x)
   else:
     raise ValueError('unknown norm type %s' % config.transformer_norm_type)
-  return x
+  return x #shape: (B, D + cond_dim - 1, S)
 
 
 def cross_attention(config, l2r_embed, r2l_embed, temb):
@@ -304,7 +309,11 @@ class MaskedTransformer(nn.Module):
   @nn.compact
   def __call__(self, x, temb, pos):
     config = self.config
+
+    # fügt eine dim hinzu: B, D => B, D, emb
     x = nn.Embed(config.vocab_size + 1, config.embed_dim)(x)
+
+    # für TransformerEncoder muss x 3dim sein 
     embed = TransformerEncoder(config)(x, temb)
     embed = jnp.expand_dims(embed[:, pos], axis=1)
     if config.readout == 'mlp':
@@ -319,6 +328,7 @@ class MaskedTransformer(nn.Module):
 
 class UniDirectionalTransformer(nn.Module):
   """Transformer in one direction."""
+  # input shape B, D, S
 
   config: Any
   direction: str
@@ -356,4 +366,5 @@ class UniDirectionalTransformer(nn.Module):
       x = TransformerBlock(
           name='block_{}'.format(layer_idx),
           config=config)(x, masks=mask)
-    return x
+    # cond_dim = emb_dim 
+    return x # shape: (B, D + cond_dim - 1, S)

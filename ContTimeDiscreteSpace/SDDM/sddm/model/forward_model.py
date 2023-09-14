@@ -87,7 +87,7 @@ class UniformForward(ForwardModel):
         jnp.reshape(self.eigvals,
                     (1, self.num_states)) * jnp.reshape(t, (bsize, 1))))
     transitions = usvt(self.eigvecs, self.eigvecs.T, diag_embed)
-    return transitions
+    return transitions # shape (B, S, S)
 
   def transit_between(self, t1, t2):
     return self.transition(t2 - t1)
@@ -95,7 +95,7 @@ class UniformForward(ForwardModel):
   def sample_from_prior(self, rng, shape):
     xt = jax.random.randint(rng, shape, minval=0,
                             maxval=self.num_states, dtype=jnp.int32)
-    return xt
+    return xt # (Shape) = (Num_samples, config.discrete_dim)
 
 
 class UniformVariantForward(UniformForward):

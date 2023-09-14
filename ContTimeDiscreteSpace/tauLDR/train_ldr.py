@@ -65,6 +65,8 @@ def main(cfg, custom_name=None):
         batch_size=cfg.data.batch_size,
         shuffle=cfg.data.shuffle)
 
+    # loss func => backward model: hier Loss.calc_loss
+    # training_step(Loss)
     loss = losses_utils.get_loss(cfg)
 
     training_step = training_utils.get_train_step(cfg)

@@ -197,6 +197,7 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
 def exact_sampling(cls, params, rng, tau, xt, t, xt_target=None):
   """Exact categorical simulation."""
   del xt_target
+  # in HollowModel: get_logits = model.forward() = model()
   logits = cls.backwd_model.get_logits(params, xt, t)
   log_p0t = jax.nn.log_softmax(logits, axis=-1)
   t_eps = t - tau
