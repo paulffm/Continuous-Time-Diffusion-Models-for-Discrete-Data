@@ -563,7 +563,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
     return log_prob, log_xt
 
-
+@losses_utils.register_sampler
 class HollowAux:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -585,7 +585,7 @@ class HollowAux:
         
         qt0 = model.transition(ts)  # (B, S, S)
 
-        rate = model.rate(ts)  # (B, S, S)
+        #rate = model.rate(ts)  # (B, S, S)
 
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
         qt0 = qt0[b, minibatch]
@@ -593,31 +593,31 @@ class HollowAux:
         logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(logits=logits).sample()
         # get logits from CondFactorizedBackwardModel 
-        logits = model(xt, ts)
+        logits = model(xt, ts) # B, D, S
 
         # ce_coeff < 0
         # ce_coeff neu bestimmen
         if self.cfg.ce_coeff > 0:
-            x0_onehot = F.one_hot(minibatch, self.config.data.S)
+            x0_onehot = F.one_hot(minibatch, self.cfg.data.S)
             ll = F.log_softmax(logits, dim=-1)
             loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff
         else:
-            ll_all, log_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits)
+            ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits) * (1 - self.cfg.ce_coeff)
             # loss type new param
             if self.cfg.loss_type == "rm":
                 loss = -ll_xt
-            elif self.config.loss_type == "mle":
+            elif self.cfg.loss_type == "mle":
                 loss = -(
-                    (self.config.vocab_size - 1) * ll_xt
+                    (self.cfg.data.S - 1) * ll_xt
                     + torch.sum(utils.log1mexp(ll_all), dim=-1)
                     - utils.log1mexp(ll_xt)
                 )
             elif self.cfg.loss_type == "elbo":
-                xt_onehot = F.one_hot(xt, num_classes=self.config.vocab_size)
+                xt_onehot = F.one_hot(xt, num_classes=self.cfg.data.S)
                 b = utils.expand_dims(
                     torch.arange(xt.shape[0]), tuple(range(1, xt.dim()))
                 )
-                qt0_x2y = self.fwd_model.transition(ts)
+                qt0_x2y = model.transition(ts)
                 qt0_y2x = qt0_x2y.permute(0, 2, 1)
                 qt0_y2x = qt0_y2x[b, xt]
                 ll_xt = ll_xt.unsqueeze(-1)
@@ -629,11 +629,12 @@ class HollowAux:
                 second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
                 loss = first_term - second_term
             else:
-                raise ValueError("Unknown loss_type: %s" % self.config.loss_type)
+                raise ValueError("Unknown loss_type: %s" % self.cfg.loss_type)
             #weight = self.get_lambda_t(ts)
-            #weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
-            loss = loss #* weight
-
+            weight = torch.ones((B, ), dtype=torch.float32)
+            weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
+            loss = loss * weight
+        return np.sum(loss / B)
             # calc loss from CondFactorizedBackwardModel
 
 

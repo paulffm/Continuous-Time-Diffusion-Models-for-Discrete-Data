@@ -36,7 +36,7 @@ def lbjf_corrector_step(cls, params, rng, tau, xt, t, xt_target=None):
   new_y = jax.random.categorical(rng, log_posterior, axis=-1)
   return new_y
 
-
+# Interface
 class DiffusionModel(object):
   """Model interface."""
 
@@ -50,12 +50,12 @@ class DiffusionModel(object):
     self.fwd_model = None
     self.backwd_model = self.build_backwd_model(config)
     self.fwd_model = forward_model.get_fwd_model(config)
-
+  
   def init_state(self, model_key):
     state = utils.init_host_state(self.backwd_model.make_init_params(model_key),
                                   self.optimizer)
     return state
-
+  
   def build_loss_func(self, rng, x0):
     rng, loss_rng = jax.random.split(rng)
     xt, t = self.fwd_model.sample_xt(x0, self.config.time_duration, rng)
@@ -211,6 +211,7 @@ def exact_sampling(cls, params, rng, tau, xt, t, xt_target=None):
   qt0 = q_teps_0 * q_t_teps
   log_qt0 = jnp.where(qt0 <= 0.0, -1e9, jnp.log(qt0))
   log_p0t = jnp.expand_dims(log_p0t, axis=-1)
+  
   log_prob = jax.nn.logsumexp(log_p0t + log_qt0, axis=-2)
   new_y = jax.random.categorical(rng, log_prob, axis=-1)
   return new_y
@@ -261,6 +262,31 @@ class CategoricalDiffusionModel(DiffusionModel):
     else:
       raise ValueError('Unknown model type %s' % config.model_type)
     return backwd_model
+
+  def sample_step(self, params, rng, tau, xt, t):
+    return get_sampler(self.config)(self, params, rng, tau, xt, t)
+  
+class CategoricalDiffusionModelPaul():
+  def __init__(self, config):
+    self.config = config
+    self.optimizer = utils.build_optimizer(config)
+    self.backwd_model = None
+    self.fwd_model = None
+    self.backwd_model = self.build_backwd_model(config)
+    self.fwd_model = forward_model.get_fwd_model(config)
+
+  def build_backwd_model(self, config):
+    if config.model_type == 'ebm':
+      backwd_model = ebm.CategoricalScoreModel(config)
+    elif config.model_type == 'hollow':
+      backwd_model = hollow_model.HollowModel(config)
+    elif config.model_type == 'tauldr':
+      backwd_model = tauldr_model.TauLDRBackward(config)
+    else:
+      raise ValueError('Unknown model type %s' % config.model_type)
+    return backwd_model
+
+    
 
   def sample_step(self, params, rng, tau, xt, t):
     return get_sampler(self.config)(self, params, rng, tau, xt, t)

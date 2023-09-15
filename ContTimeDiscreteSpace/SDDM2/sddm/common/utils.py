@@ -76,6 +76,9 @@ def init_host_state(params, optimizer):
   )
   return jax.device_get(state)
 
+def init_state(model, model_key):
+    state = init_host_state(model.backwd_model.make_init_params(model_key), model.optimizer)
+    return state
 
 def tf_to_numpy(tf_batch):
   """TF to NumPy, using ._numpy() to avoid copy."""

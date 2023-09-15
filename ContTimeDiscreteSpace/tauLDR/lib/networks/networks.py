@@ -565,16 +565,17 @@ class TransformerEncoder(nn.Module):
                 times*self.time_scale_factor, self.temb_dim
             )
         )
+        # dna hier eigene one hot?
         one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, L, S)
 
         if self.use_one_hot_input:
-            # wird gemacht, weil: 
+            # wird gemacht, weil: like nn.Embed(cfg.data.S, cfg.embed_dim)
             x = self.input_embedding(one_hot_x.float()) # (B, L, K)
         else:
             x = self.normalize_input(x)
             x = x.view(B, L, 1)
             x = self.input_embedding(x) # (B, L, K)
-
+        # until here: more or less the same as BidirectionalTransformer
         x = self.pos_embed(x)
 
         for encoder_layer in self.encoder_layers:

@@ -498,6 +498,10 @@ class ResidualMLP(nn.Module):
 
         return logits
 
+def HTransformer():
+    pass
+    # self.net = bidirectional transformer
+
 
 # Based on https://github.com/yang-song/score_sde_pytorch/blob/ef5cb679a4897a40d20e94d8d0e2124c3a48fb8c/models/ema.py
 class EMA:
@@ -595,6 +599,15 @@ class EMA:
 
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
+@model_utils.register_model
+class UniformRateSequenceTransformerEMA(EMA, SequenceTransformer, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        SequenceTransformer.__init__(self, cfg, device, rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
