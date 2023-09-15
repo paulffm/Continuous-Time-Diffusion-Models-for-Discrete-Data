@@ -1,6 +1,4 @@
 
-
-
 """MNIST dataloader."""
 
 import jax

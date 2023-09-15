@@ -1,73 +1,60 @@
-
-"""Utils."""
-
 import functools
-from typing import Any
-from absl import logging
-import flax
 import jax
 import jax.numpy as jnp
-import numpy as np
-import optax
 
 
-@flax.struct.dataclass
-class TrainState:
-  step: int
-  params: Any
-  opt_state: Any
-  ema_params: Any
+def shard_prng_key(prng_key):
+    return jax.random.split(prng_key, num=jax.local_device_count())
 
 
-def apply_ema(decay, avg, new):
-  return jax.tree_map(lambda a, b: decay * a + (1. - decay) * b, avg, new)
+# gather data over several devices
+@functools.partial(jax.pmap, axis_name="shard")
+def all_gather(x):
+    return jax.lax.all_gather(x, "shard", tiled=True)
 
 
-def copy_pytree(pytree):
-  return jax.tree_map(jnp.array, pytree)
-
-def init_host_state(params, optimizer):
-  state = TrainState(
-      step=0,
-      params=params,
-      opt_state=optimizer.init(params),
-      ema_params=copy_pytree(params),
-  )
-  return jax.device_get(state)
-
-def make_init_params(config, net, global_rng):
-    if isinstance(config.discrete_dim, int):
-        input_shape = (1, config.discrete_dim)
-    else:
-        input_shape = [1] + list(config.discrete_dim)
-    init_kwargs = dict(
-        x=jnp.zeros(input_shape, dtype=jnp.int32),
-        t=jnp.zeros((1,), dtype=jnp.float32)
-    )
-    return net.init({'params': global_rng}, **init_kwargs)['params']
-
-def init_state(config, model, model_key):
-    #state = init_host_state(make_init_params(config, model.backwd_model, model_key), model.optimizer)
-
-    if isinstance(config.discrete_dim, int):
-        input_shape = (1, config.discrete_dim)
-    else:
-        input_shape = [1] + list(config.discrete_dim)
-    init_kwargs = dict(
-        x=jnp.zeros(input_shape, dtype=jnp.int32),
-        t=jnp.zeros((1,), dtype=jnp.float32)
-    )
-
-    params = model.backwd_model.net.init({'params': model_key}, **init_kwargs)['params']
-    state = TrainState(
-      step=0,
-      params=params,
-      opt_state=model.optimizer.init(params),
-      ema_params=copy_pytree(params),
-    )
-
-    return jax.device_get(state)
+def log1mexp(x):
+    # Computes log(1-exp(-|x|))
+    # https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
+    x = -jnp.abs(x)
+    return jnp.where(x > -0.693, jnp.log(-jnp.expm1(x)), jnp.log1p(-jnp.exp(x)))
 
 
+def binary_hamming_sim(x, y):
+    x = jnp.expand_dims(x, axis=1)
+    y = jnp.expand_dims(y, axis=0)
+    d = jnp.sum(jnp.abs(x - y), axis=-1)
+    return x.shape[-1] - d
 
 
+def binary_exp_hamming_sim(x, y, bd):
+    x = jnp.expand_dims(x, axis=1)
+    y = jnp.expand_dims(y, axis=0)
+    d = jnp.sum(jnp.abs(x - y), axis=-1)
+    return jnp.exp(-bd * d)
+
+
+def binary_mmd(x, y, sim_fn):
+    """MMD for binary data."""
+    x = x.astype(jnp.float32)
+    y = y.astype(jnp.float32)
+    kxx = sim_fn(x, x)
+    kxx = kxx * (1 - jnp.eye(x.shape[0]))
+    kxx = jnp.sum(kxx) / x.shape[0] / (x.shape[0] - 1)
+
+    kyy = sim_fn(y, y)
+    kyy = kyy * (1 - jnp.eye(y.shape[0]))
+    kyy = jnp.sum(kyy) / y.shape[0] / (y.shape[0] - 1)
+    kxy = jnp.sum(sim_fn(x, y))
+    kxy = kxy / x.shape[0] / y.shape[0]
+    mmd = kxx + kyy - 2 * kxy
+    return mmd
+
+
+def binary_exp_hamming_mmd(x, y, bandwidth=0.1):
+    sim_fn = functools.partial(binary_exp_hamming_sim, bd=bandwidth)
+    return binary_mmd(x, y, sim_fn)
+
+
+def binary_hamming_mmd(x, y):
+    return binary_mmd(x, y, binary_hamming_sim)

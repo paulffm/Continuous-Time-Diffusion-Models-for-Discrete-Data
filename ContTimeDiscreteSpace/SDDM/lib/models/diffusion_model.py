@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import lib.utils.utils as utils
+import lib.models.model_utils as model_utils
 import lib.sampling.sampling_utils as sampling_utils
 
 # Aufbau:
@@ -13,8 +14,6 @@ import lib.sampling.sampling_utils as sampling_utils
 # DiffusionModel => specify forward model, how to calc loss, how to sample
 # CategoricalDiffusion => inherits from DiffusionModel => just specifiy BackwardsModel and Samples
 
-
-# Interface
 class CategoricalDiffusionModel:
     """Model interface."""
 
@@ -62,7 +61,7 @@ class CategoricalDiffusionModel:
         params = optax.apply_updates(params, updates)
 
         # weight decay if step > 0
-        ema_params = utils.apply_ema(
+        ema_params = model_utils.apply_ema(
             decay=jnp.where(state.step == 0, 0.0, self.config.ema_decay),
             avg=state.ema_params,
             new=params,

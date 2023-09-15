@@ -61,8 +61,10 @@ def train_loop(
     if os.path.exists(ckpt_folder):
         state = checkpoints.restore_checkpoint(ckpt_folder, state)
         logging.info("Restored from %s at step %d", ckpt_folder, state.step)
+
     init_step = state.step
     state = flax.jax_utils.replicate(state)
+    
     process_rng_key = jax.random.fold_in(global_key, jax.process_index())
     train_step_fn = jax.pmap(train_step_fn, axis_name="shard")
     lr_schedule = utils.build_lr_schedule(config)

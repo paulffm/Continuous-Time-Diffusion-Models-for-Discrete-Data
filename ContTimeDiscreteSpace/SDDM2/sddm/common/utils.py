@@ -10,22 +10,7 @@ import numpy as np
 import optax
 
 
-@flax.struct.dataclass
-class TrainState:
-  step: int
-  params: Any
-  opt_state: Any
-  ema_params: Any
-
-
-def apply_ema(decay, avg, new):
-  return jax.tree_map(lambda a, b: decay * a + (1. - decay) * b, avg, new)
-
-
-def copy_pytree(pytree):
-  return jax.tree_map(jnp.array, pytree)
-
-
+# optimizer 
 def build_lr_schedule(config):
   """Build lr schedule."""
   if config.lr_schedule == 'constant':
@@ -66,7 +51,7 @@ def build_optimizer(config):
   optim = optax.chain(*optims)
   return optim
 
-
+# model utils
 def init_host_state(params, optimizer):
   state = TrainState(
       step=0,
@@ -80,6 +65,22 @@ def init_state(model, model_key):
     state = init_host_state(model.backwd_model.make_init_params(model_key), model.optimizer)
     return state
 
+@flax.struct.dataclass
+class TrainState:
+  step: int
+  params: Any
+  opt_state: Any
+  ema_params: Any
+
+
+def apply_ema(decay, avg, new):
+  return jax.tree_map(lambda a, b: decay * a + (1. - decay) * b, avg, new)
+
+
+def copy_pytree(pytree):
+  return jax.tree_map(jnp.array, pytree)
+
+# dataset utils
 def tf_to_numpy(tf_batch):
   """TF to NumPy, using ._numpy() to avoid copy."""
   # pylint: disable=protected-access
@@ -91,7 +92,16 @@ def tf_to_numpy(tf_batch):
 def numpy_iter(tf_dataset):
   return map(tf_to_numpy, iter(tf_dataset))
 
+def get_per_process_batch_size(batch_size):
+  num_devices = jax.device_count()
+  assert (batch_size // num_devices * num_devices == batch_size), (
+      'Batch size %d must be divisible by num_devices %d', batch_size,
+      num_devices)
+  batch_size = batch_size // jax.process_count()
+  logging.info('Batch size per process: %d', batch_size)
+  return batch_size
 
+# general utils
 def shard_prng_key(prng_key):
   # PRNG keys can used at train time to drive stochastic modules
   # e.g. DropOut. We would like a different PRNG key for each local
@@ -104,17 +114,7 @@ def shard_prng_key(prng_key):
 def all_gather(x):
   return jax.lax.all_gather(x, 'shard', tiled=True)
 
-
-def get_per_process_batch_size(batch_size):
-  num_devices = jax.device_count()
-  assert (batch_size // num_devices * num_devices == batch_size), (
-      'Batch size %d must be divisible by num_devices %d', batch_size,
-      num_devices)
-  batch_size = batch_size // jax.process_count()
-  logging.info('Batch size per process: %d', batch_size)
-  return batch_size
-
-
+# discrete
 def categorical_kl_logits(logits1, logits2, eps=1.e-6):
   """KL divergence between categorical distributions.
 
@@ -156,7 +156,7 @@ def categorical_log_likelihood(x, logits):
   x_onehot = jax.nn.one_hot(x, logits.shape[-1])
   return jnp.sum(log_probs * x_onehot, axis=-1)
 
-
+# general
 def log1mexp(x):
   # Computes log(1-exp(-|x|))
   # https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
@@ -203,7 +203,7 @@ def binary_exp_hamming_mmd(x, y, bandwidth=0.1):
 def binary_hamming_mmd(x, y):
   return binary_mmd(x, y, binary_hamming_sim)
 
-
+# dataset utils
 def np_tile_imgs(imgs, *, pad_pixels=1, pad_val=255, num_col=0):
   """NumPy utility: tile a batch of images into a single image.
 

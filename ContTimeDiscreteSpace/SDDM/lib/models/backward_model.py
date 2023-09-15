@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import lib.models.model_utils as model_utils
 import forward_model
+import lib.utils.utils as utils
 
 def get_logprob_with_logits(cls, xt, t, logits, xt_target=None):
     """Get lobprob with logits."""
