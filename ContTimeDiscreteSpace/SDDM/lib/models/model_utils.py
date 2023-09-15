@@ -7,13 +7,13 @@ import jax.numpy as jnp
 
 
 
-def build_backwd_model(config):
+def build_backwd_model(config, fwd_model, net):
     if config.model_type == 'ebm':
-        backwd_model = ebm.CategoricalScoreModel(config)
+        backwd_model = ebm.CategoricalScoreModel(config, fwd_model, net)
     elif config.model_type == 'hollow':
-        backwd_model = hollow_model.HollowModel(config)
+        backwd_model = hollow_model.HollowModel(config, fwd_model, net)
     elif config.model_type == 'tauldr':
-        backwd_model = tauldr_model.TauLDRBackward(config)
+        backwd_model = tauldr_model.TauLDRBackward(config, fwd_model, net)
     else:
         raise ValueError('Unknown model type %s' % config.model_type)
     return backwd_model

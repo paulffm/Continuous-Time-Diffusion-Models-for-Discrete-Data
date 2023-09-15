@@ -266,27 +266,3 @@ class CategoricalDiffusionModel(DiffusionModel):
   def sample_step(self, params, rng, tau, xt, t):
     return get_sampler(self.config)(self, params, rng, tau, xt, t)
   
-class CategoricalDiffusionModelPaul():
-  def __init__(self, config):
-    self.config = config
-    self.optimizer = utils.build_optimizer(config)
-    self.backwd_model = None
-    self.fwd_model = None
-    self.backwd_model = self.build_backwd_model(config)
-    self.fwd_model = forward_model.get_fwd_model(config)
-
-  def build_backwd_model(self, config):
-    if config.model_type == 'ebm':
-      backwd_model = ebm.CategoricalScoreModel(config)
-    elif config.model_type == 'hollow':
-      backwd_model = hollow_model.HollowModel(config)
-    elif config.model_type == 'tauldr':
-      backwd_model = tauldr_model.TauLDRBackward(config)
-    else:
-      raise ValueError('Unknown model type %s' % config.model_type)
-    return backwd_model
-
-    
-
-  def sample_step(self, params, rng, tau, xt, t):
-    return get_sampler(self.config)(self, params, rng, tau, xt, t)

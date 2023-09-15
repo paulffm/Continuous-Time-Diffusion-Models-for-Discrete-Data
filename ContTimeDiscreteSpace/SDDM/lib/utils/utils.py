@@ -58,7 +58,7 @@ def init_state(config, model, model_key):
         t=jnp.zeros((1,), dtype=jnp.float32)
     )
 
-    params = model.backwd_model.init({'params': model_key}, **init_kwargs)['params']
+    params = model.backwd_model.net.init({'params': model_key}, **init_kwargs)['params']
     state = TrainState(
       step=0,
       params=params,
