@@ -13,25 +13,26 @@ def save_model(save_dir, state, step, overwrite=True):
         # from GPU to CPU
         # state = jax.device_get(jax_utils.unreplicate(state))
         current_date = datetime.now().strftime("%Y-%m-%d")
-        model_filename = f"model_{step}.pt"
+        #model_filename = f"model_{step}"
 
         model_path = os.path.join(save_dir, current_date)
         if not os.path.exists(model_path):
             os.makedirs(model_path)
-        model_path = os.path.join(model_path, model_filename)
+        #model_path = os.path.join(model_path, model_filename)
 
         checkpoints.save_checkpoint(
             model_path,
             state,
             step,
-            keep=5,
+            keep=10,
             overwrite=overwrite,
         )
         logging.info(f"Model saved in Iteration {step}")
 
 
-def load_model(load_dir):
-    pass
+def load_model(load_dir, state):
+    state = checkpoints.restore_checkpoint(load_dir, state)
+    return state
 
 
 def save_config(config: dict, config_dir: str) -> None:

@@ -59,14 +59,14 @@ def get_config():
     config.grad_norm = 1.0
 
     # training
-    config.total_train_steps = 3
+    config.total_train_steps = 2
     config.phase = 'train'
     config.sample_freq = 3
-    config.checkpoint_freq = 3
+    config.checkpoint_freq = 1
 
     # saving 
-    config.save_dir = 'SavedModels/MNIST'
-    config.sample_plot_path = 'SavedModels/MNIST/PNGs'
+    config.save_dir = 'SavedModels/MNIST' # 
+    config.sample_plot_path = 'SavedModels/MNIST/PNGs' # 
     config.ckpt_keep = 5
     #config.plot_num_batches = 10
     #config.log_every_steps = 50
