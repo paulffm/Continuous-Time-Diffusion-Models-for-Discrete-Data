@@ -2,7 +2,6 @@
 
 import jax
 import jax.numpy as jnp
-import forward_model
 
 
 class TauLDRBackward:
