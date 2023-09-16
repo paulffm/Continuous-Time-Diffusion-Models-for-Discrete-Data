@@ -47,11 +47,11 @@ class TauLDRBackward:
         qt0 = jnp.clip(qt0, a_min=1e-8)
         rate_mat = self.fwd_model.rate_mat(t)
         bsize = xt.shape[0]
-        # from B, C, H, W to B, C*H*W
-        xt = jnp.reshape(xt, [bsize, -1])
+        
+        xt = jnp.reshape(xt, [bsize, -1]) # from B, H, W, C to B, H*W*C
         d = xt.shape[1]
         s = config.vocab_size
-        xt_onehot = jax.nn.one_hot(xt, s)
+        xt_onehot = jax.nn.one_hot(xt, s) # B, H*W*C to B, H*W*C, S
         cat_dims = xt.shape[1]
         b = jnp.expand_dims(jnp.arange(bsize), axis=1)
 
@@ -60,14 +60,14 @@ class TauLDRBackward:
         rate_xt_offdiag = jnp.sum(rate_given_xt, axis=-1)
         rng, dimcat = self._sample_categorical(rng, rate_xt_offdiag)
 
-        rate_newval = rate_given_xt[jnp.arange(bsize), dimcat]
+        rate_newval = rate_given_xt[jnp.arange(bsize), dimcat] 
         rng, valcat = self._sample_categorical(rng, rate_newval)
         dimcat_onehot = jax.nn.one_hot(dimcat, cat_dims, dtype=jnp.int32)
         valcat = jnp.expand_dims(valcat, axis=-1)
         xtilde = xt * (1 - dimcat_onehot) + dimcat_onehot * valcat
 
         if config.tauldr_onepass:
-            x_logits = self.net.apply({"params": params}, x=xtilde, t=t)
+            x_logits = self.net.apply({"params": params}, x=xtilde, t=t) # input shape: B, H*W*C, output: B, H*W*C, S
             reg_x = xtilde
         else:
             x_logits = self.net.apply({"params": params}, x=xt, t=t)
@@ -87,8 +87,8 @@ class TauLDRBackward:
         if config.tauldr_onepass:
             p0t_sig = p0t_reg
         else:
-            x_logits = self.net.apply({"params": params}, x=xtilde, t=t)
-            p0t_sig = jax.nn.softmax(x_logits, axis=2)
+            x_logits = self.net.apply({"params": params}, x=xtilde, t=t) # output shape: B, H*W*C, S
+            p0t_sig = jax.nn.softmax(x_logits, axis=2) 
 
         outer_qt0_numer_sig = qt0[
             jnp.repeat(jnp.arange(bsize), d * s),

@@ -10,23 +10,23 @@ from lib.networks import networks
 
 def bidir_transformer(config, x, temb, readout_dim=None):
     """Bidirectional Transformer procedure."""
-    # x muss hier 3 dim haben: B, D, S
+  
 
     if readout_dim is None:
         readout_dim = config.vocab_size
-    input_shape = list(x.shape)[:-1]  # shape (B, D, S) => input shape (B, D)
-    # if x shape B, D, S => after reshape B, D, S
-    # and if x B, C, H, W => after this B, d=C*H*W, S
-    x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]])
+    input_shape = list(x.shape)[:-1]  # x shape: (B, D, emb_dim) => input_shape B, D
+
+    x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]]) # B, D, E  
     if config.net_arch == "bidir_transformer":
-        module = networks.UniDirectionalTransformer  # 3 dim input B, D, S
+        module = networks.UniDirectionalTransformer  
     elif config.net_arch == "bidir_combiner_transformer":
         module = networks.CombinerAxial
     else:
         raise ValueError("Unknown net_arch: %s" % config.net_arch)
     l2r_embed = module(config, "l2r")(x, temb)  # x muss hier 3 dim haben: B, D, S
     r2l_embed = module(config, "r2l")(x, temb)  # # temb: (B, embedding_dim)
-    # l2r, r2l shape: B, D +  concat_dim - 1, S (S kann auch out_dim sein aus transformerblock)
+    # l2r, r2l shape:  B, (D-1) + 2E, E
+    print("UNI prediction")
     if config.bidir_readout == "concat":
         readout_module = networks.ConcatReadout
     elif config.bidir_readout == "res_concat":
@@ -36,10 +36,11 @@ def bidir_transformer(config, x, temb, readout_dim=None):
     else:
         raise ValueError("Unknown bidir_readout: %s" % config.bidir_readout)
     logits = readout_module(config, readout_dim=readout_dim)(l2r_embed, r2l_embed, temb)
-    logits = jnp.reshape(logits, input_shape + [readout_dim])  # (B, D, )
+    print("Concat Prediction")
+    logits = jnp.reshape(logits, input_shape + [readout_dim])  # (B, D, S)
     return logits  # fehler bei concat_dim - 1 irgendwo: shape hier muss B, D ,S sein
 
-
+# TypeError: Cannot concatenate arrays with shapes that differ in dimensions other than the one being concatenated: concatenating along dimension 1 for shapes (1, 1, 512), (64, 783, 512).
 class BidirectionalTransformer(nn.Module):
     """Transformer in two directions."""
 
@@ -47,11 +48,12 @@ class BidirectionalTransformer(nn.Module):
 
     @nn.compact
     def __call__(self, x, t):
+        assert x.ndim == 2
         config = self.config
-        x = nn.Embed(config.vocab_size, config.embed_dim)(x)
+        x = nn.Embed(config.vocab_size, config.embed_dim)(x) # x.ndim = 3 B, D, embed_dim = B, E
         temb = networks.transformer_timestep_embedding(
             t * config.time_scale_factor, config.embed_dim
-        )  # temb: (B, embedding_dim)
+        )  # temb: (B, embed_dim) = B, E
         return bidir_transformer(config, x, temb)
 
 

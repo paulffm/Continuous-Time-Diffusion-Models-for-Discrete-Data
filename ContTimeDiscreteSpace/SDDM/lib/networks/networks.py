@@ -38,12 +38,13 @@ class ConcatReadout(nn.Module):
     def __call__(self, l2r_embed, r2l_embed, _):
         config = self.config
         state = jnp.concatenate([l2r_embed, r2l_embed], axis=-1)
+        print("COncatReadout")
         out_dim = self.readout_dim
         if out_dim == 0:
             out_dim = config.vocab_size
         predictor = MLP([2 * config.embed_dim, out_dim], activation=nn.gelu)
         logits = predictor(state)
-        return logits  # B, D + Emb_dim - 1, S.
+        return logits  # B, D-1 + 2E,  S
 
 
 class ResidualReadout(nn.Module):
@@ -57,6 +58,7 @@ class ResidualReadout(nn.Module):
         config = self.config
         embed_dim = x.shape[-1]
         temb = MLP([config.mlp_dim, 4 * temb.shape[1]], activation=nn.gelu)(temb)
+        print("ResReadout")
         for _ in range(config.num_output_ffresiduals):
             film_params = nn.Dense(2 * embed_dim)(temb)
             z = MLP([config.mlp_dim, embed_dim], activation=nn.gelu)(x)
@@ -79,6 +81,7 @@ class ConcatResidualReadout(nn.Module):
     def __call__(self, l2r_embed, r2l_embed, temb):
         config = self.config
         state = jnp.concatenate([l2r_embed, r2l_embed], axis=-1)
+        print("ConcatRes")
         return ResidualReadout(config, readout_dim=self.readout_dim)(state, temb)
 
 
@@ -115,6 +118,7 @@ class TransformerMlpBlock(nn.Module):
 
     @nn.compact
     def __call__(self, inputs):
+        # inputs shape: B, D-1 + 2E , E
         """Applies Transformer MlpBlock module."""
         actual_out_dim = inputs.shape[-1] if self.out_dim is None else self.out_dim
         x = nn.Dense(
@@ -136,13 +140,13 @@ class TransformerMlpBlock(nn.Module):
         output = nn.Dropout(rate=self.dropout_rate)(
             output, deterministic=self.dropout_deterministic
         )
-        return output
+        return output #  B, (D-1) + 2E, actual_out_dim
 
 
 def sa_block(config, inputs, masks):
     """Self-attention block."""
     # shape von x bleibt gleich:
-    # shape: (B, D + cond_dim - 1, S)
+    # shape: (B, (D-1) + 2E, S)
     if config.transformer_norm_type == "prenorm":
         x = nn.LayerNorm(dtype=config.dtype)(inputs)
         x = nn.SelfAttention(
@@ -177,7 +181,7 @@ def sa_block(config, inputs, masks):
         x = nn.LayerNorm(dtype=config.dtype)(x)
     else:
         raise ValueError("unknown norm type %s" % config.transformer_norm_type)
-    return x  # shape: (B, D + cond_dim - 1, S)
+    return x  # shape: B, (D-1) + 2E, S)
 
 
 def cross_attention(config, l2r_embed, r2l_embed, temb):
@@ -257,7 +261,7 @@ def ff_block(config, x):
         z = nn.LayerNorm(dtype=config.dtype)(z)
     else:
         raise ValueError("unknown norm type %s" % config.transformer_norm_type)
-    return z
+    return z # B, D-1 +2E, E
 
 
 class TransformerBlock(nn.Module):
@@ -272,7 +276,7 @@ class TransformerBlock(nn.Module):
         x = sa_block(config, inputs, masks)
         # MLP block.
         z = ff_block(config, x)
-        return z
+        return z #  B, (D-1) + 2E, E?
 
 
 class TransformerEncoder(nn.Module):
@@ -317,7 +321,7 @@ class MaskedTransformer(nn.Module):
     def __call__(self, x, temb, pos):
         config = self.config
 
-        # fügt eine dim hinzu: B, D => B, D, emb
+        # fügt eine dim hinzu: B, D => B, D, E
         x = nn.Embed(config.vocab_size + 1, config.embed_dim)(x)
 
         # für TransformerEncoder muss x 3dim sein
@@ -337,7 +341,7 @@ class MaskedTransformer(nn.Module):
 class UniDirectionalTransformer(nn.Module):
     """Transformer in one direction."""
 
-    # input shape B, D, S
+    # input shape B, D, E
 
     config: Any
     direction: str
@@ -349,24 +353,26 @@ class UniDirectionalTransformer(nn.Module):
         if conditioner is None:
             conditioner = temb
         else:
-            conditioner = jnp.concatenate([conditioner, temb], axis=1)
+            conditioner = jnp.concatenate([conditioner, temb], axis=1) # B, 2E
+        print("UNI")
         config = self.config
-        cond_dim = conditioner.shape[1]
-        concat_dim = x.shape[1] + cond_dim - 1
+        cond_dim = conditioner.shape[1] # 2E
+        concat_dim = x.shape[1] + cond_dim - 1 # concat_dim = D + 2E - 1
         pos_idx = jnp.expand_dims(jnp.arange(concat_dim, dtype=jnp.int32), 0)
         if self.direction == "l2r":
-            x = jnp.concatenate([conditioner, x[:, :-1]], axis=1)
+            x = jnp.concatenate([conditioner, x[:, :-1]], axis=1) # (B,(D−1)+2E,E)
             mask = nn.attention.make_attention_mask(pos_idx, pos_idx, jnp.greater_equal)
             mask = mask.at[:, :, :cond_dim, :cond_dim].set(1.0)
         else:
-            x = jnp.concatenate([x[:, 1:], conditioner], axis=1)
+            x = jnp.concatenate([x[:, 1:], conditioner], axis=1) # B,(D−1)+2E,E)
             mask = nn.attention.make_attention_mask(pos_idx, pos_idx, jnp.less_equal)
             mask = mask.at[:, :, -cond_dim:, -cond_dim:].set(1.0)
+        print("Concat in uni")
         pos_embed = self.param(
             "pos_embed",
             nn.initializers.xavier_uniform(),
             (1, concat_dim, x.shape[2]),
-            config.dtype,
+            config.dtype,   # 1, D + 2E -1 
         )
         x = x + pos_embed
         x = nn.Dropout(config.dropout_rate)(
@@ -377,4 +383,30 @@ class UniDirectionalTransformer(nn.Module):
                 x, masks=mask
             )
         # cond_dim = emb_dim
-        return x  # shape: (B, D + cond_dim - 1, S)
+        return x  # shape:  B, (D-1) + 2E, E
+
+
+
+class UNet:
+
+    def __init__(self, config):
+        self.config = config
+    
+    def forward(self, x, t):
+        B, D = x.shape
+        C, H, W = self.data_shape
+        S = self.S
+        x = jnp.reshape(x, (B, C, H, W))
+
+
+
+
+
+
+
+
+
+        x = jnp.reshape(x, (B, D, S))
+
+        return x
+

@@ -52,7 +52,7 @@ class CondFactorizedBackwardModel:
         elif self.config.loss_type == "elbo":
             xt_onehot = jax.nn.one_hot(xt, self.config.vocab_size)
             b = jnp.expand_dims(jnp.arange(xt.shape[0]), tuple(range(1, xt.ndim)))
-            qt0_x2y = self.fwd_model.transition(t)
+            qt0_x2y = self.fwd_model.transition(t) # B, S, S
             qt0_y2x = jnp.transpose(qt0_x2y, (0, 2, 1))
             qt0_y2x = qt0_y2x[b, xt]
             ll_xt = jnp.expand_dims(ll_xt, axis=-1)
@@ -73,6 +73,7 @@ class CondFactorizedBackwardModel:
     def loss(self, params, rng, x0, xt, t):
         """Calc loss."""
         del rng
+        # xt shape: B, D
         logits = self.get_logits(params, xt, t)
         loss = 0.0
         ce_coeff = self.config.get("ce_coeff", 0.0)

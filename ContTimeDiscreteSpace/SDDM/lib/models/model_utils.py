@@ -53,7 +53,7 @@ def get_logprob_with_logits(cls, xt, t, logits, xt_target=None):
 
     if xt_target is None:
         xt_target = xt
-        xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size)
+    xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size) # from B, D to B, D, S, should work also with B, H, W, C
     if cls.config.get("logit_type", "direct") == "direct":
         log_prob = nn.log_softmax(logits, axis=-1)
     else:
@@ -93,10 +93,12 @@ def copy_pytree(pytree):
 
 def init_state(config, model, model_key):
     # state = init_host_state(make_init_params(config, model.backwd_model, model_key), model.optimizer)
-
+    # laut diesem code: mnist solte discrete_dim als list haben?
     if isinstance(config.discrete_dim, int):
+        # input_shape = (config.batch_size, config.discrete_dim)
         input_shape = (1, config.discrete_dim)
     else:
+        # input_shape = [config.batch_size] + list(config.discrete_dim)
         input_shape = [1] + list(config.discrete_dim)
     init_kwargs = dict(
         x=jnp.zeros(input_shape, dtype=jnp.int32), t=jnp.zeros((1,), dtype=jnp.float32)

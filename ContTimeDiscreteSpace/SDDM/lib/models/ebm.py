@@ -24,7 +24,7 @@ class BinaryMLPScoreFunc(nn.Module):
             x = nn.Dense(self.hidden_size)(x) + temb
             x = nn.elu(x)
         x = nn.Dense(1)(x)
-        return x
+        return x # scalar output
 
 
 class BinaryTransformerScoreFunc(nn.Module):
@@ -66,7 +66,7 @@ class CatMLPScoreFunc(nn.Module):
             x = nn.Dense(self.hidden_size)(x) + temb
             x = nn.silu(x)
         x = nn.Dense(1)(x)
-        return x
+        return x # scalar output
 
 
 class BinaryScoreModel:
@@ -143,7 +143,8 @@ class CategoricalScoreModel:
     def get_logits(self, params, xt, t):
         assert xt.ndim == 2
         bsize = xt.shape[0]
-        ddim = self.config.discrete_dim
+        # assert self.config.discrete_dim == 
+        ddim = self.config.discrete_dim # must be int 
         vocab_size = self.config.vocab_size
         mask = jnp.eye(ddim, dtype=jnp.int32).repeat(bsize * vocab_size, axis=0)
         xrep = jnp.tile(xt, (ddim * vocab_size, 1))
@@ -151,7 +152,7 @@ class CategoricalScoreModel:
         candidate = jnp.tile(jnp.expand_dims(candidate, axis=1), ((ddim, 1)))
         xall = mask * candidate + (1 - mask) * xrep
         t = jnp.tile(t, (ddim * vocab_size,))
-        qall = self.net.apply({"params": params}, x=xall, t=t)
+        qall = self.net.apply({"params": params}, x=xall, t=t) # output shape: (B, 1)
         logits = jnp.reshape(qall, (ddim, vocab_size, bsize))
         logits = jnp.transpose(logits, (2, 0, 1))
         return logits

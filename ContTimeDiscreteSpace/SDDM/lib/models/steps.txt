@@ -1,0 +1,32 @@
+for x0 in data:
+    diffusion_model.training_step(x0)
+
+
+    def training_step(x0,...):
+        if len(x0.shape) == 4:
+            x0 = x0.reshape(B, C*H*W)
+        ....
+        xt = sample_xt()
+        loss = backward_model.loss(x0, xt)
+
+
+    def backward_model.loss(x0, xt)
+        prediction = network(xt)
+        ...
+        ...
+        return loss
+
+
+
+    tau_model = backward_model:
+    tau_model.net = FreeFormTransformer => gibt es nicht => define Unet
+    ----
+    def loss(x0, xt):
+        xt = xt.reshape(B, C*H*W)
+        x0 kommt nur vor, wo jnp.ravel(x0) => resultierender shape: B*H*W*C => 1D
+        logits = net(xt) => net bekommt also 2D input: B, D und macht 3D output B, D, S
+
+    hollow_model = backward_model
+    inherits loss from CondFactorizedBackwardModel
+    def loss(x0, xt):
+        logits = net(xt)
