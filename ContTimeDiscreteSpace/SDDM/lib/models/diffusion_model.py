@@ -14,6 +14,7 @@ import lib.sampling.sampling_utils as sampling_utils
 # DiffusionModel => specify forward model, how to calc loss, how to sample
 # CategoricalDiffusion => inherits from DiffusionModel => just specifiy BackwardsModel and Samples
 
+
 class CategoricalDiffusionModel:
     """Model interface."""
 
@@ -78,7 +79,7 @@ class CategoricalDiffusionModel:
     # wrapper to give self as parameter
     def _sample_step(self, params, rng, tau, xt, t):
         return sampling_utils.get_sampler(self.config)(self, params, rng, tau, xt, t)
-    
+
     # wrapper to give self as parameter
     def _sample_from_prior(self, rng, num_samples, conditioner=None):
         del conditioner
@@ -87,11 +88,11 @@ class CategoricalDiffusionModel:
         else:
             shape = tuple([num_samples] + list(self.config.discrete_dim))
         return self.fwd_model.sample_from_prior(rng, shape)
-    
+
     # wrapper to give self as parameter
     def _corrector_step(self, params, rng, tau, xt, t):
         return sampling_utils.lbjf_corrector_step(self, params, rng, tau, xt, t)
-    
+
     def sample_loop(self, state, rng, num_samples, conditioner=None):
         """Sampling loop."""
         rng, prior_rng = jax.random.split(rng)

@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import optax
 import lib.utils.utils as utils
 
+
 def binary_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
     if xt_target is None:
         xt_target = xt
@@ -106,12 +107,12 @@ def lbjf_corrector_step(cls, params, rng, tau, xt, t, xt_target=None):
 
 def get_sampler(config):
     """Get generic categorical samplers."""
-    if config.get('sampler_type', 'lbjf') == 'lbjf':
+    if config.get("sampler_type", "lbjf") == "lbjf":
         fn_sampler = lbjf_sample_step
-    elif config.sampler_type == 'tau_leaping':
+    elif config.sampler_type == "tau_leaping":
         fn_sampler = tau_leaping_step
-    elif config.sampler_type == 'exact':
+    elif config.sampler_type == "exact":
         fn_sampler = exact_sampling
     else:
-        raise ValueError('Unknown sampler type %s' % config.sampler_type)
+        raise ValueError("Unknown sampler type %s" % config.sampler_type)
     return fn_sampler

@@ -51,3 +51,8 @@ def get_dataloader(config, phase):
     dataset = dataset.batch(config.batch_size, drop_remainder=is_training)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
+
+# test discrete:
+# first_batch = next(iter(train_ds))
+# unique_values = np.unique(first_batch)
+# print(unique_values)
