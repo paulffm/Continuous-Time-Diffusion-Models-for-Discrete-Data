@@ -6,6 +6,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 def tf_to_numpy(tf_batch):
     """TF to NumPy, using ._numpy() to avoid copy."""
@@ -29,7 +32,6 @@ def get_per_process_batch_size(batch_size):
     return batch_size
 
 
-
 def np_tile_imgs(imgs, *, pad_pixels=1, pad_val=255, num_col=0):
     """NumPy utility: tile a batch of images into a single image.
 
@@ -43,18 +45,18 @@ def np_tile_imgs(imgs, *, pad_pixels=1, pad_val=255, num_col=0):
     np.ndarray: one tiled image: a uint8 array of shape [H, W, c]
     """
     if pad_pixels < 0:
-        raise ValueError('Expected pad_pixels >= 0')
+        raise ValueError("Expected pad_pixels >= 0")
     if not 0 <= pad_val <= 255:
-        raise ValueError('Expected pad_val in [0, 255]')
+        raise ValueError("Expected pad_val in [0, 255]")
 
     imgs = np.asarray(imgs)
     if imgs.dtype != np.uint8:
-        raise ValueError('Expected uint8 input')
+        raise ValueError("Expected uint8 input")
     # if imgs.ndim == 3:
     #   imgs = imgs[..., None]
     n, h, w, c = imgs.shape
     if c not in [1, 3]:
-        raise ValueError('Expected 1 or 3 channels')
+        raise ValueError("Expected 1 or 3 channels")
 
     if num_col <= 0:
         # Make a square
@@ -68,10 +70,15 @@ def np_tile_imgs(imgs, *, pad_pixels=1, pad_val=255, num_col=0):
 
     imgs = np.pad(
         imgs,
-        pad_width=((0, num_row * num_col - n), (pad_pixels, pad_pixels),
-                    (pad_pixels, pad_pixels), (0, 0)),
-        mode='constant',
-        constant_values=pad_val)
+        pad_width=(
+            (0, num_row * num_col - n),
+            (pad_pixels, pad_pixels),
+            (pad_pixels, pad_pixels),
+            (0, 0),
+        ),
+        mode="constant",
+        constant_values=pad_val,
+    )
     h, w = h + 2 * pad_pixels, w + 2 * pad_pixels
     imgs = imgs.reshape(num_row, num_col, h, w, c)
     imgs = imgs.transpose(0, 2, 1, 3, 4)
@@ -82,3 +89,21 @@ def np_tile_imgs(imgs, *, pad_pixels=1, pad_val=255, num_col=0):
     if c == 1:
         imgs = imgs[..., 0]
     return imgs
+
+
+def plot_mnist_batch(batch, save_path):
+    """Plottet ein Batch von MNIST-Bildern."""
+    num_images = batch.shape[0]
+    sqrt_num_images = int(np.sqrt(num_images))
+
+    fig, axes = plt.subplots(sqrt_num_images, sqrt_num_images, figsize=(8, 8))
+
+    for i, ax in enumerate(axes.flat):
+        img = batch[i].squeeze()
+        ax.imshow(img, cmap="gray")
+        ax.axis("off") 
+
+    plt.tight_layout() 
+    plt.savefig(save_path)
+    plt.show()
+    plt.close()

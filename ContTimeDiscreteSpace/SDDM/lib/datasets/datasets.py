@@ -1,4 +1,3 @@
-
 """MNIST dataloader."""
 
 import jax
@@ -7,16 +6,23 @@ import tensorflow_datasets as tfds
 import lib.datasets.datasets_utils as datasets_utils
 
 
-
 def get_dataloader(config, phase):
     """Get cifar10 data loader."""
-    is_training = phase == "train"
-    dataset = tfds.load("mnist", split=phase, shuffle_files=is_training)
-    num_shards = jax.process_count()
-    shard_id = jax.process_index()
+    is_training = False
+
+    if phase == "train":
+        is_training = True
+
+    dataset = tfds.load(
+        "mnist", split=phase, shuffle_files=is_training, data_dir="lib/datasets"
+    )
+    num_shards = jax.process_count()  # cpu 1
+    shard_id = jax.process_index()  # cpu 0
     dataset = dataset.shard(num_shards=num_shards, index=shard_id)
+
+    # repeats dataset
     if is_training:
-        dataset = dataset.repeat().shuffle(buffer_size=50000, seed=shard_id)
+        dataset = dataset.repeat().shuffle(buffer_size=50000)
 
     def preprocess(x):
         """Preprocess img."""
@@ -38,10 +44,10 @@ def get_dataloader(config, phase):
         return out
 
     dataset = dataset.map(preprocess, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    #proc_batch_size = datasets_utils.get_per_process_batch_size(config.batch_size)
-    
-    #dataset = dataset.batch(proc_batch_size // jax.local_device_count(), drop_remainder=is_training)
-    #dataset = dataset.batch(jax.local_device_count(), drop_remainder=is_training)
+    # proc_batch_size = datasets_utils.get_per_process_batch_size(config.batch_size)
+
+    # dataset = dataset.batch(proc_batch_size // jax.local_device_count(), drop_remainder=is_training)
+    # dataset = dataset.batch(jax.local_device_count(), drop_remainder=is_training)
     dataset = dataset.batch(config.batch_size, drop_remainder=is_training)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
