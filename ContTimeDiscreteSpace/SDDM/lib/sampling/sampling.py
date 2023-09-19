@@ -29,6 +29,7 @@ class Sampler:
         rng, prior_rng = jax.random.split(rng)
 
         x_start = self._sample_from_prior(prior_rng, self.num_samples, self.conditioner)
+        print("x_start from prior", x_start.shape)
         ones = jnp.ones((self.num_samples,), dtype=jnp.float32)
         tau = 1.0 / self.config.sampling_steps
 

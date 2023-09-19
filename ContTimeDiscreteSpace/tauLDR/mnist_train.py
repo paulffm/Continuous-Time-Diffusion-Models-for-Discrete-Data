@@ -32,7 +32,7 @@ import numpy as np
 
 def main():
 
-    train_resume = True
+    train_resume = False
 
     if not train_resume:
         cfg = get_config()

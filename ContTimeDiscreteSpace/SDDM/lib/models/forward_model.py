@@ -114,3 +114,4 @@ class UniformVariantForward(UniformForward):
 
     def transition(self, t):
         return self.transit_between(0, t)
+

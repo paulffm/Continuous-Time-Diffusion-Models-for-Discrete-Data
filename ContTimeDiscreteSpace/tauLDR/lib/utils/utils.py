@@ -62,15 +62,6 @@ def expand_dims(x, axis):
     return x
 
 
-@functools.partial(torch.distributed.barrier)
-def all_gather(x):
-    # In PyTorch, torch.distributed.barrier synchronizes all processes before the gather
-    gathered_data = [
-        torch.zeros_like(x) for _ in range(torch.distributed.get_world_size())
-    ]
-    torch.distributed.all_gather(gathered_data, x)
-    return gathered_data
-
 
 def categorical_kl_logits(logits1, logits2, eps=1e-6):
     p1 = F.softmax(logits1 + eps, dim=-1)

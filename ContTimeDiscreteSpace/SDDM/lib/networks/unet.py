@@ -272,14 +272,17 @@ class AttnBlock(nn.Module):
       assert out.shape == (B, H, W, C)
       return(out + x)
 
+def center_data(x, x_min, x_max):
+    out = (x - x_min) / (x_max - x_min) # [0, 1]
+    return 2 * out - 1 
 
 class Unet(nn.Module):
     dim: int
     shape: tuple
     init_dim: Optional[int] = None # if None, same as dim
     out_dim: Optional[int] = None
-    dim_mults: Tuple[int, int, int, int] = (1, 2, 4, 8)
-    resnet_block_groups: int = 2 #8
+    dim_mults: Tuple[int, int, int, int] = (1, 2, 4)
+    resnet_block_groups: int = 3 #8
     learned_variance: bool = False
     num_classes: int = 256
     dtype: Any = jnp.float32
@@ -289,8 +292,10 @@ class Unet(nn.Module):
     @nn.compact
     def __call__(self, x, t):
 
-        x = jnp.reshape(x, (x.shape[0], self.shape[1], self.shape[2], self.shape[3]))
+        x = jnp.reshape(x, (x.shape[0], self.shape[0], self.shape[1], self.shape[2]))
         B, H, W, C = x.shape
+        x_one_hot = jax.nn.one_hot(x, self.num_classes)
+        x = center_data(x, 0, self.num_classes - 1)
         
         init_dim = self.dim if self.init_dim is None else self.init_dim
         hs = []
@@ -363,7 +368,10 @@ class Unet(nn.Module):
         # out_dim = default_out_dim if self.out_dim is None else self.out_dim
         out_dim = C * self.num_classes
         x_out = nn.Conv(out_dim, kernel_size=(1,1), dtype=self.dtype, name= 'final.conv_0')(out)
+        x_out = jnp.reshape(x_out, (B, H, W, 1, self.num_classes))
+        #x_out = jnp.transpose(x_out, (0, 2, 3, ))
+        x_out = x_out + x_one_hot
 
-        x_out = jnp.reshape(x_out, (B, C * H * W, self.num_classes))
+        x_out = jnp.reshape(x_out, (B, H * W * 1, self.num_classes))
         
         return x_out 

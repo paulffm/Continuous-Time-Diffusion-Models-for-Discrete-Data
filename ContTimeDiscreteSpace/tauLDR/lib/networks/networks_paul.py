@@ -89,7 +89,9 @@ class MiniUNetDiscrete(nn.Module):
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + x_centered), log_scale # (B, C * 2, H, W)
         else:
+            print("before reshape:", out.shape)
             out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, img_size, img_size))
+            print("after reshape:", out.shape)
             #print('out after reshape', out.shape)
             out = out.permute(0, 1, 3, 4, 2).contiguous()
             #print('out after cont', out.shape)
@@ -535,10 +537,11 @@ class UNet(nn.Module):
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
+            print("before reshape:", out.shape)
             out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, height, width))
-            #print('out after reshape', out.shape)
+            print('out after reshape', out.shape)
             out = out.permute(0, 1, 3, 4, 2).contiguous()
-            #print('out after cont', out.shape)
+            print('out after cont', out.shape)
             out = out + input_onehot
 
         return out

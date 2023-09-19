@@ -26,17 +26,17 @@ class CategoricalDiffusionModel:
 
     def _build_loss_func(self, rng, x0):
         rng, loss_rng = jax.random.split(rng)
-        #if len(x0.shape) == 4:
+        # if len(x0.shape) == 4:
         #    B, H, W, C = x0.shape
         #    x0 = jnp.reshape(x0, (B, H * W * C))
 
         # sample xt => noise data
-        bsize = x0.shape[0] # B
+        bsize = x0.shape[0]  # B
         t_rng, sample_rng = jax.random.split(rng)
         t = jax.random.uniform(t_rng, (bsize,))
         t = t * self.config.time_duration
         qt = self.fwd_model.transition(t)
-        b = jnp.expand_dims(jnp.arange(bsize), tuple(range(1, x0.ndim))) # 
+        b = jnp.expand_dims(jnp.arange(bsize), tuple(range(1, x0.ndim)))  #
         qt0 = qt[b, x0]
         logits = jnp.where(qt0 <= 0.0, -1e9, jnp.log(qt0))
         xt = jax.random.categorical(sample_rng, logits)
@@ -49,6 +49,9 @@ class CategoricalDiffusionModel:
     def training_step(self, state, rng, batch):
         """Single gradient update step."""
         # batch: B, H, W, C or B, D
+        if len(batch.shape) == 4:
+            B, H, W, C = batch.shape
+            batch = jnp.reshape(batch, (B, H * W * C))
         params, opt_state = state.params, state.opt_state
         loss_fn = self._build_loss_func(rng, batch)
 
@@ -56,7 +59,7 @@ class CategoricalDiffusionModel:
         (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(
             params
         )  # aux = {"loss": neg_elbo}
-        print("calc loss")
+        print("loss", aux['loss'])
         # got only cpu
         # grads = jax.lax.pmean(grads, axis_name='shard')
         # aux = jax.lax.pmean(aux, axis_name='shard')
@@ -78,7 +81,7 @@ class CategoricalDiffusionModel:
             opt_state=opt_state,
             ema_params=ema_params,
         )
-        print("updated state")
+
         return new_state, aux
 
     # wrapper to give self as parameter
@@ -93,7 +96,9 @@ class CategoricalDiffusionModel:
             shape = (num_samples, self.config.discrete_dim)
         else:
             shape = tuple([num_samples] + list(self.config.discrete_dim))
-        return self.fwd_model.sample_from_prior(rng, shape) #  shape: B, discrete_dim kann sein: B, H*W*C oder B, H, W, C: muss hier B, D sein
+        return self.fwd_model.sample_from_prior(
+            rng, shape
+        )  #  shape: B, discrete_dim kann sein: B, H*W*C oder B, H, W, C: muss hier B, D sein
 
     # wrapper to give self as parameter
     def _corrector_step(self, params, rng, tau, xt, t):
@@ -104,7 +109,7 @@ class CategoricalDiffusionModel:
         print("Sampling")
         rng, prior_rng = jax.random.split(rng)
 
-        x_noisy = self._sample_from_prior(prior_rng, num_samples, conditioner) # shape:
+        x_noisy = self._sample_from_prior(prior_rng, num_samples, conditioner)  # shape:
         ones = jnp.ones((num_samples,), dtype=jnp.float32)
         tau = 1.0 / self.config.sampling_steps
 

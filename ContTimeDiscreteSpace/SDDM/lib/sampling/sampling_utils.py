@@ -52,10 +52,12 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     choices = jnp.expand_dims(
         jnp.arange(cls.config.vocab_size, dtype=jnp.int32), axis=list(range(xt.ndim))
     )
+    """
     if not cls.config.get("is_ordinal", True):
         tot_flips = jnp.sum(flips, axis=-1, keepdims=True)
         flip_mask = (tot_flips <= 1).astype(jnp.int32)
         flips = flips * flip_mask
+    """
     diff = choices - jnp.expand_dims(xt, axis=-1)
     avg_offset = jnp.sum(flips * diff, axis=-1)
     new_y = xt + avg_offset

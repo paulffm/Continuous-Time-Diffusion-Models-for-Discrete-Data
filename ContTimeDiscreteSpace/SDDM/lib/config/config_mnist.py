@@ -15,14 +15,14 @@ def get_config():
     config.diffuse_type = 'uniform'
 
     # backward
-    config.discrete_dim = 28 * 28 * 1 # D = C*H*W
+    config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
     # only for cond_backward_model
     config.lambda_t = 'const'
     config.logit_type = 'direct'
     config.loss_type = 'elbo'
 
     # model
-    config.model_type = 'tauldr' # hollow, 'cond_hollow, ebm
+    config.model_type = 'ebm' # hollow, 'cond_hollow, ebm
     # for hollow and 'cond_hollow: bidir_transformer or enum_transformer
     config.net_arch = 'bidir_transformer'
     # bidir_transformer inputs:
@@ -33,7 +33,7 @@ def get_config():
 
     # unet
     config.unet_dim = 32
-    config.unet_data_shape = (config.batch_size, config.image_size, config.image_size, 1)
+    config.unet_data_shape = (config.image_size, config.image_size, 1)
     config.unet_outdim = 1
     config.unet_dim_mults = (1, 2, 2)
     config.unet_resnet_block_groups =  2 #8
@@ -53,16 +53,16 @@ def get_config():
     # optimizer
     config.lr_schedule = 'constant'
     config.learning_rate = 1e-4
-    config.warmup_frac = 0.01
+    config.warmup_frac = 0.00
     config.optimizer = 'adamw'
     config.weight_decay = 0
-    config.grad_norm = 1.0
+    config.grad_norm = 0.0
 
     # training
-    config.total_train_steps = 2
+    config.total_train_steps = 3000
     config.phase = 'train'
-    config.sample_freq = 3
-    config.checkpoint_freq = 1
+    config.sample_freq = 1500
+    config.checkpoint_freq = 500
 
     # saving 
     config.save_dir = 'SavedModels/MNIST' # 
@@ -81,10 +81,10 @@ def get_config():
 
     # sampler 
     # config.plot_sample = 4096
-    config.sampling_steps = 10 #400 # mabye 10000
+    config.sampling_steps = 500 #400 # mabye 10000
     config.corrector_scale = 1.0
     config.corrector_steps = 0
-    config.sampler_type = 'tau_leaping'
+    config.sampler_type = 'exact'
 
     # nets
     config.embed_dim = 512

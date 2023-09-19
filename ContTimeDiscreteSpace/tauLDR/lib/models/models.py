@@ -43,7 +43,7 @@ class ImageX0PredBasePaul(nn.Module):
                 attn_resolutions=[16],
                 num_heads=1,
                 dropout=cfg.model.dropout,
-                model_output="logistic_pars",  # 'logits' or 'logistic_pars'
+                model_output= 'logits', #"logistic_pars",  # 'logits' or 'logistic_pars'
                 num_classes=self.S,
                 x_min_max=data_min_max,
                 img_size=self.data_shape[2],
@@ -600,7 +600,7 @@ class EMA:
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
 @model_utils.register_model
-class UniformRateSequenceTransformerEMA(EMA, SequenceTransformer, UniformRate):
+class UniformRateSequenceTransformerEMA2(EMA, SequenceTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         SequenceTransformer.__init__(self, cfg, device, rank)
