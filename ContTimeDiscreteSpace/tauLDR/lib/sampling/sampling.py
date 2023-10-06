@@ -546,7 +546,7 @@ class ExactSampling():
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
                 # axis kein parameter? fehler hier
-                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob, axis=-2)
+                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob, axis=-1)
                 new_y = cat_dist.sample()
                 return new_y
 
