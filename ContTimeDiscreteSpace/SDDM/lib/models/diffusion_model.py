@@ -9,6 +9,7 @@ from lib.sampling import sampling_utils
 from lib.models import ebm, hollow_model, tauldr_model
 from lib.optimizer import optimizer as optim
 from lib.models import forward_model
+
 # Aufbau:
 # forward Model => Q matrices => x_0 to noisy image x_t
 # backward model => Loss calculation
@@ -20,14 +21,14 @@ class CategoricalDiffusionModel:
     """Model interface."""
 
     def build_backwd_model(self, config):
-        if config.model_type == 'ebm':
+        if config.model_type == "ebm":
             backwd_model = ebm.CategoricalScoreModel(config)
-        elif config.model_type == 'hollow':
+        elif config.model_type == "hollow":
             backwd_model = hollow_model.HollowModel(config)
-        elif config.model_type == 'tauldr':
+        elif config.model_type == "tauldr":
             backwd_model = tauldr_model.TauLDRBackward(config)
         else:
-            raise ValueError('Unknown model type %s' % config.model_type)
+            raise ValueError("Unknown model type %s" % config.model_type)
         return backwd_model
 
     def __init__(self, config):
@@ -37,8 +38,9 @@ class CategoricalDiffusionModel:
         self.backwd_model = self.build_backwd_model(config)
 
     def init_state(self, model_key):
-        state = utils.init_host_state(self.backwd_model.make_init_params(model_key),
-                                    self.optimizer)
+        state = utils.init_host_state(
+            self.backwd_model.make_init_params(model_key), self.optimizer
+        )
         return state
 
     def _build_loss_func(self, rng, x0):
@@ -48,16 +50,8 @@ class CategoricalDiffusionModel:
         #    x0 = jnp.reshape(x0, (B, H * W * C))
 
         # sample xt => noise data
-        bsize = x0.shape[0]  # B
-        t_rng, sample_rng = jax.random.split(rng)
-        t = jax.random.uniform(t_rng, (bsize,))
-        t = t * self.config.time_duration
-        qt = self.fwd_model.transition(t)
-        b = jnp.expand_dims(jnp.arange(bsize), tuple(range(1, x0.ndim)))  #
-        qt0 = qt[b, x0]
-        logits = jnp.where(qt0 <= 0.0, -1e9, jnp.log(qt0))
-        xt = jax.random.categorical(sample_rng, logits)
 
+        xt, t = self.fwd_model.sample_xt(x0, self.config.time_duration, rng)
         loss_fn = functools.partial(
             self.backwd_model.loss, rng=loss_rng, x0=x0, xt=xt, t=t
         )
@@ -69,41 +63,35 @@ class CategoricalDiffusionModel:
         if len(batch.shape) == 4:
             B, H, W, C = batch.shape
             batch = jnp.reshape(batch, (B, H * W * C))
+
         params, opt_state = state.params, state.opt_state
-        loss_fn = self._build_loss_func(rng, batch)
+        loss_fn = self.build_loss_func(rng, batch)
+        (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
 
-        # calc grad and loss (has auxiliary output )
-        (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-            params
-        )  # aux = {"loss": neg_elbo}
-        print("loss", aux['loss'])
-        # got only cpu
-        # grads = jax.lax.pmean(grads, axis_name='shard')
-        # aux = jax.lax.pmean(aux, axis_name='shard')
+        grads = jax.lax.pmean(grads, axis_name="shard")
+        aux = jax.lax.pmean(aux, axis_name="shard")
 
-        # update optimizer and params of (weights)
         updates, opt_state = self.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
-
-        # weight decay if step > 0
         ema_params = utils.apply_ema(
             decay=jnp.where(state.step == 0, 0.0, self.config.ema_decay),
             avg=state.ema_params,
             new=params,
         )
-        # update values in struct state
         new_state = state.replace(
             step=state.step + 1,
             params=params,
             opt_state=opt_state,
             ema_params=ema_params,
         )
-
         return new_state, aux
 
     # wrapper to give self as parameter
     def _sample_step(self, params, rng, tau, xt, t):
         return sampling_utils.get_sampler(self.config)(self, params, rng, tau, xt, t)
+
+    def _corrector_step(self, params, rng, tau, xt, t):
+        return sampling_utils.lbjf_corrector_step(self, params, rng, tau, xt, t)
 
     # wrapper to give self as parameter
     def _sample_from_prior(self, rng, num_samples, conditioner=None):
@@ -116,10 +104,6 @@ class CategoricalDiffusionModel:
         return self.fwd_model.sample_from_prior(
             rng, shape
         )  #  shape: B, discrete_dim kann sein: B, H*W*C oder B, H, W, C: muss hier B, D sein
-
-    # wrapper to give self as parameter
-    def _corrector_step(self, params, rng, tau, xt, t):
-        return sampling_utils.lbjf_corrector_step(self, params, rng, tau, xt, t)
 
     def sample_loop(self, state, rng, num_samples, conditioner=None):
         """Sampling loop."""
