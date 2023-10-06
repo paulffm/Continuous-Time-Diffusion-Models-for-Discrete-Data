@@ -4,7 +4,8 @@ from flax import linen as nn
 import jax
 import jax.numpy as jnp
 from lib.networks import networks
-import lib.models.model_utils as model_utils
+from lib.models import forward_model
+from lib.models import backward_model
 
 
 class BinaryMLPScoreFunc(nn.Module):
@@ -24,7 +25,7 @@ class BinaryMLPScoreFunc(nn.Module):
             x = nn.Dense(self.hidden_size)(x) + temb
             x = nn.elu(x)
         x = nn.Dense(1)(x)
-        return x # scalar output
+        return x
 
 
 class BinaryTransformerScoreFunc(nn.Module):
@@ -66,15 +67,14 @@ class CatMLPScoreFunc(nn.Module):
             x = nn.Dense(self.hidden_size)(x) + temb
             x = nn.silu(x)
         x = nn.Dense(1)(x)
-        return x # scalar output
+        return x
 
 
-class BinaryScoreModel:
+class BinaryScoreModel(backward_model.BackwardModel):
     """EBM for binary data."""
 
-    def __init__(self, config, fwd_model, net=None):
-        self.config = config
-        self.fwd_model = fwd_model
+    def __init__(self, config):
+        super(BinaryScoreModel, self).__init__(config)
         if config.net_arch == "mlp":
             self.net = BinaryMLPScoreFunc(
                 num_layers=config.num_layers,
@@ -85,6 +85,7 @@ class BinaryScoreModel:
             self.net = BinaryTransformerScoreFunc(config)
         else:
             raise ValueError("Unknown net arch: %s" % config.net_arch)
+        self.fwd_model = forward_model.get_fwd_model(self.config)
 
     def get_q(self, params, xt, t):
         """Get ll."""
@@ -121,13 +122,69 @@ class BinaryScoreModel:
         """Get backwd ratio."""
         del xt_target
         logits = self.get_logits(params, xt, t)
-        return model_utils.get_logprob_with_logits(self, xt, t, logits)
+        return backward_model.get_logprob_with_logits(self, xt, t, logits)
 
     def loss(self, params, rng, x0, xt, t):
         del x0, rng
         _, ll_xt = self.get_logprob(params, xt, t)
         loss = -ll_xt
         loss = jnp.sum(loss) / xt.shape[0]
+        aux = {"loss": loss}
+        return loss, aux
+
+
+class CategoricalScoreModel(backward_model.BackwardModel):
+    """EBM for categorical data."""
+
+    def __init__(self, config):
+        super(CategoricalScoreModel, self).__init__(config)
+        if config.net_arch == "mlp":
+            if config.vocab_size == 2:
+                self.net = BinaryMLPScoreFunc(
+                    num_layers=config.num_layers,
+                    hidden_size=config.embed_dim,
+                    time_scale_factor=config.time_scale_factor,
+                )
+            else:
+                self.net = CatMLPScoreFunc(
+                    vocab_size=config.vocab_size,
+                    cat_embed_size=config.cat_embed_size,
+                    num_layers=config.num_layers,
+                    hidden_size=config.embed_dim,
+                    time_scale_factor=config.time_scale_factor,
+                )
+        else:
+            raise ValueError("Unknown net arch: %s" % config.net_arch)
+
+    def get_logits(self, params, xt, t):
+        assert xt.ndim == 2
+        bsize = xt.shape[0]
+        ddim = self.config.discrete_dim
+        vocab_size = self.config.vocab_size
+        mask = jnp.eye(ddim, dtype=jnp.int32).repeat(bsize * vocab_size, axis=0)
+        xrep = jnp.tile(xt, (ddim * vocab_size, 1))
+        candidate = jnp.arange(vocab_size).repeat(bsize, axis=0)
+        candidate = jnp.tile(jnp.expand_dims(candidate, axis=1), ((ddim, 1)))
+        xall = mask * candidate + (1 - mask) * xrep
+        t = jnp.tile(t, (ddim * vocab_size,))
+        qall = self.net.apply({"params": params}, x=xall, t=t)
+        logits = jnp.reshape(qall, (ddim, vocab_size, bsize))
+        logits = jnp.transpose(logits, (2, 0, 1))
+        return logits
+
+    def get_logprob(self, params, xt, t):
+        bsize = xt.shape[0]
+        ddim = self.config.discrete_dim
+        logits = self.get_logits(params, xt, t)
+        ll_all = jax.nn.log_softmax(logits, axis=-1)
+        ll_xt = ll_all[jnp.arange(bsize)[:, None], jnp.arange(ddim)[None, :], xt]
+        return ll_all, ll_xt
+
+    def loss(self, params, rng, x0, xt, t):
+        del x0, rng
+        _, ll_xt = self.get_logprob(params, xt, t)
+        loss = -jnp.sum(ll_xt, axis=-1)
+        loss = jnp.mean(loss)
         aux = {"loss": loss}
         return loss, aux
 
@@ -143,8 +200,8 @@ class CategoricalScoreModel:
     def get_logits(self, params, xt, t):
         assert xt.ndim == 2
         bsize = xt.shape[0]
-        # assert self.config.discrete_dim == 
-        ddim = self.config.discrete_dim # must be int 
+        # assert self.config.discrete_dim ==
+        ddim = self.config.discrete_dim  # must be int
         vocab_size = self.config.vocab_size
         mask = jnp.eye(ddim, dtype=jnp.int32).repeat(bsize * vocab_size, axis=0)
         xrep = jnp.tile(xt, (ddim * vocab_size, 1))
@@ -152,7 +209,7 @@ class CategoricalScoreModel:
         candidate = jnp.tile(jnp.expand_dims(candidate, axis=1), ((ddim, 1)))
         xall = mask * candidate + (1 - mask) * xrep
         t = jnp.tile(t, (ddim * vocab_size,))
-        qall = self.net.apply({"params": params}, x=xall, t=t) # output shape: (B, 1)
+        qall = self.net.apply({"params": params}, x=xall, t=t)  # output shape: (B, 1)
         logits = jnp.reshape(qall, (ddim, vocab_size, bsize))
         logits = jnp.transpose(logits, (2, 0, 1))
         return logits
