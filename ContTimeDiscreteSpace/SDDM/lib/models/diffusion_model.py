@@ -5,9 +5,10 @@ import jax
 import jax.numpy as jnp
 import optax
 import lib.utils.utils as utils
-import lib.models.model_utils as model_utils
-import lib.sampling.sampling_utils as sampling_utils
-
+from lib.sampling import sampling_utils
+from lib.models import ebm, hollow_model, tauldr_model
+from lib.optimizer import optimizer as optim
+from lib.models import forward_model
 # Aufbau:
 # forward Model => Q matrices => x_0 to noisy image x_t
 # backward model => Loss calculation
@@ -18,11 +19,27 @@ import lib.sampling.sampling_utils as sampling_utils
 class CategoricalDiffusionModel:
     """Model interface."""
 
-    def __init__(self, config, fwd_model, backwd_model, optimizer):
+    def build_backwd_model(self, config):
+        if config.model_type == 'ebm':
+            backwd_model = ebm.CategoricalScoreModel(config)
+        elif config.model_type == 'hollow':
+            backwd_model = hollow_model.HollowModel(config)
+        elif config.model_type == 'tauldr':
+            backwd_model = tauldr_model.TauLDRBackward(config)
+        else:
+            raise ValueError('Unknown model type %s' % config.model_type)
+        return backwd_model
+
+    def __init__(self, config):
         self.config = config
-        self.optimizer = optimizer
-        self.backwd_model = backwd_model
-        self.fwd_model = fwd_model
+        self.optimizer = optim.build_optimizer(config)
+        self.fwd_model = forward_model.build_fwd_model(config)
+        self.backwd_model = self.build_backwd_model(config)
+
+    def init_state(self, model_key):
+        state = utils.init_host_state(self.backwd_model.make_init_params(model_key),
+                                    self.optimizer)
+        return state
 
     def _build_loss_func(self, rng, x0):
         rng, loss_rng = jax.random.split(rng)
@@ -69,7 +86,7 @@ class CategoricalDiffusionModel:
         params = optax.apply_updates(params, updates)
 
         # weight decay if step > 0
-        ema_params = model_utils.apply_ema(
+        ema_params = utils.apply_ema(
             decay=jnp.where(state.step == 0, 0.0, self.config.ema_decay),
             avg=state.ema_params,
             new=params,
