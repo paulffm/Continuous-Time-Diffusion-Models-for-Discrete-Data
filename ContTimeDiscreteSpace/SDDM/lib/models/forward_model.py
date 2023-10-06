@@ -1,7 +1,49 @@
+"""Forward diffusion models."""
+
 import math
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+
+class ForwardModel(object):
+    """Generic forward model."""
+
+    def __init__(self, num_states):
+        self.num_states = num_states
+
+    def rate(self, t):
+        raise NotImplementedError
+
+    def rate_mat(self, t):
+        raise NotImplementedError
+
+    def transition(self, t):
+        raise NotImplementedError
+
+    def transit_between(self, t1, t2):
+        raise NotImplementedError
+
+    def sample_xt_with_aux(self, x0, time_duration, rng):
+        """Sample x_t and t with aux info returned."""
+        bsize = x0.shape[0]
+        t_rng, sample_rng = jax.random.split(rng)
+        t = jax.random.uniform(t_rng, (bsize,))
+        t = t * time_duration
+        qt = self.transition(t)
+        b = jnp.expand_dims(jnp.arange(bsize), tuple(range(1, x0.ndim)))
+        qt0 = qt[b, x0]
+        logits = jnp.where(qt0 <= 0.0, -1e9, jnp.log(qt0))
+        xt = jax.random.categorical(sample_rng, logits)
+        return qt0, xt, t
+
+    def sample_xt(self, x0, time_duration, rng):
+        """Sample x_t and t."""
+        _, xt, t = self.sample_xt_with_aux(x0, time_duration, rng)
+        return xt, t
+
+    def sample_from_prior(self, rng, shape):
+        raise NotImplementedError
 
 
 def get_rate_matrix(rate):
@@ -24,11 +66,11 @@ def usvt(eigvecs, inv_eigvecs, diag_embed):
     return transitions
 
 
-class UniformForward:
+class UniformForward(ForwardModel):
     """Uniform rate."""
 
     def __init__(self, num_states, rate_const):
-        self.num_states = num_states
+        super(UniformForward, self).__init__(num_states=num_states)
         self.rate_const = rate_const
         rate = rate_const * np.ones((num_states, num_states))
         self.rate_matrix, self.eigvals, self.eigvecs = get_rate_matrix(rate)
@@ -115,3 +157,15 @@ class UniformVariantForward(UniformForward):
     def transition(self, t):
         return self.transit_between(0, t)
 
+
+def get_fwd_model(config):
+    """Get forward model."""
+    if config.diffuse_type == "uniform":
+        fwd_model = UniformForward(
+            num_states=config.vocab_size, rate_const=config.uniform_rate_const
+        )
+    elif config.diffuse_type == "uniform_variant":
+        fwd_model = UniformVariantForward(config)
+    else:
+        raise ValueError("Unknown diffusion type %s" % config.diffuse_type)
+    return fwd_model
