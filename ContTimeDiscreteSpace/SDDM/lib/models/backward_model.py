@@ -73,7 +73,7 @@ class CondFactorizedBackwardModel(BackwardModel):
 
     def __init__(self, config):
         super(CondFactorizedBackwardModel, self).__init__(config)
-        self.fwd_model = forward_model.get_fwd_model(self.config)
+        self.fwd_model = forward_model.build_fwd_model(self.config)
 
     def get_logits(self, params, xt, t):
         return self.net.apply({"params": params}, x=xt, t=t)

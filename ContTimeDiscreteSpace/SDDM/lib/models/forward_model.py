@@ -158,7 +158,7 @@ class UniformVariantForward(UniformForward):
         return self.transit_between(0, t)
 
 
-def get_fwd_model(config):
+def build_fwd_model(config):
     """Get forward model."""
     if config.diffuse_type == "uniform":
         fwd_model = UniformForward(
