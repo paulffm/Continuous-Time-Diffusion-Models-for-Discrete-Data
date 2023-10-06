@@ -1,6 +1,46 @@
+"""Utils."""
+
 import functools
+from typing import Any
+from absl import logging
+import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
+import optax
+
+
+def apply_ema(decay, avg, new):
+    return jax.tree_map(lambda a, b: decay * a + (1.0 - decay) * b, avg, new)
+
+
+def copy_pytree(pytree):
+    return jax.tree_map(jnp.array, pytree)
+
+
+@flax.struct.dataclass
+class TrainState:
+    step: int
+    params: Any
+    opt_state: Any
+    ema_params: Any
+
+
+def init_host_state(params, optimizer):
+    state = TrainState(
+        step=0,
+        params=params,
+        opt_state=optimizer.init(params),
+        ema_params=copy_pytree(params),
+    )
+    return jax.device_get(state)
+
+
+def init_state(model, model_key):
+    state = init_host_state(
+        model.backwd_model.make_init_params(model_key), model.optimizer
+    )
+    return state
 
 
 def shard_prng_key(prng_key):
