@@ -3,9 +3,11 @@ from flax import linen as nn
 import jax
 import jax.numpy as jnp
 import lib.utils.utils as utils
+from lib.models import forward_model
 
 # only in conditional twice and in binary score model once
 
+"""Generic backward models."""
 
 class BackwardModel(object):
     """Backward model."""
@@ -25,18 +27,18 @@ class BackwardModel(object):
         )
         return self.net.init({"params": global_rng}, **init_kwargs)["params"]
 
-    def get_lambda_t(config, t):
+    def get_lambda_t(self, t):
         """Get lambda schedule."""
-        if config.get("lambda_t", "const") == "const":
+        if self.config.get("lambda_t", "const") == "const":
             return jnp.ones(t.shape, dtype=jnp.float32)
-        elif config.lambda_t == "grow_linear":
+        elif self.config.lambda_t == "grow_linear":
             return 0.5 + t
-        elif config.lambda_t == "decay_linear":
+        elif self.config.lambda_t == "decay_linear":
             return 1.5 - t
-        elif config.lambda_t == "decay_convex":
+        elif self.config.lambda_t == "decay_convex":
             return (0.1 + t) ** -0.5
         else:
-            raise ValueError("Unknown lambda_t: %s" % config.lambda_t)
+            raise ValueError("Unknown lambda_t: %s" % self.config.lambda_t)
 
 
 def get_logprob_with_logits(cls, xt, t, logits, xt_target=None):
@@ -44,26 +46,24 @@ def get_logprob_with_logits(cls, xt, t, logits, xt_target=None):
 
     if xt_target is None:
         xt_target = xt
-    xt_onehot = jax.nn.one_hot(
-        xt_target, cls.config.vocab_size
-    )  # from B, D to B, D, S, should work also with B, H, W, C
+    xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size)
     if cls.config.get("logit_type", "direct") == "direct":
         log_prob = nn.log_softmax(logits, axis=-1)
     else:
         qt0 = cls.fwd_model.transition(t)
-    if cls.config.logit_type == "reverse_prob":
-        p0t = jax.nn.softmax(logits, axis=-1)
-        qt0 = jnp.expand_dims(qt0, axis=list(range(1, xt.ndim - 1)))
-        prob_all = p0t @ qt0
-        log_prob = jnp.log(prob_all + 1e-35)
-    elif cls.config.logit_type == "reverse_logscale":
-        log_p0t = nn.log_softmax(logits, axis=-1)
-        log_qt0 = jnp.where(qt0 <= 1e-35, -1e9, jnp.log(qt0))
-        log_qt0 = jnp.expand_dims(log_qt0, axis=list(range(1, xt.ndim)))
-        log_p0t = jnp.expand_dims(log_p0t, axis=-1)
-        log_prob = jax.nn.logsumexp(log_p0t + log_qt0, axis=-2)
-    else:
-        raise ValueError("Unknown logit_type: %s" % cls.config.logit_type)
+        if cls.config.logit_type == "reverse_prob":
+            p0t = jax.nn.softmax(logits, axis=-1)
+            qt0 = jnp.expand_dims(qt0, axis=list(range(1, xt.ndim - 1)))
+            prob_all = p0t @ qt0
+            log_prob = jnp.log(prob_all + 1e-35)
+        elif cls.config.logit_type == "reverse_logscale":
+            log_p0t = nn.log_softmax(logits, axis=-1)
+            log_qt0 = jnp.where(qt0 <= 1e-35, -1e9, jnp.log(qt0))
+            log_qt0 = jnp.expand_dims(log_qt0, axis=list(range(1, xt.ndim)))
+            log_p0t = jnp.expand_dims(log_p0t, axis=-1)
+            log_prob = jax.nn.logsumexp(log_p0t + log_qt0, axis=-2)
+        else:
+            raise ValueError("Unknown logit_type: %s" % cls.config.logit_type)
     log_xt = jnp.sum(log_prob * xt_onehot, axis=-1)
     return log_prob, log_xt
 
@@ -93,12 +93,12 @@ class CondFactorizedBackwardModel(BackwardModel):
         """Calc loss.
 
         Args:
-            xt: bsize x dim(s)
-            t: bsize
-            ll_all: bsize x dim(s) x vocab_size
-            ll_xt: bsize x dim(s)
+          xt: bsize x dim(s)
+          t: bsize
+          ll_all: bsize x dim(s) x vocab_size
+          ll_xt: bsize x dim(s)
         Returns:
-            loss: bsize x dim(s)
+          loss: bsize x dim(s)
         """
         if self.config.loss_type == "rm":
             loss = -ll_xt
@@ -111,7 +111,7 @@ class CondFactorizedBackwardModel(BackwardModel):
         elif self.config.loss_type == "elbo":
             xt_onehot = jax.nn.one_hot(xt, self.config.vocab_size)
             b = jnp.expand_dims(jnp.arange(xt.shape[0]), tuple(range(1, xt.ndim)))
-            qt0_x2y = self.fwd_model.transition(t)  # B, S, S
+            qt0_x2y = self.fwd_model.transition(t)
             qt0_y2x = jnp.transpose(qt0_x2y, (0, 2, 1))
             qt0_y2x = qt0_y2x[b, xt]
             ll_xt = jnp.expand_dims(ll_xt, axis=-1)
@@ -132,7 +132,6 @@ class CondFactorizedBackwardModel(BackwardModel):
     def loss(self, params, rng, x0, xt, t):
         """Calc loss."""
         del rng
-        # xt shape: B, D
         logits = self.get_logits(params, xt, t)
         loss = 0.0
         ce_coeff = self.config.get("ce_coeff", 0.0)
