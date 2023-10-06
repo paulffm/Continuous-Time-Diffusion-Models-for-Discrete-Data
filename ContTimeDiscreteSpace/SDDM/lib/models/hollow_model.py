@@ -10,15 +10,14 @@ from lib.networks import networks
 
 def bidir_transformer(config, x, temb, readout_dim=None):
     """Bidirectional Transformer procedure."""
-  
 
     if readout_dim is None:
         readout_dim = config.vocab_size
     input_shape = list(x.shape)[:-1]  # x shape: (B, D, emb_dim) => input_shape B, D
 
-    x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]]) # B, D, E  
+    x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]])  # B, D, E
     if config.net_arch == "bidir_transformer":
-        module = networks.UniDirectionalTransformer  
+        module = networks.UniDirectionalTransformer
     elif config.net_arch == "bidir_combiner_transformer":
         module = networks.CombinerAxial
     else:
@@ -26,7 +25,6 @@ def bidir_transformer(config, x, temb, readout_dim=None):
     l2r_embed = module(config, "l2r")(x, temb)  # x muss hier 3 dim haben: B, D, S
     r2l_embed = module(config, "r2l")(x, temb)  # # temb: (B, embedding_dim)
     # l2r, r2l shape:  B, (D-1) + 2E, E
-    print("UNI prediction")
     if config.bidir_readout == "concat":
         readout_module = networks.ConcatReadout
     elif config.bidir_readout == "res_concat":
@@ -36,9 +34,9 @@ def bidir_transformer(config, x, temb, readout_dim=None):
     else:
         raise ValueError("Unknown bidir_readout: %s" % config.bidir_readout)
     logits = readout_module(config, readout_dim=readout_dim)(l2r_embed, r2l_embed, temb)
-    print("Concat Prediction")
     logits = jnp.reshape(logits, input_shape + [readout_dim])  # (B, D, S)
     return logits  # fehler bei concat_dim - 1 irgendwo: shape hier muss B, D ,S sein
+
 
 # TypeError: Cannot concatenate arrays with shapes that differ in dimensions other than the one being concatenated: concatenating along dimension 1 for shapes (1, 1, 512), (64, 783, 512).
 class BidirectionalTransformer(nn.Module):
@@ -48,12 +46,11 @@ class BidirectionalTransformer(nn.Module):
 
     @nn.compact
     def __call__(self, x, t):
-        assert x.ndim == 2
         config = self.config
-        x = nn.Embed(config.vocab_size, config.embed_dim)(x) # x.ndim = 3 B, D, embed_dim = B, E
+        x = nn.Embed(config.vocab_size, config.embed_dim)(x)
         temb = networks.transformer_timestep_embedding(
             t * config.time_scale_factor, config.embed_dim
-        )  # temb: (B, embed_dim) = B, E
+        )  # temb: (B, embedding_dim)
         return bidir_transformer(config, x, temb)
 
 
@@ -85,10 +82,9 @@ class EnumerativeTransformer(nn.Module):
         )
         if prefix_cond:
             dummy_logits = jnp.zeros(
-                [x.shape[0], prefix_cond] + list(logits.shape[2:]),
-                dtype=jnp.float32,
+                [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=jnp.float32
             )
-        logits = jnp.concatenate([dummy_logits, logits], axis=1)
+            logits = jnp.concatenate([dummy_logits, logits], axis=1)
         logits = jnp.reshape(logits, list(x_shape) + [config.vocab_size])
         return logits
 
@@ -144,8 +140,8 @@ class PrefixConditionalBidirTransformer(nn.Module):
 class HollowModel(backward_model.CondFactorizedBackwardModel):
     """Hollow model for discrete data."""
 
-    def __init__(self, config, fwd_model, net):
-        super(HollowModel, self).__init__(config, fwd_model, net)
+    def __init__(self, config):
+        super(HollowModel, self).__init__(config)
         if "bidir" in config.net_arch and "transformer" in config.net_arch:
             self.net = BidirectionalTransformer(config)
         elif config.net_arch == "enum_transformer":
@@ -157,8 +153,8 @@ class HollowModel(backward_model.CondFactorizedBackwardModel):
 class PrefixCondHollowModel(HollowModel):
     """Hollow model for discrete data with prefix conditioning."""
 
-    def __init__(self, config, fwd_model, net):
-        super(PrefixCondHollowModel, self).__init__(config, fwd_model, net)
+    def __init__(self, config):
+        super(PrefixCondHollowModel, self).__init__(config)
         if "bidir" in config.net_arch and "transformer" in config.net_arch:
             self.net = PrefixConditionalBidirTransformer(config)
         elif config.net_arch == "enum_transformer":
