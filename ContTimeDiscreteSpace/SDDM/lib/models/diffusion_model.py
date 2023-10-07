@@ -107,29 +107,29 @@ class CategoricalDiffusionModel:
         if num_samples is None:
             num_samples = self.config.plot_samples // jax.device_count()
         x_start = self.sample_from_prior(prior_rng, num_samples, conditioner) # B, D oder B, H, W, C
-        print("sampled from prior", x_start.shape)
+        #print("sampled from prior", x_start.shape)
         ones = jnp.ones((num_samples,), dtype=jnp.float32)
         tau = 1.0 / self.config.sampling_steps
 
         def sample_body_fn(step, xt):
             t = ones * tau * (self.config.sampling_steps - step)
             local_rng = jax.random.fold_in(rng, step)
-            #new_y = self.sample_step(state.ema_params, local_rng, tau, xt, t)
-            print("sample step")
-            new_y = self.sample_step(state.params, local_rng, tau, xt, t)
+            new_y = self.sample_step(state.ema_params, local_rng, tau, xt, t)
+            #print("sample step")
+            #new_y = self.sample_step(state.params, local_rng, tau, xt, t)
             return new_y
 
         def sample_with_correct_body_fn(step, xt):
             t = ones * tau * (self.config.sampling_steps - step)
             local_rng = jax.random.fold_in(rng, step)
-            #xt = self.sample_step(state.ema_params, local_rng, tau, xt, t)
-            xt = self.sample_step(state.params, local_rng, tau, xt, t)
+            xt = self.sample_step(state.ema_params, local_rng, tau, xt, t)
+            #xt = self.sample_step(state.params, local_rng, tau, xt, t)
             scale = self.config.get("corrector_scale", 1.0)
 
             def corrector_body_fn(cstep, cxt):
                 c_rng = jax.random.fold_in(local_rng, cstep)
-                #cxt = self.corrector_step(state.ema_params, c_rng, tau * scale, cxt, t)
-                cxt = self.corrector_step(state.params, c_rng, tau * scale, cxt, t)
+                cxt = self.corrector_step(state.ema_params, c_rng, tau * scale, cxt, t)
+                #cxt = self.corrector_step(state.params, c_rng, tau * scale, cxt, t)
                 return cxt
 
             new_y = jax.lax.fori_loop(
