@@ -63,10 +63,10 @@ def get_config():
     config.grad_norm = 5
 
     # training
-    config.total_train_steps = 2
+    config.total_train_steps = 1000
     config.phase = 'train'
-    config.sample_freq = 2
-    config.checkpoint_freq = 2
+    config.sample_freq = 500
+    config.checkpoint_freq = 200
 
     # saving 
     config.save_dir = 'SavedModels/MNIST' # 
@@ -85,7 +85,7 @@ def get_config():
 
     # sampler 
     # config.plot_sample = 4096
-    config.sampling_steps = 4 #1000 #400 # mabye 10000
+    config.sampling_steps = 500 #1000 #400 # mabye 10000
     config.corrector_scale = 1.0
     config.corrector_steps = 10
     config.sampler_type = 'tau_leaping'
