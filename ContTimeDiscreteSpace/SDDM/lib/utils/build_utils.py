@@ -1,9 +1,7 @@
-from lib.models import ebm
-from lib.models import hollow_model
-from lib.models import tauldr_model
+
 from lib.models.forward_model import UniformForward, UniformVariantForward
 import lib.networks.networks as networks
-from lib.models import ebm, hollow_model
+from lib.models import ebm, hollow_model, tauldr_model
 from lib.networks.unet import Unet
 
 # to prevent cyclic dependencies

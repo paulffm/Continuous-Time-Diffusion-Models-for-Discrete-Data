@@ -562,8 +562,9 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
     return log_prob, log_xt
-"""
-@losses_utils.register_sampler
+
+
+@losses_utils.register_loss
 class HollowAux:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -636,7 +637,7 @@ class HollowAux:
             loss = loss * weight
         return np.sum(loss / B)
             # calc loss from CondFactorizedBackwardModel
-"""
+
 
 
 

@@ -426,7 +426,7 @@ class UNet(nn.Module):
 
         return h
 
-
+# ---------------------Transformer------------------------
 #Based on https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
 
