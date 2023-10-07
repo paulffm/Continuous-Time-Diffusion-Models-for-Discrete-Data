@@ -5,7 +5,7 @@ def get_config():
     # data
     config.seed = 1023
     config.batch_size = 64
-    config.image_size = 28
+    config.image_size = 32
     config.data_aug = False
 
     # forward
@@ -15,20 +15,22 @@ def get_config():
     config.diffuse_type = 'uniform'
 
     # backward
-    config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
+    #config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
+    config.discrete_dim = config.image_size * config.image_size * 1 #
     # only for cond_backward_model
     config.lambda_t = 'const'
     config.logit_type = 'direct'
     config.loss_type = 'elbo'
 
     # model
-    config.model_type = 'ebm' # hollow, 'cond_hollow, ebm
+    config.model_type = 'tauldr' # hollow, 'cond_hollow, ebm
+    """
     # for hollow and 'cond_hollow: bidir_transformer or enum_transformer
     config.net_arch = 'bidir_transformer'
     # bidir_transformer inputs:
     config.bidir_readout = 'res_concat'
     config.conditional_dim = 0
-
+    """
     # enum_transformer
 
     # unet
@@ -43,10 +45,12 @@ def get_config():
 
 
     # for ebm: if config.vocab_size > 2: automatic CatScoreMLP takes following inputs:
+    """
     config.vocab_size = 256
     config.cat_embed_size = 512
     config.num_layers = 2
     config.embed_dim = 512 # hidden_size
+    """
     config.time_scale_factor = 1000
 
 
@@ -56,13 +60,13 @@ def get_config():
     config.warmup_frac = 0.00
     config.optimizer = 'adamw'
     config.weight_decay = 0
-    config.grad_norm = 0.0
+    config.grad_norm = 5
 
     # training
-    config.total_train_steps = 3000
+    config.total_train_steps = 2
     config.phase = 'train'
-    config.sample_freq = 1500
-    config.checkpoint_freq = 500
+    config.sample_freq = 2
+    config.checkpoint_freq = 2
 
     # saving 
     config.save_dir = 'SavedModels/MNIST' # 
@@ -81,12 +85,13 @@ def get_config():
 
     # sampler 
     # config.plot_sample = 4096
-    config.sampling_steps = 500 #400 # mabye 10000
+    config.sampling_steps = 4 #1000 #400 # mabye 10000
     config.corrector_scale = 1.0
-    config.corrector_steps = 0
-    config.sampler_type = 'exact'
+    config.corrector_steps = 10
+    config.sampler_type = 'tau_leaping'
 
     # nets
+    """
     config.embed_dim = 512
     config.mlp_dim = 256
     config.num_output_ffresiduals = 2
@@ -98,7 +103,7 @@ def get_config():
     config.dropout_rate = 0.0
     config.num_layers = 2
     config.readout = 'mlp'
-
+    """
     # EBM
 
     # hollow

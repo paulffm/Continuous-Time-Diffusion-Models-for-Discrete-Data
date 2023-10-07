@@ -43,7 +43,7 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     ll_all, ll_xt = cls.backwd_model.get_logprob(params, xt, t, xt_target)
     log_weight = ll_all - jnp.expand_dims(ll_xt, axis=-1)
     fwd_rate = cls.fwd_model.rate(xt, t)
-
+    #print("log prob dim: ll_all, ll_xt", ll_all.shape)
     xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size)
     posterior = tau * jnp.exp(log_weight) * fwd_rate
     posterior = posterior * (1 - xt_onehot)

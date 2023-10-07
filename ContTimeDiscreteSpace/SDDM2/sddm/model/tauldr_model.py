@@ -50,7 +50,8 @@ class TauLDRBackward(backward_model.BackwardModel):
     qt0 = jnp.clip(qt0, a_min=1e-8)
     rate_mat = self.fwd_model.rate_mat(t)
     bsize = xt.shape[0]
-    # from B, C, H, W to B, C*H*W 
+    # xt: from B, C, H, W to B, C*H*W 
+    #x0 only in combination with ravel
     xt = jnp.reshape(xt, [bsize, -1])
     d = xt.shape[1]
     s = config.vocab_size

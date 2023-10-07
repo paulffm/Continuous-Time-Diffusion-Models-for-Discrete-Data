@@ -4,7 +4,8 @@ import jax
 import jax.numpy as jnp
 from lib.models import forward_model
 from lib.models import backward_model
-from lib.networks.unet import Unet
+from lib.networks.unet import UNet
+
 
 class TauLDRBackward(backward_model.BackwardModel):
     """Tau LDR backward model, from https://github.com/andrew-cr/tauLDR"""
@@ -12,6 +13,7 @@ class TauLDRBackward(backward_model.BackwardModel):
     def __init__(self, config):
         self.config = config
         self.fwd_model = forward_model.build_fwd_model(config)
+        """
         self.net = Unet(
             dim=32,
             shape=config.unet_data_shape,
@@ -20,6 +22,22 @@ class TauLDRBackward(backward_model.BackwardModel):
             resnet_block_groups=config.unet_resnet_block_groups,
             learned_variance=config.unet_learned_variance,
             num_classes=config.vocab_size,
+        )
+        """
+
+        self.net = UNet(
+            shape = config.unet_data_shape,
+            num_classes=1,
+            ch=32,
+            out_ch=1,
+            ch_mult=(1, 2, 2),
+            num_res_blocks=2,
+            attn_resolutions=(16, ),
+            num_heads=1,
+            dropout=0,
+            model_output="logits",  # 'logits' or 'logistic_pars'
+            max_time=1000.0,
+            num_pixel_vals=256,
         )
 
     def _sample_categorical(self, rng, prob):
@@ -36,8 +54,11 @@ class TauLDRBackward(backward_model.BackwardModel):
 
     def get_logprob(self, params, xt, t, xt_target=None):
         del xt_target
+        # xt sampled from prior
         b = jnp.expand_dims(jnp.arange(xt.shape[0]), tuple(range(1, xt.ndim)))
         x0_logits = self.net.apply({"params": params}, x=xt, t=t)
+        #print("x0 logits", x0_logits.shape)
+
         p0t = jax.nn.softmax(x0_logits, axis=-1)
         qt0 = jnp.clip(self.fwd_model.transition(t), a_min=1e-8)
         qt0_denorm = jnp.transpose(qt0, (0, 2, 1))[b, xt]
@@ -48,9 +69,11 @@ class TauLDRBackward(backward_model.BackwardModel):
         ll_all = inner_sum * (1 - xt_onehot) + xt_onehot
         ll_all = jnp.where(ll_all < 1e-35, -1e9, jnp.log(ll_all))
         ll_xt = jnp.zeros(ll_all.shape[:-1])
+        #print("log prob")
         return ll_all, ll_xt
 
     def loss(self, params, rng, x0, xt, t):
+        # xt = noisy data
         eps = 1e-9
         config = self.config
         qt0 = self.fwd_model.transition(t)
@@ -58,7 +81,9 @@ class TauLDRBackward(backward_model.BackwardModel):
         rate_mat = self.fwd_model.rate_mat(t)
         bsize = xt.shape[0]
         # from B, C, H, W to B, C*H*W
+        # kann xt, x0 voher als B,
         xt = jnp.reshape(xt, [bsize, -1])  # from B, H, W, C to B, H*W*C
+
         d = xt.shape[1]
         s = config.vocab_size
         xt_onehot = jax.nn.one_hot(xt, s)  # B, H*W*C to B, H*W*C, S
@@ -77,10 +102,12 @@ class TauLDRBackward(backward_model.BackwardModel):
         xtilde = xt * (1 - dimcat_onehot) + dimcat_onehot * valcat
 
         if config.tauldr_onepass:
-            x_logits = self.net.apply({"params": params}, x=xtilde, t=t)         # input shape: B, H*W*C, output: B, H*W*C, S
+            x_logits = self.net.apply(
+                {"params": params}, x=xtilde, t=t
+            )  # input shape: B, H*W*C, output: B, H*W*C, S
             reg_x = xtilde
         else:
-            x_logits = self.net.apply({"params": params}, x=xt, t=t) 
+            x_logits = self.net.apply({"params": params}, x=xt, t=t)
             reg_x = xt
         p0t_reg = jax.nn.softmax(x_logits, axis=2)
 
@@ -108,7 +135,8 @@ class TauLDRBackward(backward_model.BackwardModel):
         outer_qt0_numer_sig = jnp.reshape(outer_qt0_numer_sig, [bsize, d, s])
 
         outer_qt0_denom_sig = (
-            qt0[jnp.repeat(jnp.arange(bsize), d), jnp.ravel(x0), jnp.ravel(xtilde)] + eps
+            qt0[jnp.repeat(jnp.arange(bsize), d), jnp.ravel(x0), jnp.ravel(xtilde)]
+            + eps
         )
 
         qt0_denom_sig = jnp.transpose(qt0, (0, 2, 1))[b, xtilde] + eps
@@ -159,7 +187,8 @@ class TauLDRBackward(backward_model.BackwardModel):
         ]
         qt0_sig_norm_numer = jnp.reshape(qt0_sig_norm_numer, [bsize, d, s])
         qt0_sig_norm_denom = (
-            qt0[jnp.repeat(jnp.arange(bsize), d), jnp.ravel(x0), jnp.ravel(xtilde)] + eps
+            qt0[jnp.repeat(jnp.arange(bsize), d), jnp.ravel(x0), jnp.ravel(xtilde)]
+            + eps
         )
         qt0_sig_norm_denom = jnp.reshape(qt0_sig_norm_denom, [bsize, d])
 

@@ -27,6 +27,7 @@ def get_dataloader(config, phase):
     def preprocess(x):
         """Preprocess img."""
         img = tf.cast(x["image"], tf.float32)
+        img = tf.image.resize(img, [32, 32])
         aug = None
         if config.data_aug:
             if config.rand_flip:

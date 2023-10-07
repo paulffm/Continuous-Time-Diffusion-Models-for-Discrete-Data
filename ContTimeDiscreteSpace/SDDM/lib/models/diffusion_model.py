@@ -45,13 +45,13 @@ class CategoricalDiffusionModel:
 
     def _build_loss_func(self, rng, x0):
         rng, loss_rng = jax.random.split(rng)
-        # if len(x0.shape) == 4:
-        #    B, H, W, C = x0.shape
-        #    x0 = jnp.reshape(x0, (B, H * W * C))
+        if len(x0.shape) == 4:
+            B, H, W, C = x0.shape
+            x0 = jnp.reshape(x0, [B, -1]) 
 
         # sample xt => noise data
-
-        xt, t = self.fwd_model.sample_xt(x0, self.config.time_duration, rng)
+        
+        xt, t = self.fwd_model.sample_xt(x0, self.config.time_duration, rng) # B, D oder B, H, W, C
         loss_fn = functools.partial(
             self.backwd_model.loss, rng=loss_rng, x0=x0, xt=xt, t=t
         )
@@ -60,16 +60,16 @@ class CategoricalDiffusionModel:
     def training_step(self, state, rng, batch):
         """Single gradient update step."""
         # batch: B, H, W, C or B, D
-        if len(batch.shape) == 4:
-            B, H, W, C = batch.shape
-            batch = jnp.reshape(batch, (B, H * W * C))
+        #if len(batch.shape) == 4:
+        #    B, H, W, C = batch.shape
+        #    batch = jnp.reshape(batch, (B, H * W * C))
 
         params, opt_state = state.params, state.opt_state
-        loss_fn = self.build_loss_func(rng, batch)
+        loss_fn = self._build_loss_func(rng, batch)
         (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
-
-        grads = jax.lax.pmean(grads, axis_name="shard")
-        aux = jax.lax.pmean(aux, axis_name="shard")
+        if jax.process_count() > 1:  # or check some other condition indicating parallel execution
+            grads = jax.lax.pmean(grads, axis_name="shard")
+            aux = jax.lax.pmean(aux, axis_name="shard")
 
         updates, opt_state = self.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
@@ -87,48 +87,49 @@ class CategoricalDiffusionModel:
         return new_state, aux
 
     # wrapper to give self as parameter
-    def _sample_step(self, params, rng, tau, xt, t):
+    def sample_step(self, params, rng, tau, xt, t):
         return sampling_utils.get_sampler(self.config)(self, params, rng, tau, xt, t)
 
-    def _corrector_step(self, params, rng, tau, xt, t):
+    def corrector_step(self, params, rng, tau, xt, t):
         return sampling_utils.lbjf_corrector_step(self, params, rng, tau, xt, t)
 
-    # wrapper to give self as parameter
-    def _sample_from_prior(self, rng, num_samples, conditioner=None):
+    def sample_from_prior(self, rng, num_samples, conditioner=None):
         del conditioner
-
         if isinstance(self.config.discrete_dim, int):
-            shape = (num_samples, self.config.discrete_dim)
+            shape = (num_samples, self.config.discrete_dim) # B, D
         else:
-            shape = tuple([num_samples] + list(self.config.discrete_dim))
-        return self.fwd_model.sample_from_prior(
-            rng, shape
-        )  #  shape: B, discrete_dim kann sein: B, H*W*C oder B, H, W, C: muss hier B, D sein
+            shape = tuple([num_samples] + list(self.config.discrete_dim)) # B, H, W, C
+        return self.fwd_model.sample_from_prior(rng, shape)
 
-    def sample_loop(self, state, rng, num_samples, conditioner=None):
+    def sample_loop(self, state, rng, num_samples=None, conditioner=None):
         """Sampling loop."""
-        print("Sampling")
         rng, prior_rng = jax.random.split(rng)
-
-        x_noisy = self._sample_from_prior(prior_rng, num_samples, conditioner)  # shape:
+        if num_samples is None:
+            num_samples = self.config.plot_samples // jax.device_count()
+        x_start = self.sample_from_prior(prior_rng, num_samples, conditioner) # B, D oder B, H, W, C
+        print("sampled from prior", x_start.shape)
         ones = jnp.ones((num_samples,), dtype=jnp.float32)
         tau = 1.0 / self.config.sampling_steps
 
         def sample_body_fn(step, xt):
             t = ones * tau * (self.config.sampling_steps - step)
             local_rng = jax.random.fold_in(rng, step)
-            new_y = self._sample_step(state.ema_params, local_rng, tau, xt, t)
+            #new_y = self.sample_step(state.ema_params, local_rng, tau, xt, t)
+            print("sample step")
+            new_y = self.sample_step(state.params, local_rng, tau, xt, t)
             return new_y
 
         def sample_with_correct_body_fn(step, xt):
             t = ones * tau * (self.config.sampling_steps - step)
             local_rng = jax.random.fold_in(rng, step)
-            xt = self._sample_step(state.ema_params, local_rng, tau, xt, t)
+            #xt = self.sample_step(state.ema_params, local_rng, tau, xt, t)
+            xt = self.sample_step(state.params, local_rng, tau, xt, t)
             scale = self.config.get("corrector_scale", 1.0)
 
             def corrector_body_fn(cstep, cxt):
                 c_rng = jax.random.fold_in(local_rng, cstep)
-                cxt = self._corrector_step(state.ema_params, c_rng, tau * scale, cxt, t)
+                #cxt = self.corrector_step(state.ema_params, c_rng, tau * scale, cxt, t)
+                cxt = self.corrector_step(state.params, c_rng, tau * scale, cxt, t)
                 return cxt
 
             new_y = jax.lax.fori_loop(
@@ -139,7 +140,7 @@ class CategoricalDiffusionModel:
         cf = self.config.get("corrector_frac", 0.0)
         corrector_steps = int(cf * self.config.sampling_steps)
         x0 = jax.lax.fori_loop(
-            0, self.config.sampling_steps - corrector_steps, sample_body_fn, x_noisy
+            0, self.config.sampling_steps - corrector_steps, sample_body_fn, x_start
         )
         if corrector_steps > 0:
             x0 = jax.lax.fori_loop(
@@ -149,5 +150,4 @@ class CategoricalDiffusionModel:
                 x0,
             )
         return x0
-
-    # wrapper to give self as parameter
+        # wrapper to give self as parameter
