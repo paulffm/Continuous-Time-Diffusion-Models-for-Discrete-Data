@@ -59,6 +59,11 @@ def log1mexp(x):
     x = -jnp.abs(x)
     return jnp.where(x > -0.693, jnp.log(-jnp.expm1(x)), jnp.log1p(-jnp.exp(x)))
 
+def log_min_exp(a, b, epsilon=1.e-6):
+  """Computes the log(exp(a) - exp(b)) (b<a) in a numerically stable fashion."""
+  y = a + jnp.log1p(-jnp.exp(b - a) + epsilon)
+  return y
+
 
 def binary_hamming_sim(x, y):
     x = jnp.expand_dims(x, axis=1)
