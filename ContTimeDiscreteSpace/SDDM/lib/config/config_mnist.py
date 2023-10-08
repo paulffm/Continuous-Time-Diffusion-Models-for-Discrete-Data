@@ -15,6 +15,12 @@ def get_config():
     config.t_func = "sqrt_cos"  # univariant
     config.diffuse_type = "uniform"
 
+    # gaussian forward rate
+    config.rate_sigma = 6.0
+    config.Q_sigma = 512.0
+    config.time_exponential = 100.0
+    config.time_base = 3.0
+
     # backward
     # config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
     config.discrete_dim = config.image_size * config.image_size * 1  #

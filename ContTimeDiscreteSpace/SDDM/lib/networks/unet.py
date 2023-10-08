@@ -22,7 +22,7 @@ from flax import linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as onp
-from lib.utils.utils import utils
+from lib.utils import utils
 
 nonlinearity = nn.swish
 Normalize = nn.normalization.GroupNorm

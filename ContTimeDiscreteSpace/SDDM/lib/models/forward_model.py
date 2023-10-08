@@ -164,11 +164,11 @@ class UniformVariantForward(UniformForward):
 
 class GaussianTargetRate:
     def __init__(self, cfg, device):
-        self.S = S = cfg.data.S
-        self.rate_sigma = cfg.model.rate_sigma
-        self.Q_sigma = cfg.model.Q_sigma
-        self.time_exponential = cfg.model.time_exponential
-        self.time_base = cfg.model.time_base
+        self.S = S = cfg.S
+        self.rate_sigma = cfg.rate_sigma
+        self.Q_sigma = cfg.Q_sigma
+        self.time_exponential = cfg.time_exponential
+        self.time_base = cfg.time_base
         self.device = device
 
         rate = np.zeros((S, S))
