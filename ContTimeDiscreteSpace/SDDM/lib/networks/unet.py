@@ -155,6 +155,48 @@ class AttnBlock(nn.Module):
 def normalize_data(x):
     return x / 127.5 - 1.0
 
+def get_logits_from_logistic_pars(loc, log_scale, num_pixel_vals, eps=1e-6):
+    """Computes logits for an underlying logistic distribution."""
+
+    loc = jnp.expand_dims(loc, axis=-1)
+    log_scale = jnp.expand_dims(log_scale, axis=-1)
+
+    # Shift log_scale such that if it's zero the probs have a scale
+    # that is not too wide and not too narrow either.
+    inv_scale = jnp.exp(- (log_scale - 2.))
+
+    bin_width = 2. / (num_pixel_vals - 1.)
+    bin_centers = jnp.linspace(start=-1., stop=1., num=num_pixel_vals,
+                               endpoint=True)
+
+    bin_centers = jnp.expand_dims(bin_centers,
+                                  axis=tuple(range(0, loc.ndim-1)))
+
+    bin_centers = bin_centers - loc
+    log_cdf_min = jax.nn.log_sigmoid(
+        inv_scale * (bin_centers - 0.5 * bin_width))
+    log_cdf_plus = jax.nn.log_sigmoid(
+        inv_scale * (bin_centers + 0.5 * bin_width))
+
+    logits = utils.log_min_exp(log_cdf_plus, log_cdf_min, eps)
+
+    # Normalization:
+    # # Option 1:
+    # # Assign cdf over range (-\inf, x + 0.5] to pmf for pixel with
+    # # value x = 0.
+    # logits = logits.at[..., 0].set(log_cdf_plus[..., 0])
+    # # Assign cdf over range (x - 0.5, \inf) to pmf for pixel with
+    # # value x = 255.
+    # log_one_minus_cdf_min = - jax.nn.softplus(
+    #     inv_scale * (bin_centers - 0.5 * bin_width))
+    # logits = logits.at[..., -1].set(log_one_minus_cdf_min[..., -1])
+    # # Option 2:
+    # # Alternatively normalize by reweighting all terms. This avoids
+    # # sharp peaks at 0 and 255.
+    # since we are outputting logits here, we don't need to do anything.
+    # they will be normalized by softmax anyway.
+
+    return logits
 
 class UNet(nn.Module):
     """A UNet architecture."""
@@ -280,6 +322,7 @@ class UNet(nn.Module):
 
             # ensure loc is between [-1, 1], just like normalized data.
             loc = jnp.tanh(loc + x)
+            get_logits_from_logistic_pars(self, loc, log_scale)
             return loc, log_scale
 
         elif self.model_output == "logits":
