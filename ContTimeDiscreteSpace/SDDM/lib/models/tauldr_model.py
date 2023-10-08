@@ -78,7 +78,7 @@ class TauLDRBackward(backward_model.BackwardModel):
         config = self.config
         qt0 = self.fwd_model.transition(t)
         qt0 = jnp.clip(qt0, a_min=1e-8)
-        rate_mat = self.fwd_model.rate_mat(t)
+        rate_mat = self.fwd_model.rate_mat(t) # B, S, S
         bsize = xt.shape[0]
         # from B, C, H, W to B, C*H*W
         # kann xt, x0 voher als B,
@@ -99,6 +99,9 @@ class TauLDRBackward(backward_model.BackwardModel):
         rng, valcat = self._sample_categorical(rng, rate_newval)
         dimcat_onehot = jax.nn.one_hot(dimcat, cat_dims, dtype=jnp.int32)
         valcat = jnp.expand_dims(valcat, axis=-1)
+        # x_tilde one transition in every batch
+        # x_t =     (1, 0, 3, 5, 1, 4)
+        # x_tilde = (5, 0, 3, 5, 1, 4)
         xtilde = xt * (1 - dimcat_onehot) + dimcat_onehot * valcat
 
         if config.tauldr_onepass:

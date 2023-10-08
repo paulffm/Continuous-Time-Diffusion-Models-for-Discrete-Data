@@ -47,8 +47,8 @@ class ForwardModel(object):
 
 
 def get_rate_matrix(rate):
-    rate = rate - np.diag(np.diag(rate))
-    rate = rate - np.diag(np.sum(rate, axis=1))
+    rate = rate - np.diag(np.diag(rate)) # diag = 0
+    rate = rate - np.diag(np.sum(rate, axis=1)) # diag = - sum of rows
     eigvals, eigvecs = np.linalg.eigh(rate)
     return (
         jnp.array(rate, dtype=jnp.float32),
@@ -59,9 +59,9 @@ def get_rate_matrix(rate):
 
 def usvt(eigvecs, inv_eigvecs, diag_embed):
     ns = eigvecs.shape[0]
-    u = jnp.reshape(eigvecs, (1, ns, ns))
+    u = jnp.reshape(eigvecs, (1, ns, ns)) # 1, S, S
     vt = jnp.reshape(inv_eigvecs, (1, ns, ns))
-    transitions = u @ diag_embed @ vt
+    transitions = u @ diag_embed @ vt # # 3d or 2d tensor such that dimension fit (lambda)
     transitions = transitions / jnp.sum(transitions, axis=-1, keepdims=True)
     return transitions
 
@@ -76,7 +76,7 @@ class UniformForward(ForwardModel):
         self.rate_matrix, self.eigvals, self.eigvecs = get_rate_matrix(rate)
 
     def rate_mat(self, t):
-        return jnp.tile(jnp.expand_dims(self.rate_matrix, axis=0), [t.shape[0], 1, 1])
+        return jnp.tile(jnp.expand_dims(self.rate_matrix, axis=0), [t.shape[0], 1, 1]) # dimension from 1, S, S to B, S, S
 
     def rate(self, y, t):
         del t

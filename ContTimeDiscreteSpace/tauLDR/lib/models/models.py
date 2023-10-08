@@ -285,8 +285,8 @@ class UniformRate:
         self.device = device
 
         rate = self.rate_const * np.ones((S, S))
-        rate = rate - np.diag(np.diag(rate))
-        rate = rate - np.diag(np.sum(rate, axis=1))
+        rate = rate - np.diag(np.diag(rate)) # diag = 0
+        rate = rate - np.diag(np.sum(rate, axis=1)) # diag = - sum of rows
         eigvals, eigvecs = np.linalg.eigh(rate)
 
         self.rate_matrix = torch.from_numpy(rate).float().to(self.device)
@@ -299,15 +299,15 @@ class UniformRate:
         B = t.shape[0]
         S = self.S
 
-        return torch.tile(self.rate_matrix.view(1, S, S), (B, 1, 1))
+        return torch.tile(self.rate_matrix.view(1, S, S), (B, 1, 1)) # dimension from 1, S, S to B, S, S
     # func usvt from forward model
     def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]
         S = self.S
         transitions = (
-            self.eigvecs.view(1, S, S)
-            @ torch.diag_embed(torch.exp(self.eigvals.view(1, S) * t.view(B, 1)))
-            @ self.eigvecs.T.view(1, S, S)
+            self.eigvecs.view(1, S, S) # Q 
+            @ torch.diag_embed(torch.exp(self.eigvals.view(1, S) * t.view(B, 1))) # 3d or 2d tensor such that dimension fit (lambda)
+            @ self.eigvecs.T.view(1, S, S) # Q^-1
         )
 
         if torch.min(transitions) < -1e-6:
@@ -317,7 +317,7 @@ class UniformRate:
 
         transitions[transitions < 1e-8] = 0.0
 
-        return transitions
+        return transitions # q_{t | 0}
     
     def transit_between(self, t1, t2):
         return self.transition(t2 - t1)

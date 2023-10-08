@@ -1,5 +1,6 @@
 import ml_collections
 
+
 def get_config():
     config = ml_collections.ConfigDict()
     # data
@@ -10,20 +11,20 @@ def get_config():
 
     # forward
     config.uniform_rate_const = 1.0
-    config.vocab_size = 256 
-    config.t_func = 'sqrt_cos' # univariant
-    config.diffuse_type = 'uniform'
+    config.vocab_size = 256
+    config.t_func = "sqrt_cos"  # univariant
+    config.diffuse_type = "uniform"
 
     # backward
-    #config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
-    config.discrete_dim = config.image_size * config.image_size * 1 #
+    # config.discrete_dim = config.image_size * config.image_size  * 1 # D = C*H*W
+    config.discrete_dim = config.image_size * config.image_size * 1  #
     # only for cond_backward_model
-    config.lambda_t = 'const'
-    config.logit_type = 'direct'
-    config.loss_type = 'elbo'
+    config.lambda_t = "const"
+    config.logit_type = "direct"
+    config.loss_type = "elbo"
 
     # model
-    config.model_type = 'tauldr' # hollow, 'cond_hollow, ebm
+    config.model_type = "tauldr"  # hollow, 'cond_hollow, ebm
     """
     # for hollow and 'cond_hollow: bidir_transformer or enum_transformer
     config.net_arch = 'bidir_transformer'
@@ -38,11 +39,8 @@ def get_config():
     config.unet_data_shape = (config.image_size, config.image_size, 1)
     config.unet_outdim = 1
     config.unet_dim_mults = (1, 2, 2)
-    config.unet_resnet_block_groups =  2 #8
+    config.unet_resnet_block_groups = 2  # 8
     config.unet_learned_variance = False
-
-
-
 
     # for ebm: if config.vocab_size > 2: automatic CatScoreMLP takes following inputs:
     """
@@ -53,29 +51,28 @@ def get_config():
     """
     config.time_scale_factor = 1000
 
-
     # optimizer
-    config.lr_schedule = 'constant'
+    config.lr_schedule = "constant"
     config.learning_rate = 1e-4
     config.warmup_frac = 0.00
-    config.optimizer = 'adamw'
+    config.optimizer = "adamw"
     config.weight_decay = 0
     config.grad_norm = 5
 
     # training
     config.total_train_steps = 1000
-    config.phase = 'train'
+    config.phase = "train"
     config.sample_freq = 500
     config.checkpoint_freq = 200
 
-    # saving 
-    config.save_dir = 'SavedModels/MNIST' # 
-    config.sample_plot_path = 'SavedModels/MNIST/PNGs' # 
+    # saving
+    config.save_dir = "SavedModels/MNIST"  #
+    config.sample_plot_path = "SavedModels/MNIST/PNGs"  #
     config.ckpt_keep = 5
-    #config.plot_num_batches = 10
-    #config.log_every_steps = 50
+    # config.plot_num_batches = 10
+    # config.log_every_steps = 50
 
-    config.dtype = 'float32'
+    config.dtype = "float32"
 
     # loss
     config.time_duration = 1.0
@@ -83,12 +80,12 @@ def get_config():
     # ema
     config.ema_decay = 0.9999
 
-    # sampler 
+    # sampler
     # config.plot_sample = 4096
-    config.sampling_steps = 1000 #1000 #400 # mabye 10000
+    config.sampling_steps = 1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
     config.corrector_steps = 10
-    config.sampler_type = 'tau_leaping'
+    config.sampler_type = "tau_leaping"
 
     # nets
     """
@@ -114,12 +111,9 @@ def get_config():
 
     config.eval_rounds = 10
 
- 
-
-    #VQ image diffusion
-    #config.vq_model_info
+    # VQ image diffusion
+    # config.vq_model_info
     # config.vq_model
-
 
     """
     # ebm
@@ -157,4 +151,3 @@ def get_config():
     """
 
     return config
-  
