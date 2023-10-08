@@ -85,7 +85,7 @@ def get_config():
 
     # sampler 
     # config.plot_sample = 4096
-    config.sampling_steps = 500 #1000 #400 # mabye 10000
+    config.sampling_steps = 1000 #1000 #400 # mabye 10000
     config.corrector_scale = 1.0
     config.corrector_steps = 10
     config.sampler_type = 'tau_leaping'
