@@ -22,7 +22,7 @@ from flax import linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as onp
-
+from lib.utils.utils import utils
 
 nonlinearity = nn.swish
 Normalize = nn.normalization.GroupNorm
@@ -96,7 +96,7 @@ class ResnetBlock(nn.Module):
             h += nn.Dense(features=out_ch, name="y_proj")(y)[:, None, None, :]
 
         h = nonlinearity(Normalize(name="norm2")(h))
-        #h = nn.Dropout(rate=self.dropout)(h, deterministic=deterministic)
+        # h = nn.Dropout(rate=self.dropout)(h, deterministic=deterministic)
         h = nn.Conv(
             features=out_ch,
             kernel_size=(3, 3),
@@ -155,6 +155,7 @@ class AttnBlock(nn.Module):
 def normalize_data(x):
     return x / 127.5 - 1.0
 
+
 def get_logits_from_logistic_pars(loc, log_scale, num_pixel_vals, eps=1e-6):
     """Computes logits for an underlying logistic distribution."""
 
@@ -163,20 +164,16 @@ def get_logits_from_logistic_pars(loc, log_scale, num_pixel_vals, eps=1e-6):
 
     # Shift log_scale such that if it's zero the probs have a scale
     # that is not too wide and not too narrow either.
-    inv_scale = jnp.exp(- (log_scale - 2.))
+    inv_scale = jnp.exp(-(log_scale - 2.0))
 
-    bin_width = 2. / (num_pixel_vals - 1.)
-    bin_centers = jnp.linspace(start=-1., stop=1., num=num_pixel_vals,
-                               endpoint=True)
+    bin_width = 2.0 / (num_pixel_vals - 1.0)
+    bin_centers = jnp.linspace(start=-1.0, stop=1.0, num=num_pixel_vals, endpoint=True)
 
-    bin_centers = jnp.expand_dims(bin_centers,
-                                  axis=tuple(range(0, loc.ndim-1)))
+    bin_centers = jnp.expand_dims(bin_centers, axis=tuple(range(0, loc.ndim - 1)))
 
     bin_centers = bin_centers - loc
-    log_cdf_min = jax.nn.log_sigmoid(
-        inv_scale * (bin_centers - 0.5 * bin_width))
-    log_cdf_plus = jax.nn.log_sigmoid(
-        inv_scale * (bin_centers + 0.5 * bin_width))
+    log_cdf_min = jax.nn.log_sigmoid(inv_scale * (bin_centers - 0.5 * bin_width))
+    log_cdf_plus = jax.nn.log_sigmoid(inv_scale * (bin_centers + 0.5 * bin_width))
 
     logits = utils.log_min_exp(log_cdf_plus, log_cdf_min, eps)
 
@@ -198,18 +195,20 @@ def get_logits_from_logistic_pars(loc, log_scale, num_pixel_vals, eps=1e-6):
 
     return logits
 
+
 class UNet(nn.Module):
     """A UNet architecture."""
+
     shape: Tuple
     num_classes: int = 1
     ch: int = 32
     out_ch: int = 1
-    ch_mult: Tuple[int]= (1, 2, 2)
+    ch_mult: Tuple[int] = (1, 2, 2)
     num_res_blocks: int = 2
-    attn_resolutions: Tuple[int]= (16, )
+    attn_resolutions: Tuple[int] = (16,)
     num_heads: int = 1
     dropout: float = 0.1
-    model_output: str='logits'  # 'logits' or 'logistic_pars'
+    model_output: str = "logits"  # 'logits' or 'logistic_pars'
     max_time: float = 1000.0
     num_pixel_vals: int = 256
 
@@ -218,7 +217,7 @@ class UNet(nn.Module):
         assert x.dtype == jnp.int32
         train = False
         y = None
-        #print("X shape input unet:", x.shape)
+        # print("X shape input unet:", x.shape)
         x = jnp.reshape(x, (x.shape[0], self.shape[0], self.shape[1], self.shape[2]))
 
         x_onehot = jax.nn.one_hot(x, num_classes=self.num_pixel_vals)
@@ -235,17 +234,17 @@ class UNet(nn.Module):
         # Class embedding
         assert self.num_classes >= 1
         if self.num_classes > 1:
-            #logging.info("conditional: num_classes=%d", self.num_classes)
+            # logging.info("conditional: num_classes=%d", self.num_classes)
             assert y.shape == (batch_size,) and y.dtype == jnp.int32
             y = jax.nn.one_hot(y, num_classes=self.num_classes, dtype=x.dtype)
             y = nn.Dense(features=ch * 4, name="class_emb")(y)
             assert y.shape == (batch_size, ch * 4)
         else:
-            #logging.info("unconditional: num_classes=%d", self.num_classes)
+            # logging.info("unconditional: num_classes=%d", self.num_classes)
             y = None
 
         # Timestep embedding
-        #logging.info("model max_time: %f", self.max_time)
+        # logging.info("model max_time: %f", self.max_time)
         temb = get_timestep_embedding(t, ch, max_time=self.max_time)
         temb = nn.Dense(features=ch * 4, name="dense0")(temb)
         temb = nn.Dense(features=ch * 4, name="dense1")(nonlinearity(temb))
@@ -322,8 +321,8 @@ class UNet(nn.Module):
 
             # ensure loc is between [-1, 1], just like normalized data.
             loc = jnp.tanh(loc + x)
-            get_logits_from_logistic_pars(self, loc, log_scale)
-            return loc, log_scale
+            logits = get_logits_from_logistic_pars(loc, log_scale, self.num_pixel_vals)
+            return logits
 
         elif self.model_output == "logits":
             h = nn.Conv(
@@ -336,9 +335,9 @@ class UNet(nn.Module):
             h = jnp.reshape(h, (*x.shape[:3], self.out_ch, self.num_pixel_vals))
 
             h = x_onehot + h
-            #print("h shape before reshape output", h.shape)
+            # print("h shape before reshape output", h.shape)
             h = jnp.reshape(h, (h.shape[0], -1, h.shape[-1]))
-            #print("h shape output", h.shape)
+            # print("h shape output", h.shape)
             return h
 
         else:

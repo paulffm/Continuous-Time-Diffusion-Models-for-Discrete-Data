@@ -10,7 +10,7 @@ def get_config():
     config.data_aug = False
 
     # forward
-    config.uniform_rate_const = 1.0
+    config.uniform_rate_const = 0.01 # 0.007
     config.vocab_size = 256
     config.t_func = "sqrt_cos"  # univariant
     config.diffuse_type = "uniform"
@@ -53,11 +53,11 @@ def get_config():
 
     # optimizer
     config.lr_schedule = "constant"
-    config.learning_rate = 1e-4
+    config.learning_rate = 0.8e-4 #1e-4
     config.warmup_frac = 0.00
-    config.optimizer = "adamw"
+    config.optimizer = 'adam' #"adamw"
     config.weight_decay = 0
-    config.grad_norm = 5
+    config.grad_norm = 1 #5
 
     # training
     config.total_train_steps = 1000
@@ -84,7 +84,7 @@ def get_config():
     # config.plot_sample = 4096
     config.sampling_steps = 1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
-    config.corrector_steps = 10
+    config.corrector_steps = 0 #10
     config.sampler_type = "tau_leaping"
 
     # nets

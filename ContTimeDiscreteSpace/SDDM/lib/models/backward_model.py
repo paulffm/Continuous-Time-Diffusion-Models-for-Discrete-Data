@@ -100,7 +100,7 @@ class CondFactorizedBackwardModel(BackwardModel):
         Returns:
           loss: bsize x dim(s)
         """
-        if self.config.loss_type == "rm":
+        if self.config.loss_type == "rm": # meaning?
             loss = -ll_xt
         elif self.config.loss_type == "mle":
             loss = -(
@@ -132,14 +132,14 @@ class CondFactorizedBackwardModel(BackwardModel):
     def loss(self, params, rng, x0, xt, t):
         """Calc loss."""
         del rng
-        logits = self.get_logits(params, xt, t)
+        logits = self.get_logits(params, xt, t) # 
         loss = 0.0
-        ce_coeff = self.config.get("ce_coeff", 0.0)
+        ce_coeff = self.config.get("ce_coeff", 0.0) # ce_coeff?
         if self.config.loss_type == "x0ce":
             ce_coeff = 1.0
         if ce_coeff > 0:
             x0_onehot = jax.nn.one_hot(x0, self.config.vocab_size)
-            ll = jax.nn.log_softmax(logits, axis=-1)
+            ll = jax.nn.log_softmax(logits, axis=-1) # why log_softmax
             loss = -jnp.sum(ll * x0_onehot, axis=-1) * ce_coeff
         if ce_coeff < 1:
             ll_all, log_xt = get_logprob_with_logits(self, xt, t, logits)

@@ -8,10 +8,10 @@ def common_config():
   return dict(
       data_folder='synthetic/checkerboard',
       seed=1023,
-      batch_size=128,
+      batch_size=128, # true
       total_train_steps=500000,
       learning_rate=1e-3,
-      time_scale_factor=1000,
+      time_scale_factor=1000, #true resolution
       time_duration=1.0,
       ema_decay=0.9999,
       lr_schedule='constant',
@@ -50,9 +50,9 @@ def get_config():
       num_heads=4,
       embed_dim=64,
       qkv_dim=64,
-      mlp_dim=256,
+      mlp_dim=256, # true
       dropout_rate=0.0,
-      learning_rate=1e-4,
+      learning_rate=1e-4, # true 
       attention_dropout_rate=0.0,
       dropout_deterministic=False,
   ))
