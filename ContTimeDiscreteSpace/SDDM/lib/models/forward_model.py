@@ -47,8 +47,8 @@ class ForwardModel(object):
 
 
 def get_rate_matrix(rate):
-    rate = rate - np.diag(np.diag(rate)) # diag = 0
-    rate = rate - np.diag(np.sum(rate, axis=1)) # diag = - sum of rows
+    rate = rate - np.diag(np.diag(rate))  # diag = 0
+    rate = rate - np.diag(np.sum(rate, axis=1))  # diag = - sum of rows
     eigvals, eigvecs = np.linalg.eigh(rate)
     return (
         jnp.array(rate, dtype=jnp.float32),
@@ -59,9 +59,11 @@ def get_rate_matrix(rate):
 
 def usvt(eigvecs, inv_eigvecs, diag_embed):
     ns = eigvecs.shape[0]
-    u = jnp.reshape(eigvecs, (1, ns, ns)) # 1, S, S
+    u = jnp.reshape(eigvecs, (1, ns, ns))  # 1, S, S
     vt = jnp.reshape(inv_eigvecs, (1, ns, ns))
-    transitions = u @ diag_embed @ vt # # 3d or 2d tensor such that dimension fit (lambda)
+    transitions = (
+        u @ diag_embed @ vt
+    )  # # 3d or 2d tensor such that dimension fit (lambda)
     transitions = transitions / jnp.sum(transitions, axis=-1, keepdims=True)
     return transitions
 
@@ -76,7 +78,9 @@ class UniformForward(ForwardModel):
         self.rate_matrix, self.eigvals, self.eigvecs = get_rate_matrix(rate)
 
     def rate_mat(self, t):
-        return jnp.tile(jnp.expand_dims(self.rate_matrix, axis=0), [t.shape[0], 1, 1]) # dimension from 1, S, S to B, S, S
+        return jnp.tile(
+            jnp.expand_dims(self.rate_matrix, axis=0), [t.shape[0], 1, 1]
+        )  # dimension from 1, S, S to B, S, S
 
     def rate(self, y, t):
         del t
@@ -156,6 +160,75 @@ class UniformVariantForward(UniformForward):
 
     def transition(self, t):
         return self.transit_between(0, t)
+
+
+class GaussianTargetRate:
+    def __init__(self, cfg, device):
+        self.S = S = cfg.data.S
+        self.rate_sigma = cfg.model.rate_sigma
+        self.Q_sigma = cfg.model.Q_sigma
+        self.time_exponential = cfg.model.time_exponential
+        self.time_base = cfg.model.time_base
+        self.device = device
+
+        rate = np.zeros((S, S))
+
+        vals = np.exp(-np.arange(0, S) ** 2 / (self.rate_sigma**2))
+        for i in range(S):
+            for j in range(S):
+                if i < S // 2:
+                    if j > i and j < S - i:
+                        rate[i, j] = vals[j - i - 1]
+                elif i > S // 2:
+                    if j < i and j > -i + S - 1:
+                        rate[i, j] = vals[i - j - 1]
+        for i in range(S):
+            for j in range(S):
+                if rate[j, i] > 0.0:
+                    rate[i, j] = rate[j, i] * np.exp(
+                        -((j + 1) ** 2 - (i + 1) ** 2 + S * (i + 1) - S * (j + 1))
+                        / (2 * self.Q_sigma**2)
+                    )
+        self.rate_matrix, self.eigvals, self.eigvecs = get_rate_matrix(rate)
+
+    def _integral_rate_scalar(self, t):
+        # so ähnlich für between s und t
+        return self.time_base * (self.time_exponential**t) - self.time_base
+
+    def _rate_scalar(self, t):
+        return (
+            self.time_base
+            * math.log(self.time_exponential)
+            * (self.time_exponential**t)
+        )
+
+    def rate(self, t):
+        B = t.shape[0]
+        S = self.S
+        rate_scalars = self._rate_scalar(t)
+
+        return jnp.reshape(self.rate_matrix, (1, S, S)) * jnp.reshape(
+            rate_scalars, (1, S, S)
+        )
+
+    def transition(self, t):
+        B = t.shape[0]
+        S = self.S
+
+        integral_rate_scalars = self._integral_rate_scalar(t)
+
+        adj_eigvals = jnp.reshape(integral_rate_scalars, (B, 1)) * jnp.reshape(
+            self.eigvals, (1, S)
+        )
+        diag_embed = jax.vmap(jnp.diag)(jnp.exp(adj_eigvals))
+
+        transitions = usvt(self.eigvecs, self.eigvecs.T, diag_embed)
+        # Some entries that are supposed to be very close to zero might be negative
+        # Clamping at 1e-8 because at float level accuracy anything lower than that
+        # is probably inaccurate and should be zero anyway
+        transitions[transitions < 1e-8] = 0.0
+
+        return transitions
 
 
 def build_fwd_model(config):
