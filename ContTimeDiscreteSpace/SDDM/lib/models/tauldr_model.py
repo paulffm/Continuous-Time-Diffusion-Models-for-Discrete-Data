@@ -26,18 +26,18 @@ class TauLDRBackward(backward_model.BackwardModel):
         """
 
         self.net = UNet(
-            shape = config.unet_data_shape,
-            num_classes=1,
-            ch=32,
-            out_ch=1,
-            ch_mult=(1, 2, 2),
-            num_res_blocks=2,
-            attn_resolutions=(16, ),
-            num_heads=1,
-            dropout=0,
-            model_output="logits",  # 'logits' or 'logistic_pars'
-            max_time=1000.0,
-            num_pixel_vals=256,
+            shape=config.unet_data_shape,
+            num_classes=config.unet_num_classes,
+            ch=config.unet_dim,
+            out_ch=config.unet_outdim,
+            ch_mult=config.unet_dim_mults,
+            num_res_blocks=config.unet_resnet_block_groups,
+            attn_resolutions=config.unet_attn_resolutions,
+            num_heads=config.unet_num_heads,
+            dropout=config.unet_dropout,
+            model_output=config.unet_model_output,  # 'logits' or 'logistic_pars'
+            max_time=config.unet_max_time,
+            num_pixel_vals=config.vocab_size,
         )
 
     def _sample_categorical(self, rng, prob):
@@ -57,7 +57,7 @@ class TauLDRBackward(backward_model.BackwardModel):
         # xt sampled from prior
         b = jnp.expand_dims(jnp.arange(xt.shape[0]), tuple(range(1, xt.ndim)))
         x0_logits = self.net.apply({"params": params}, x=xt, t=t)
-        #print("x0 logits", x0_logits.shape)
+        # print("x0 logits", x0_logits.shape)
 
         p0t = jax.nn.softmax(x0_logits, axis=-1)
         qt0 = jnp.clip(self.fwd_model.transition(t), a_min=1e-8)
@@ -69,7 +69,7 @@ class TauLDRBackward(backward_model.BackwardModel):
         ll_all = inner_sum * (1 - xt_onehot) + xt_onehot
         ll_all = jnp.where(ll_all < 1e-35, -1e9, jnp.log(ll_all))
         ll_xt = jnp.zeros(ll_all.shape[:-1])
-        #print("log prob")
+        # print("log prob")
         return ll_all, ll_xt
 
     def loss(self, params, rng, x0, xt, t):
@@ -78,7 +78,7 @@ class TauLDRBackward(backward_model.BackwardModel):
         config = self.config
         qt0 = self.fwd_model.transition(t)
         qt0 = jnp.clip(qt0, a_min=1e-8)
-        rate_mat = self.fwd_model.rate_mat(t) # B, S, S
+        rate_mat = self.fwd_model.rate_mat(t)  # B, S, S
         bsize = xt.shape[0]
         # from B, C, H, W to B, C*H*W
         # kann xt, x0 voher als B,

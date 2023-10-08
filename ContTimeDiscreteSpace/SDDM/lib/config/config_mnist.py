@@ -47,6 +47,12 @@ def get_config():
     config.unet_dim_mults = (1, 2, 2)
     config.unet_resnet_block_groups = 2  # 8
     config.unet_learned_variance = False
+    config.unet_model_output = 'logistic_pars'
+    config.unet_attn_resolutions = (16, )
+    config.unet_num_heads = 1
+    config.unet_max_time = 1000.0
+    config.unet_num_classes = 1
+    config.unet_dropout = 0
 
     # for ebm: if config.vocab_size > 2: automatic CatScoreMLP takes following inputs:
     """
@@ -90,7 +96,7 @@ def get_config():
     # config.plot_sample = 4096
     config.sampling_steps = 1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
-    config.corrector_steps = 0 #10
+    config.corrector_steps = 10 #10
     config.sampler_type = "tau_leaping"
 
     # nets
