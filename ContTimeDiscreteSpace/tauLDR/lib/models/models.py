@@ -424,7 +424,7 @@ class SequenceTransformer(nn.Module):
         use_one_hot_input = cfg.model.use_one_hot_input
         self.S = cfg.data.S
 
-        assert len(cfg.data.shape) == 1
+        # assert len(cfg.data.shape) == 1
         max_len = cfg.data.shape[0]
 
         tmp_net = networks.TransformerEncoder(
@@ -600,10 +600,10 @@ class EMA:
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
 @model_utils.register_model
-class UniformRateSequenceTransformerEMA2(EMA, SequenceTransformer, UniformRate):
+class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        SequenceTransformer.__init__(self, cfg, device, rank)
+        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()

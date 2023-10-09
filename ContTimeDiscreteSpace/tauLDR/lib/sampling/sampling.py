@@ -70,6 +70,7 @@ class TauLeaping():
                 qt0 = model.transition(t * torch.ones((N,), device=device)) # (N, S, S)
                 rate = model.rate(t * torch.ones((N,), device=device)) # (N, S, S)
                 # p_theta(x_0|x_t) ?
+
                 p0t = F.softmax(model(x, t * torch.ones((N,), device=device)), dim=2) # (N, D, S)
 
 
@@ -513,7 +514,7 @@ class ExactSampling():
         if initial_dist == 'gaussian':
             initial_dist_std  = model.Q_sigma
         else:
-            initial_dist_std = None
+            initial_dist_std = 'uniform'
         device = model.device
 
         with torch.no_grad():
@@ -548,7 +549,8 @@ class ExactSampling():
                 # axis kein parameter? fehler hier
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob, axis=-1)
                 new_y = cat_dist.sample()
-                return new_y
+        
+        return new_y
 
 # exakt noch zu exactsampling
 class LBJFSampling():

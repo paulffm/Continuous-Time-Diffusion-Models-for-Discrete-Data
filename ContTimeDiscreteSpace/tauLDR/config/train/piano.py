@@ -39,11 +39,11 @@ def get_config():
     model.name = 'UniformRateSequenceTransformerEMA'
 
     model.num_layers = 6
-    model.d_model = 128
-    model.num_heads = 8
+    model.d_model = 512
+    model.num_heads = 4
     model.dim_feedforward = 2048
     model.dropout = 0.1
-    model.temb_dim = 128
+    model.temb_dim = 512
     model.num_output_FFresiduals = 2
     model.time_scale_factor = 1000
     model.use_one_hot_input = True

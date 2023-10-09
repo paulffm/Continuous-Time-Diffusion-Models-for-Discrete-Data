@@ -70,6 +70,7 @@ class TauLDRBackward(backward_model.BackwardModel):
         ll_all = jnp.where(ll_all < 1e-35, -1e9, jnp.log(ll_all))
         ll_xt = jnp.zeros(ll_all.shape[:-1])
         # print("log prob")
+        # ll_xt = revers_rates
         return ll_all, ll_xt
 
     def loss(self, params, rng, x0, xt, t):

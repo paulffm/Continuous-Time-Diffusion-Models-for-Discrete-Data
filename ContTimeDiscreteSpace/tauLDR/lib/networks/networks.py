@@ -566,6 +566,7 @@ class TransformerEncoder(nn.Module):
             )
         )
         # dna hier eigene one hot?
+        print("input trans shape", x.shape)
         one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, L, S)
 
         if self.use_one_hot_input:
@@ -588,7 +589,7 @@ class TransformerEncoder(nn.Module):
         x = self.output_linear(x) # (B, L, S)
 
         x = x + one_hot_x #  addition to instill a residual bias into the network
-
+        print("output shape", x.shape)
         return x
 
     def normalize_input(self, x):

@@ -58,7 +58,8 @@ class Sampler:
             return new_y
 
         cf = self.config.get("corrector_frac", 0.0)
-        corrector_steps = int(cf * self.config.sampling_steps)
+        #corrector_steps = int(cf * self.config.sampling_steps)
+        corrector_steps = self.config.corrector_steps 
         x0 = jax.lax.fori_loop(
             0, self.config.sampling_steps - corrector_steps, sample_body_fn, x_start
         )
