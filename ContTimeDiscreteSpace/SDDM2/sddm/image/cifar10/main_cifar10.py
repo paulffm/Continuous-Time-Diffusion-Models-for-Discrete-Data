@@ -67,7 +67,7 @@ def main(argv: Sequence[str]) -> None:
             evaluator = cifar10_utils.Cifar10FidIs(
                 config, model.sample_loop, writer=writer
             )
-            fn_eval = evaluator.eval_model
+            fnx_eval = evaluator.eval_model
         elif config.phase == "plot":
             fn_eval = fn_plot
         else:

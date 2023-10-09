@@ -1,0 +1,38 @@
+Ablauf Training:
+
+t \in U(0, T)
+
+x0 -------------> xt -------------> x_{tilde}
+       q_{t|0}            R_t
+
+x_t und x_tilde unterscheiden sich in einer dimension
+(Wieso Übergang x_t zu x_tilde: Paper sagt: )
+
+Falls nur ein forward pass:
+logits = net(x_tilde, t)
+sonst:
+logits = net(x_t, t)
+
+(ich predicte dann x0 oder xt?)
+
+Cont. Framework Elbo:
+From Paper:
+when we minimize LCT, we are sampling (x, x ̃) from the forward process 
+and then maximizing the assigned model probability for the pairing in the reverse direction.
+
+The slight extra complexity comes from the fact we are considering the case when xk = xk+1 
+and the case when xk ̸= xk+1 separately. When xk = xk+1, this corresponds to the 
+first term in LCT which we can see is minimizing the reverse rate out of x which is 
+exactly maximizing the model probability for no transition to occur. When xk ̸= xk+1, 
+this corresponds to the second term in LCT, which is maximizing the reverse rate from x ̃ 
+to x which in turn maximizes the model probability for the x ̃ to x transition to occur.
+
+LCT ist der loss: LCT = sum_x'!=x R_t(x, x') +....
+=> damit loss klein ist muss sum_x'!=x R_t(x, x') klein sein 
+=> sum_x'!=x R_t(x, x') = Rate von x zu x' zu springen => also transition out of x
+LCT = ... - Z R(x_tilde, x)
+=> damit loss klein, Z R(x_tilde, x) muss groß sein
+=> R(x_tilde, x) = Rate von x_tilde zu x zu springen => also transition x_tilde zu x => maximizen
+
+1.Term: x = x_tilde Minimizing Rate out of x => maximizing prob no that no transiton occur
+2.Term: R(x_tilde, x) x != x_tilde => maximzing Rate x_tilde to x => max prob that transition occur 

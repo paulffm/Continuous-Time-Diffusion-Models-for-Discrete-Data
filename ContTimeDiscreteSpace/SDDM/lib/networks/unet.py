@@ -192,7 +192,6 @@ def get_logits_from_logistic_pars(loc, log_scale, num_pixel_vals, eps=1e-6):
     # # sharp peaks at 0 and 255.
     # since we are outputting logits here, we don't need to do anything.
     # they will be normalized by softmax anyway.
-
     return logits
 
 
@@ -215,7 +214,7 @@ class UNet(nn.Module):
     @nn.compact
     def __call__(self, x, t):
         assert x.dtype == jnp.int32
-        train = False
+        train = True
         y = None
         # print("X shape input unet:", x.shape)
         x = jnp.reshape(x, (x.shape[0], self.shape[0], self.shape[1], self.shape[2]))
@@ -322,6 +321,7 @@ class UNet(nn.Module):
             # ensure loc is between [-1, 1], just like normalized data.
             loc = jnp.tanh(loc + x)
             logits = get_logits_from_logistic_pars(loc, log_scale, self.num_pixel_vals)
+            logits = jnp.reshape(logits, (logits.shape[0], -1, logits.shape[-1]))
             return logits
 
         elif self.model_output == "logits":

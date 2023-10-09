@@ -132,7 +132,7 @@ class GenericAux:
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
             reg_x = x_tilde
         else:
-            # x_t = x from Paper 
+            # x_t = x from Paper
             x_logits = model(x_t, ts)  # (B, D, S)
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
             reg_x = x_t
@@ -198,22 +198,6 @@ class GenericAux:
         else:
             p0t_sig = F.softmax(model(x_tilde, ts), dim=2)  # (B, D, S)
 
-        # When we have B,D,S,S first S is x_0, second is x
-        outer_qt0_numer_sig = qt0[
-            torch.arange(B, device=device).repeat_interleave(D * S),
-            minibatch.long().flatten().repeat_interleave(S),
-            torch.arange(S, device=device).repeat(B * D),
-        ].view(B, D, S)
-
-        outer_qt0_denom_sig = (
-            qt0[
-                torch.arange(B, device=device).repeat_interleave(D),
-                minibatch.long().flatten(),
-                x_tilde.long().flatten(),
-            ]
-            + self.ratio_eps
-        )  # (B, D)
-
         # q_{t|0} (x_0|x ̃)
         qt0_numer_sig = qt0.view(B, S, S)  # first S is x_0, second S is x
 
@@ -245,6 +229,22 @@ class GenericAux:
             x_tilde.long().flatten().repeat_interleave(S),
         ].view(B, D, S)
 
+        # When we have B,D,S,S first S is x_0, second is x
+        outer_qt0_numer_sig = qt0[
+            torch.arange(B, device=device).repeat_interleave(D * S),
+            minibatch.long().flatten().repeat_interleave(S),
+            torch.arange(S, device=device).repeat(B * D),
+        ].view(B, D, S)
+
+        outer_qt0_denom_sig = (
+            qt0[
+                torch.arange(B, device=device).repeat_interleave(D),
+                minibatch.long().flatten(),
+                x_tilde.long().flatten(),
+            ]
+            + self.ratio_eps
+        )  # (B, D)
+        
         outer_sum_sig = torch.sum(
             x_tilde_mask
             * outer_rate_sig
@@ -615,7 +615,7 @@ class HollowAux:
         # rate = model.rate(ts)  # (B, S, S)
 
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
-        qt0 = qt0[b, minibatch]
+        qt0 = qt0[b, minibatch].view(-1, S)
         # log loss
         logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(logits=logits).sample()

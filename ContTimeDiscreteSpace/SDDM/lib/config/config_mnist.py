@@ -13,7 +13,7 @@ def get_config():
     config.uniform_rate_const = 0.01 # 0.007
     config.vocab_size = 256
     config.t_func = "sqrt_cos"  # univariant
-    config.diffuse_type = "uniform"
+    config.diffuse_type = "uniform_variant" # uniform_variant
 
     # gaussian forward rate
     config.rate_sigma = 6.0
@@ -45,9 +45,9 @@ def get_config():
     config.unet_data_shape = (config.image_size, config.image_size, 1)
     config.unet_outdim = 1
     config.unet_dim_mults = (1, 2, 2)
-    config.unet_resnet_block_groups = 2  # 8
+    config.unet_resnet_block_groups = 3  # 8
     config.unet_learned_variance = False
-    config.unet_model_output = 'logistic_pars'
+    config.unet_model_output = 'logits'
     config.unet_attn_resolutions = (16, )
     config.unet_num_heads = 1
     config.unet_max_time = 1000.0
@@ -65,17 +65,17 @@ def get_config():
 
     # optimizer
     config.lr_schedule = "constant"
-    config.learning_rate = 0.8e-4 #1e-4
+    config.learning_rate = 1e-4 #1e-4
     config.warmup_frac = 0.00
     config.optimizer = 'adam' #"adamw"
     config.weight_decay = 0
-    config.grad_norm = 1 #5
+    config.grad_norm = 5 #5
 
     # training
-    config.total_train_steps = 1000
+    config.total_train_steps = 2000 # 1000
     config.phase = "train"
-    config.sample_freq = 500
-    config.checkpoint_freq = 200
+    config.sample_freq = 2000 #00
+    config.checkpoint_freq = 500 #00
 
     # saving
     config.save_dir = "SavedModels/MNIST"  #
@@ -94,9 +94,9 @@ def get_config():
 
     # sampler
     # config.plot_sample = 4096
-    config.sampling_steps = 1000  # 1000 #400 # mabye 10000
+    config.sampling_steps = 1000 #1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
-    config.corrector_steps = 10 #10
+    config.corrector_steps = 10 #0 #10
     config.sampler_type = "tau_leaping"
 
     # nets
