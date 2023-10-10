@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from lib.models import backward_model
 from lib.networks import networks
+from lib.networks.unet import UNet
 
 
 def bidir_transformer(config, x, temb, readout_dim=None):
@@ -18,8 +19,8 @@ def bidir_transformer(config, x, temb, readout_dim=None):
     x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]])  # B, D, E
     if config.net_arch == "bidir_transformer":
         module = networks.UniDirectionalTransformer
-    elif config.net_arch == "bidir_combiner_transformer":
-        module = networks.CombinerAxial
+    # elif config.net_arch == "bidir_combiner_transformer":
+    #    module = networks.CombinerAxial
     else:
         raise ValueError("Unknown net_arch: %s" % config.net_arch)
     l2r_embed = module(config, "l2r")(x, temb)  # x muss hier 3 dim haben: B, D, S
@@ -143,7 +144,21 @@ class HollowModel(backward_model.CondFactorizedBackwardModel):
     def __init__(self, config):
         super(HollowModel, self).__init__(config)
         if "bidir" in config.net_arch and "transformer" in config.net_arch:
-            self.net = BidirectionalTransformer(config)
+            # self.net = BidirectionalTransformer(config)
+            self.net = UNet(
+                shape=config.unet_data_shape,
+                num_classes=config.unet_num_classes,
+                ch=config.unet_dim,
+                out_ch=config.unet_outdim,
+                ch_mult=config.unet_dim_mults,
+                num_res_blocks=config.unet_resnet_block_groups,
+                attn_resolutions=config.unet_attn_resolutions,
+                num_heads=config.unet_num_heads,
+                dropout=config.unet_dropout,
+                model_output=config.unet_model_output,  # 'logits' or 'logistic_pars'
+                max_time=config.unet_max_time,
+                num_pixel_vals=config.vocab_size,
+            )
         elif config.net_arch == "enum_transformer":
             self.net = EnumerativeTransformer(config)
         else:

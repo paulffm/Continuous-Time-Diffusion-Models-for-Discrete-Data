@@ -9,7 +9,7 @@ from lib.sampling import sampling_utils
 from lib.models import ebm, hollow_model, tauldr_model
 from lib.optimizer import optimizer as optim
 from lib.models import forward_model
-
+import time 
 # Aufbau:
 # forward Model => Q matrices => x_0 to noisy image x_t
 # backward model => Loss calculation
@@ -66,6 +66,7 @@ class CategoricalDiffusionModel:
 
         params, opt_state = state.params, state.opt_state
         loss_fn = self._build_loss_func(rng, batch)
+        start = time.time()
         (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
         if jax.process_count() > 1:  # or check some other condition indicating parallel execution
             grads = jax.lax.pmean(grads, axis_name="shard")
@@ -73,6 +74,8 @@ class CategoricalDiffusionModel:
 
         updates, opt_state = self.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
+        end = time.time()
+        print("backward time", end - start)
         ema_params = utils.apply_ema(
             decay=jnp.where(state.step == 0, 0.0, self.config.ema_decay),
             avg=state.ema_params,

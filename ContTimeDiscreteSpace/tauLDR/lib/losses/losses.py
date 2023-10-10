@@ -7,7 +7,7 @@ import torch.autograd.profiler as profiler
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import lib.utils.utils as utils
-
+import time
 
 @losses_utils.register_loss
 class GenericAux:
@@ -565,10 +565,11 @@ class ConditionalAux:
 
 def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     """Get logprob with logits."""
+    start = time.time()
     #checked
     if xt_target is None:
         xt_target = xt
-    xt_onehot = F.one_hot(xt_target, cfg.data.S)
+    xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
     if cfg.logit_type == "direct":
         log_prob = F.log_softmax(logits, dim=-1)
     else:
@@ -589,6 +590,8 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
         else:
             raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+    end = time.time()
+    print("get_logprob_logits time", end - start)
     return log_prob, log_xt
 
 
@@ -602,6 +605,7 @@ class HollowAux:
         self.min_time = cfg.loss.min_time
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):
+        start = time.time()
         B = xt.shape[0]
         if self.cfg.loss.loss_type == "rm":
             loss = -ll_xt
@@ -613,17 +617,17 @@ class HollowAux:
                 - utils.log1mexp(ll_xt)
             )
         elif self.cfg.loss.loss_type == "elbo":
-            xt_onehot = F.one_hot(xt, num_classes=self.cfg.data.S)
+            xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
             b = utils.expand_dims(torch.arange(xt.shape[0]), tuple(range(1, xt.dim())))
             qt0_x2y = model.transition(t)
             qt0_y2x = qt0_x2y.permute(0, 2, 1)
-            qt0_y2x = qt0_y2x[b, xt]
+            qt0_y2x = qt0_y2x[b, xt.long()]
             ll_xt = ll_xt.unsqueeze(-1)
 
             backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
             first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
 
-            qt0_x2y = qt0_x2y[b, xt]
+            qt0_x2y = qt0_x2y[b, xt.long()]
             fwd = (ll_xt - ll_all) * qt0_x2y
             second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
             loss = first_term - second_term
@@ -633,15 +637,18 @@ class HollowAux:
         weight = torch.ones((B,), dtype=torch.float32)
         weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
         loss = loss * weight
+        end = time.time()
+        print("_comp_loss ", end - start)
         return loss
 
     def calc_loss(self, minibatch, state, writer=None):
+        start_calc = time.time()
         model = state["model"]
         S = self.cfg.data.S
         # if 4 Dim => like images: True
         if len(minibatch.shape) == 4:
             B, C, H, W = minibatch.shape
-            minibatch = minibatch.view(B, C * H * W).to(torch.long)  
+            minibatch = minibatch.view(B, C * H * W) 
         # hollow xt, t, l_all, l_xt geht rein
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
@@ -651,7 +658,7 @@ class HollowAux:
         # rate = model.rate(ts)  # (B, S, S)
 
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
-        qt0 = qt0[b, minibatch]
+        qt0 = qt0[b, minibatch.long()]
         # log loss
         logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(logits=logits).sample()
@@ -659,13 +666,12 @@ class HollowAux:
         logits = model(xt, ts)  # B, D, S
         # check
         # ce_coeff < 0
-        # ce_coeff neu bestimmen
         if self.cfg.ce_coeff > 0:
-            x0_onehot = F.one_hot(minibatch, self.cfg.data.S)
+            x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
             ll = F.log_softmax(logits, dim=-1)
             loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff
         else:
-            ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits) 
+            ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits) # 
             ll_xt = ll_xt * (1 - self.cfg.ce_coeff)
             ll_all = ll_all * (1 - self.cfg.ce_coeff)
             loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
@@ -675,5 +681,7 @@ class HollowAux:
         print(type(loss), loss)
         print(type(B), B)
             # loss type new param
+        end_calc = time.time()
+        print("calc loss time", end_calc - start_calc)
         return torch.sum(loss) / B
         # calc loss from CondFactorizedBackwardModel

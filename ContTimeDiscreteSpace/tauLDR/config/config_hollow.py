@@ -45,8 +45,11 @@ def get_config():
     data.image_size = 32
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = 'UniformRateSequenceTransformerEMA'
-    
+    model.name = 'UniformRateImageX0PredEMA'
+
+    model.rate_const = 0.03
+    config.logit_type = "reverse_logscale"
+    """
     model.num_layers = 6
     model.d_model = 256
     model.num_heads = 8
@@ -86,7 +89,9 @@ def get_config():
     model.time_embed_dim = model.ch
     model.time_scale_factor = 1000
     model.fix_logistic = False
-    """
+    model.ema_decay = 0.9999 #0.9999
+    model.model_output = "logistic_pars"
+    
     """
     model.rate_sigma = 6.0
     model.Q_sigma = 512.0

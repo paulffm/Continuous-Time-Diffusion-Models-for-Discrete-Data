@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import lib.utils.utils as utils
-
+import time
 
 def binary_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
     if xt_target is None:
@@ -38,6 +38,7 @@ def lbjf_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
 
 def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     """Categorical simulation with tau leaping."""
+    start = time.time()
     if xt_target is None:
         xt_target = xt
     ll_all, ll_xt = cls.backwd_model.get_logprob(params, xt, t, xt_target)
@@ -60,6 +61,8 @@ def tau_leaping_step(cls, params, rng, tau, xt, t, xt_target=None):
     avg_offset = jnp.sum(flips * diff, axis=-1)
     new_y = xt + avg_offset
     new_y = jnp.clip(new_y, a_min=0, a_max=cls.config.vocab_size - 1)
+    end = time.time()
+    print("sample time", end - start)
     return new_y
 
 

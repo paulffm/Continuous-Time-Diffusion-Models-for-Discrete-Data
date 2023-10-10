@@ -20,8 +20,8 @@ def bidir_transformer(config, x, temb, readout_dim=None):
   x = jnp.reshape(x, [x.shape[0], -1, x.shape[-1]])
   if config.net_arch == 'bidir_transformer':
     module = nets.UniDirectionalTransformer # 3 dim input B, D, S
-  elif config.net_arch == 'bidir_combiner_transformer':
-    module = nets.CombinerAxial
+  #elif config.net_arch == 'bidir_combiner_transformer':
+  #  module = nets.CombinerAxial
   else:
     raise ValueError('Unknown net_arch: %s' % config.net_arch)
   l2r_embed = module(config, 'l2r')(x, temb) # x muss hier 3 dim haben: B, D, S

@@ -7,6 +7,7 @@ import math
 from tqdm import tqdm
 import lib.sampling.sampling_utils as sampling_utils
 import lib.utils.utils as utils
+import time
 
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == 'uniform':
@@ -502,6 +503,8 @@ class ExactSampling():
     def __init__(self, cfg):
         self.cfg = cfg
     def sample(self, model, N, num_intermediates):
+        start_sample = time.time()
+
         t = 1.0
         C,H,W = self.cfg.data.shape
         D = C*H*W
@@ -540,17 +543,19 @@ class ExactSampling():
                 q_t_teps = q_t_teps.permute(0, 2, 1)
 
                 b = utils.expand_dims(torch.arange(xt.shape[0]), axis=list(range(1, xt.ndim)))
-                q_t_teps = utils.expand_dims(q_t_teps[b, xt], axis=-2)
+                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
                 # axis kein parameter? fehler hier
-                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob, axis=-1)
+                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 new_y = cat_dist.sample()
-        
-        return new_y
+                print("new_sample", new_y, new_y.shape)
+            end_sample = time.time()
+            print("sample time", end_sample -  start_sample)
+            return new_y
 
 # exakt noch zu exactsampling
 class LBJFSampling():
@@ -601,7 +606,6 @@ class LBJFSampling():
 
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-                # axis kein parameter? fehler hier
-                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob, axis=-2)
+                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 new_y = cat_dist.sample()
-                return new_y
+            return new_y

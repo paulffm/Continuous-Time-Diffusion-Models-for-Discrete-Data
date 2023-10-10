@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import lib.utils.utils as utils
 from lib.models import forward_model
+import time
 
 # only in conditional twice and in binary score model once
 
@@ -130,6 +131,7 @@ class CondFactorizedBackwardModel(BackwardModel):
         return loss
 
     def loss(self, params, rng, x0, xt, t):
+        start = time.time()
         """Calc loss."""
         del rng
         logits = self.get_logits(params, xt, t) # 
@@ -146,4 +148,7 @@ class CondFactorizedBackwardModel(BackwardModel):
             loss = loss + self.calc_loss(xt, t, ll_all, log_xt) * (1 - ce_coeff)
         loss = jnp.sum(loss) / xt.shape[0]
         aux = {"loss": loss}
+        end = time.time()
+        print("loss ", type(loss), loss)
+        print("loss time", end - start)
         return loss, aux

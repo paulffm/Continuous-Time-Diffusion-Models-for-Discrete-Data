@@ -43,7 +43,7 @@ class ImageX0PredBasePaul(nn.Module):
                 attn_resolutions=[16],
                 num_heads=1,
                 dropout=cfg.model.dropout,
-                model_output= 'logits', #"logistic_pars",  # 'logits' or 'logistic_pars'
+                model_output = cfg.model.model_output,  # 'logits' or 'logistic_pars'
                 num_classes=self.S,
                 x_min_max=data_min_max,
                 img_size=self.data_shape[2],

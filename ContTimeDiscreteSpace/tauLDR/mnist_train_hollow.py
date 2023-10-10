@@ -75,6 +75,11 @@ def main():
     
         
     print(state["n_iter"])
+    print("loss_name", cfg.loss.name)
+    print("loss type", cfg.loss.loss_type)
+    print("ce_coeff", cfg.ce_coeff)
+    print("logit_type", cfg.logit_type)
+    print("sampler", cfg.sampler.name)
 
     n_samples = 16
 
