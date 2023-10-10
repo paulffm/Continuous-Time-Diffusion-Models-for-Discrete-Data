@@ -1,0 +1,18 @@
+ce > 0
+loss directly: whole training step < 10 second
+
+ce <0
+get_logprob_with_logits() -> direct, reverse_prob, reverse_logscale
+_comp_loss() -> rm, mle, elbo (schnell < 1sek)
+
+direct + rm => + loss < 5sek (loss = 10 000)
+direct + mle =>  + loss < 10sek (loss = 2 567 661)
+direct + elbo => - loss < 10sek (loss = -)
+
+reverse_prob + rm => + loss < 10 sek (loss = 12 404.3740)
+reverse_prob + mle =>  + loss < 10 sek (loss = 3 180 100 )
+reverse_prob + elbo => + loss < 10sek   (loss = 880)
+
+reverse_logscale + rm =>
+reverse_logscale + mle =>  + loss < 10sek
+reverse_logscale + elbo => - loss < 10sek 

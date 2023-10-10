@@ -18,8 +18,11 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    loss.loss_type = "elbo"
-    config.ce_coeff = -0.5
+    config.logit_type = "reverse_prob" 
+    loss.loss_type = "elbo" # rm, mle, elbo
+    config.ce_coeff = -0.5 # >0 whole train_step with backward < 10 sek
+    config.logit_type = "reverse_prob" # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.01
@@ -27,7 +30,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
-    training.n_iters = 2 #2000 #2000000
+    training.n_iters = 10 #2000 #2000000
     training.clip_grad = True
     training.warmup = 50 # 5000
     training.resume = True 
@@ -38,7 +41,7 @@ def get_config():
     data.train = True
     data.download = True
     data.S = 256
-    data.batch_size = 64 # use 128 if you have enough memory or use distributed
+    data.batch_size = 32 # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.shape = [1,32,32]
     data.random_flips = True
@@ -48,7 +51,7 @@ def get_config():
     model.name = 'UniformRateImageX0PredEMA'
 
     model.rate_const = 0.03
-    config.logit_type = "reverse_logscale"
+    
     """
     model.num_layers = 6
     model.d_model = 256
@@ -107,13 +110,13 @@ def get_config():
 
     saving.enable_preemption_recovery = False
     saving.preemption_start_day_YYYYhyphenMMhyphenDD = None
-    saving.checkpoint_freq = 2
+    saving.checkpoint_freq = 1
     saving.num_checkpoints_to_keep = 2
     saving.checkpoint_archive_freq = 3000 #200000
     saving.log_low_freq = 10000
     saving.low_freq_loggers = ['denoisingImages']
     saving.prepare_to_resume_after_timeout = False
-    saving.sample_plot_path = 'SavedModels/MNIST/PNGs'
+    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs'
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
@@ -126,6 +129,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.1
 
-    sampler.sample_freq = 2
+    sampler.sample_freq = 10
 
     return config

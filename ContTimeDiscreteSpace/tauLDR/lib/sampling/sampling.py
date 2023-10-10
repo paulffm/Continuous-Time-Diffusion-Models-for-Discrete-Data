@@ -125,7 +125,7 @@ class TauLeaping():
 
             p_0gt = F.softmax(model(x, min_t * torch.ones((N,), device=device)), dim=2) # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            return x_0max.detach().cpu().numpy().astype(int), x_hist, x0_hist
+            return x_0max.detach().cpu().numpy().astype(int) #, x_hist, x0_hist
 
 @sampling_utils.register_sampler
 class PCTauLeaping():
@@ -524,7 +524,7 @@ class ExactSampling():
             xt = get_initial_samples(N, D, device, S, initial_dist,initial_dist_std)
             #tau = 1 / num_steps
             ts = np.concatenate((np.linspace(1.0, min_t, num_steps), np.array([0])))
-            save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
+            #save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx+1]
@@ -536,26 +536,34 @@ class ExactSampling():
                 # stellt sich frage:
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 log_p0t = F.log_softmax(model(xt, t * torch.ones((N,), device=device)), dim=2) # (N, D, S)
+                start_opt = time.time()
                 t_eps = t - h #tau
+                
                 q_teps_0 = model.transition(t_eps * torch.ones((N,), device=device)) # (N, S, S)
                 q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
+
                 q_t_teps = model.transit_between(t_eps * torch.ones((N,), device=device), t * torch.ones((N,), device=device))  # (N, S, S
                 q_t_teps = q_t_teps.permute(0, 2, 1)
 
                 b = utils.expand_dims(torch.arange(xt.shape[0]), axis=list(range(1, xt.ndim)))
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
+
+                #
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                # 
 
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
                 # axis kein parameter? fehler hier
+                end_opt = time.time()
+                print("sampling operations time", end_opt - start_opt)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 new_y = cat_dist.sample()
                 print("new_sample", new_y, new_y.shape)
             end_sample = time.time()
             print("sample time", end_sample -  start_sample)
-            return new_y
+            return new_y.detach().cpu().numpy().astype(int)
 
 # exakt noch zu exactsampling
 class LBJFSampling():

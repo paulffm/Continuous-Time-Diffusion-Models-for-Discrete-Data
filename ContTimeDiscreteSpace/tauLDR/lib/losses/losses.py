@@ -313,11 +313,11 @@ class GenericAux:
             writer.add_scalar("reg", reg_mean.detach(), state["n_iter"])
 
         neg_elbo = sig_mean + reg_mean
-
+        print("neg_elbo", type(neg_elbo), neg_elbo)
         perm_x_logits = torch.permute(x_logits, (0, 2, 1))
 
         nll = self.cross_ent(perm_x_logits, minibatch.long())
-
+        print("nll", type(nll), nll)
         return neg_elbo + self.nll_weight * nll
 
 
@@ -573,7 +573,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     if cfg.logit_type == "direct":
         log_prob = F.log_softmax(logits, dim=-1)
     else:
-        qt0 = model.transition(t)
+        qt0 = model.transition(t) 
         if cfg.logit_type == "reverse_prob":
             p0t = F.softmax(logits, dim=-1)
             qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
@@ -604,11 +604,11 @@ class HollowAux:
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
 
-    def _comp_loss(self, model, xt, t, ll_all, ll_xt):
+    def _comp_loss(self, model, xt, t, ll_all, ll_xt): # <1sec
         start = time.time()
         B = xt.shape[0]
         if self.cfg.loss.loss_type == "rm":
-            loss = -ll_xt
+            loss = -ll_xt # direct + rm => - loss
         elif self.cfg.loss.loss_type == "mle":
             # check
             loss = -(
@@ -616,7 +616,7 @@ class HollowAux:
                 + torch.sum(utils.log1mexp(ll_all), dim=-1)
                 - utils.log1mexp(ll_xt)
             )
-        elif self.cfg.loss.loss_type == "elbo":
+        elif self.cfg.loss.loss_type == "elbo": #direct + elbo => - loss
             xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
             b = utils.expand_dims(torch.arange(xt.shape[0]), tuple(range(1, xt.dim())))
             qt0_x2y = model.transition(t)
@@ -661,12 +661,12 @@ class HollowAux:
         qt0 = qt0[b, minibatch.long()]
         # log loss
         logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.distributions.categorical.Categorical(logits=logits).sample()
+        xt = torch.distributions.categorical.Categorical(logits=logits).sample() # bis hierhin <1 sek
         # get logits from CondFactorizedBackwardModel
-        logits = model(xt, ts)  # B, D, S
+        logits = model(xt, ts)  # B, D, S <10 sek
         # check
         # ce_coeff < 0
-        if self.cfg.ce_coeff > 0:
+        if self.cfg.ce_coeff > 0: # whole train step <10 sek
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
             ll = F.log_softmax(logits, dim=-1)
             loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff

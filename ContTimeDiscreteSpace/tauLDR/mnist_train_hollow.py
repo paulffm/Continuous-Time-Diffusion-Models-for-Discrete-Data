@@ -22,6 +22,7 @@ import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
+import time
 from lib.datasets.datasets import (
     create_train_discrete_mnist_dataloader,
     create_train_discrete_cifar10_dataloader,
@@ -90,7 +91,10 @@ def main():
         # for minibatch, _ in tqdm(dataloader):
         for minibatch, _ in tqdm(dataloader):
             # print("minibatch", minibatch, minibatch.shape)
+            start_train = time.time()
             l = training_step.step(state, minibatch, loss)
+            end_train = time.time()
+            print("whole train_step", end_train - start_train)
             print("Loss:", l.item())
             training_loss.append(l.item())
             #print('ter', state["n_iter"])
@@ -108,7 +112,7 @@ def main():
                 or state["n_iter"] == cfg.training.n_iters - 1
             ):
                 state["model"].eval()
-                samples, x_hist, x0_hist = sampler.sample(state["model"], n_samples, 10)
+                samples = sampler.sample(state["model"], n_samples, 10)
                 samples = samples.reshape(n_samples, 1, 32, 32)
                 #x_hist = x_hist.reshape(10, n_samples, 1, 32, 32)
                 #x0_hist = x0_hist.reshape(10, n_samples, 1, 32, 32)
@@ -119,9 +123,8 @@ def main():
                     plt.subplot(4, 4, 1 + i)
                     plt.axis("off")
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
-                n_iter = state["n_iter"]
                 
-                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"samples_epoch_hollow_{state['n_iter']}.png")
+                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"samples_epoch_{state['n_iter']}.png")
                 plt.savefig(saving_plot_path)
                 #plt.show()
                 plt.close()
