@@ -139,43 +139,6 @@ class TransformerMlpBlock(nn.Module):
     return output
 
 
-def sa_block(config, inputs, masks):
-  """Self-attention block."""
-  # shape von x bleibt gleich:
-  # shape: (B, D + cond_dim - 1, S)
-  if config.transformer_norm_type == 'prenorm':
-    x = nn.LayerNorm(dtype=config.dtype)(inputs)
-    x = nn.SelfAttention(
-        num_heads=config.num_heads,
-        dtype=config.dtype,
-        qkv_features=config.qkv_dim,
-        use_bias=False,
-        broadcast_dropout=False,
-        dropout_rate=config.attention_dropout_rate,
-        deterministic=config.dropout_deterministic,
-        decode=False)(x, masks)
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.dropout_deterministic)
-    x = x + inputs
-  elif config.transformer_norm_type == 'postnorm':
-    x = nn.SelfAttention(
-        num_heads=config.num_heads,
-        dtype=config.dtype,
-        qkv_features=config.qkv_dim,
-        use_bias=False,
-        broadcast_dropout=False,
-        dropout_rate=config.attention_dropout_rate,
-        deterministic=config.dropout_deterministic,
-        decode=False)(inputs, masks)
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.dropout_deterministic)
-    x = x + inputs
-    x = nn.LayerNorm(dtype=config.dtype)(x)
-  else:
-    raise ValueError('unknown norm type %s' % config.transformer_norm_type)
-  return x #shape: (B, D + cond_dim - 1, S)
-
-
 def cross_attention(config, l2r_embed, r2l_embed, temb):
   """Cross attention to both directions."""
   seq_len = l2r_embed.shape[1]
@@ -231,7 +194,42 @@ class AttentionReadout(nn.Module):
       raise ValueError('unknown norm type %s' % config.transformer_norm_type)
     x = ff_block(config, x)
     return ResidualReadout(config, self.readout_dim)(x, temb)
-
+  
+def sa_block(config, inputs, masks):
+  """Self-attention block."""
+  # shape von x bleibt gleich:
+  # shape: (B, D + cond_dim - 1, S)
+  if config.transformer_norm_type == 'prenorm':
+    x = nn.LayerNorm(dtype=config.dtype)(inputs)
+    x = nn.SelfAttention(
+        num_heads=config.num_heads,
+        dtype=config.dtype,
+        qkv_features=config.qkv_dim,
+        use_bias=False,
+        broadcast_dropout=False,
+        dropout_rate=config.attention_dropout_rate,
+        deterministic=config.dropout_deterministic,
+        decode=False)(x, masks)
+    x = nn.Dropout(rate=config.dropout_rate)(
+        x, deterministic=config.dropout_deterministic)
+    x = x + inputs
+  elif config.transformer_norm_type == 'postnorm':
+    x = nn.SelfAttention(
+        num_heads=config.num_heads,
+        dtype=config.dtype,
+        qkv_features=config.qkv_dim,
+        use_bias=False,
+        broadcast_dropout=False,
+        dropout_rate=config.attention_dropout_rate,
+        deterministic=config.dropout_deterministic,
+        decode=False)(inputs, masks)
+    x = nn.Dropout(rate=config.dropout_rate)(
+        x, deterministic=config.dropout_deterministic)
+    x = x + inputs
+    x = nn.LayerNorm(dtype=config.dtype)(x)
+  else:
+    raise ValueError('unknown norm type %s' % config.transformer_norm_type)
+  return x #shape: (B, D + cond_dim - 1, S)
 
 def ff_block(config, x):
   """Feed-forward block."""

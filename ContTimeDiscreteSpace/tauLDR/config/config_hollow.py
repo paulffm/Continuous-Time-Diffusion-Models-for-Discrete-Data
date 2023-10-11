@@ -1,7 +1,7 @@
 import ml_collections
 
 def get_config():
-    save_directory = '../../SavedModels/MNIST/'
+    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/' # '../../SavedModels/MNIST/'
     dataset_path = '../lib/datasets'
 
 
@@ -18,10 +18,10 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "reverse_prob" 
+    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "elbo" # rm, mle, elbo
     config.ce_coeff = -0.5 # >0 whole train_step with backward < 10 sek
-    config.logit_type = "reverse_prob" # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -107,15 +107,6 @@ def get_config():
     optimizer.lr = 2e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-
-    saving.enable_preemption_recovery = False
-    saving.preemption_start_day_YYYYhyphenMMhyphenDD = None
-    saving.checkpoint_freq = 1
-    saving.num_checkpoints_to_keep = 2
-    saving.checkpoint_archive_freq = 3000 #200000
-    saving.log_low_freq = 10000
-    saving.low_freq_loggers = ['denoisingImages']
-    saving.prepare_to_resume_after_timeout = False
     saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs'
 
 

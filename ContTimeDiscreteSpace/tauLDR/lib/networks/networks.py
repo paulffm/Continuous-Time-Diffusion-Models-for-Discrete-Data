@@ -484,8 +484,8 @@ class TransformerEncoderLayer(nn.Module):
 
         return x
 
-    def _sa_block(self, x):
-        x = self.self_attn(x,x,x)[0]
+    def _sa_block(self, x, masks=0):
+        x = self.self_attn(x,x,x)[masks]
         return self.dropout1(x)
 
     def _ff_block(self, x):
@@ -512,6 +512,7 @@ class FFResidual(nn.Module):
         return x
     
    # used for music example with: use_one_input = True => X shape (B, D, S)
+# equivalent to MaskedTransformer?
 class TransformerEncoder(nn.Module):
     def __init__(self, num_layers, d_model, num_heads, dim_feedforward,
         dropout, num_output_FFresiduals, time_scale_factor, S, max_len,
@@ -577,6 +578,7 @@ class TransformerEncoder(nn.Module):
             x = x.view(B, L, 1)
             x = self.input_embedding(x) # (B, L, K)
         # until here: more or less the same as BidirectionalTransformer
+        # x = 
         x = self.pos_embed(x)
 
         for encoder_layer in self.encoder_layers:
@@ -586,6 +588,8 @@ class TransformerEncoder(nn.Module):
         for resid_layer in self.output_resid_layers:
             x = resid_layer(x, temb)
 
+        # masking 
+        # embed = jnp.expand_dims(embed[:, pos], axis=1)
         x = self.output_linear(x) # (B, L, S)
 
         x = x + one_hot_x #  addition to instill a residual bias into the network

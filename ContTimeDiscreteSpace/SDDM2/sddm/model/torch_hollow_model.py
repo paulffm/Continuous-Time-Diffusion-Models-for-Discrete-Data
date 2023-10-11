@@ -16,9 +16,9 @@ class BidirectionalTransformer(nn.Module):
         if self.config.net_arch == "bidir_transformer":
             self.module_l2r = torch_nets.UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = torch_nets.UniDirectionalTransformer(self.config, "r2l")
-        elif self.config.net_arch == "bidir_combiner_transformer":
-            self.module_l2r = torch_nets.CombinerAxial(self.config, "l2r")
-            self.module_r2l = torch_nets.CombinerAxial(self.config, "r2l")
+        #elif self.config.net_arch == "bidir_combiner_transformer":
+        #    self.module_l2r = torch_nets.CombinerAxial(self.config, "l2r")
+        #    self.module_r2l = torch_nets.CombinerAxial(self.config, "r2l")
         else:
             raise ValueError("Unknown net_arch: %s" % self.config.net_arch)
 

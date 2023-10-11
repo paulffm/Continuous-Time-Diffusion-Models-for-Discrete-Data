@@ -56,13 +56,14 @@ class ResidualReadout(nn.Module):
         super(ResidualReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
-        self.embed_dim = None  # To be set during forward
+        self.embed_dim = config.embed_dim  # To be set during forward
 
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
 
         
         #self.dense_in = nn.Linear(temb.shape[1], 2 * embed_dim)
-        #self.mlp = MLP([self.config.mlp_dim, 4 * temb.shape[1]], activation=nn.GELU())
+        self.mlp = MLP([self.config.mlp_dim, 4 * self.embed_dim], activation=nn.GELU())
+
         #self.lnorm = nn.LayerNorm(embed_dim)
 
         #self.dense_out  = nn.Linear(embed_dim, self.out_dim)
@@ -71,13 +72,40 @@ class ResidualReadout(nn.Module):
 
     def forward(self, x, temb):
         embed_dim = x.shape[-1]
-        temb = MLP([self.config.mlp_dim, 4 * temb.shape[1]], activation=nn.GELU())(temb)
+        temb = self.mlp(temb)
         for _ in range(self.config.num_output_ffresiduals):
             film_params = nn.Linear(temb.shape[1], 2 * embed_dim)(temb)
             z = MLP([self.config.mlp_dim, embed_dim], activation=nn.GELU())(x)
             x = nn.LayerNorm(embed_dim)(x + z)
             x = apply_film(film_params, x)
         logits = nn.Linear(embed_dim, self.out_dim)(x)
+        return logits
+    
+class ResidualReadout(nn.Module):
+    def __init__(self, config, readout_dim=0):
+        super(ResidualReadout, self).__init__()
+        self.config = config
+        self.readout_dim = readout_dim
+        self.embed_dim = config.embed_dim
+        
+        self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
+        
+        self.mlp = MLP([self.config.mlp_dim, 4 * self.embed_dim], activation=nn.GELU())
+        
+        # Vorbereitung der Linearen Layer im Konstruktor
+        self.film_params_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)  # adjust the input size
+        self.z_layer = MLP([self.config.mlp_dim, self.embed_dim], activation=nn.GELU())
+        self.norm_layer = nn.LayerNorm(self.embed_dim)
+        self.logits_layer = nn.Linear(self.embed_dim, self.out_dim)
+
+    def forward(self, x, temb):
+        temb = self.mlp(temb)
+        for _ in range(self.config.num_output_ffresiduals):
+            film_params = self.film_params_layer(temb)
+            z = self.z_layer(x)
+            x = self.norm_layer(x + z)
+            x = apply_film(film_params, x)  # ensure the apply_film function is properly defined
+        logits = self.logits_layer(x)
         return logits
 
 

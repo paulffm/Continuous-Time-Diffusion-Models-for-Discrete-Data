@@ -9,6 +9,36 @@ import lib.sampling.sampling_utils as sampling_utils
 import lib.utils.utils as utils
 import time
 
+def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
+    """Get logprob with logits."""
+    start = time.time()
+    # checked
+    if xt_target is None:
+        xt_target = xt
+    xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
+    if cfg.logit_type == "direct":
+        log_prob = F.log_softmax(logits, dim=-1)
+    else:
+        qt0 = model.transition(t)
+        if cfg.logit_type == "reverse_prob":
+            p0t = F.softmax(logits, dim=-1)
+            qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
+            prob_all = p0t @ qt0
+            log_prob = torch.log(prob_all + 1e-35)
+            # check
+        elif cfg.logit_type == "reverse_logscale":
+            log_p0t = F.log_softmax(logits, dim=-1)
+            log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
+            log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
+            log_p0t = log_p0t.unsqueeze(-1)
+            log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
+            # check
+        else:
+            raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
+    log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+    end = time.time()
+    print("get_logprob_logits time", end - start)
+    return log_prob, log_xt
 
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
@@ -46,7 +76,7 @@ class TauLeaping:
         device = model.device
 
         with torch.no_grad():
-            xt = get_initial_samples(N, self.D, device, self.S, self.initial_dist, initial_dist_std)
+            x = get_initial_samples(N, self.D, device, self.S, self.initial_dist, initial_dist_std)
             # tau = 1 / num_steps
             ts = np.concatenate((np.linspace(1.0, self.min_t, self.num_steps), np.array([0])))
             t = 1.0
@@ -601,13 +631,35 @@ class ExactSampling:
                 end_opt = time.time()
                 print("sampling operations time", end_opt - start_opt)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
-                new_y = cat_dist.sample()
-                print("new_sample", new_y, new_y.shape)
+                xt = cat_dist.sample()
+                print("new_sample", xt, xt.shape)
             end_sample = time.time()
             print("sample time", end_sample - start_sample)
-            return new_y.detach().cpu().numpy().astype(int)
+            return xt.detach().cpu().numpy().astype(int)
+        
+
+def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
+    """Categorical simulation with lbjf."""
+    if xt_target is None:
+        xt_target = xt
+
+    logits = model(xt, t * torch.ones((N,), device=device))
+    ll_all, ll_xt = get_logprob_with_logits(cfg=cfg, model=model, xt=xt, t=t, logits=logits)
+    log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
+    fwd_rate = model.rate(xt, t)
+
+    xt_onehot = F.one_hot(xt_target, cfg.data.S)
+    posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
+    off_diag = torch.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
+    diag = torch.clip(1.0 - off_diag, a_min=0)
+    posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
+    posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
+    log_posterior = torch.log(posterior + 1e-35)
+    new_y = torch.distributions.categorical.Categorical(log_posterior).sample()
+    return new_y
 
 
+@sampling_utils.register_sampler
 class LBJFSampling:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -617,44 +669,15 @@ class LBJFSampling:
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
         self.initial_dist = cfg.sampler.initial_dist
-
-    def _get_logprob_with_logits(self, model, xt, t, logits, xt_target=None):
-        """Get logprob with logits."""
-        start = time.time()
-        # checked
-        if xt_target is None:
-            xt_target = xt
-        xt_onehot = F.one_hot(xt_target.long(), self.S)
-        if self.cfg.logit_type == "direct":
-            log_prob = F.log_softmax(logits, dim=-1)
-        else:
-            qt0 = model.transition(t)
-            if self.cfg.logit_type == "reverse_prob":
-                p0t = F.softmax(logits, dim=-1)
-                qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
-                prob_all = p0t @ qt0
-                log_prob = torch.log(prob_all + 1e-35)
-                # check
-            elif self.cfg.logit_type == "reverse_logscale":
-                log_p0t = F.log_softmax(logits, dim=-1)
-                log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
-                log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
-                log_p0t = log_p0t.unsqueeze(-1)
-                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-                # check
-            else:
-                raise ValueError("Unknown logit_type: %s" % self.cfg.logit_type)
-        log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-        end = time.time()
-        print("get_logprob_logits time", end - start)
-        return log_prob, log_xt
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
 
     def sample(self, model, N, num_intermediates):
         t = 1.0
         initial_dist_std = model.Q_sigma
         device = model.device
         with torch.no_grad():
-            xt = get_initial_samples(N, self.D, device, self.S, self.initial_dist, initial_dist_std)
+            x = get_initial_samples(N, self.D, device, self.S, self.initial_dist, initial_dist_std)
             # tau = 1 / num_steps
             ts = np.concatenate((np.linspace(1.0, self.min_t, self.num_steps), np.array([0])))
 
@@ -667,13 +690,13 @@ class LBJFSampling:
 
                 # stellt sich frage:
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
-                logits = model(xt, t * torch.ones((N,), device=device))
-                ll_all, ll_xt = self._get_logprob_with_logits(model=model, xt=xt, t=t, logits=logits)
+                logits = model(x, t * torch.ones((N,), device=device))
+                ll_all, ll_xt = get_logprob_with_logits(cfg=self.cfg, model=model, xt=x, t=t, logits=logits)
 
                 log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
-                fwd_rate = model.rate(xt, t)
+                fwd_rate = model.rate(x, t)
 
-                xt_onehot = F.one_hot(xt, self.S)
+                xt_onehot = F.one_hot(x, self.S)
                 posterior = h * torch.exp(log_weight) * fwd_rate
                 off_diag = torch.sum(
                     posterior * (1 - xt_onehot), axis=-1, keepdims=True
@@ -683,7 +706,25 @@ class LBJFSampling:
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35)
-                new_y = torch.distributions.categorical.Categorical(
+                x = torch.distributions.categorical.Categorical(
                     log_posterior
                 ).sample()
-                return new_y.detach().cpu().numpy().astype(int)
+            
+                if t <= self.corrector_entry_time:
+                    for _ in range(self.num_corrector_steps):
+                        # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+                        logits = model(x, t * torch.ones((N,), device=device))
+                        ll_all, ll_xt = get_logprob_with_logits(cfg=self.cfg, model=model, xt=x, t=t, logits=logits)
+                        log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
+                        fwd_rate = model.rate(x, t)
+
+                        xt_onehot = F.one_hot(x, self.S)
+                        posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
+                        off_diag = torch.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
+                        diag = torch.clip(1.0 - off_diag, a_min=0)
+                        posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
+                        posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
+                        log_posterior = torch.log(posterior + 1e-35)
+                        x = torch.distributions.categorical.Categorical(log_posterior).sample()
+                    
+            return x.detach().cpu().numpy().astype(int)

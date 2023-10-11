@@ -171,6 +171,9 @@ def np_tile_imgs(imgs, pad_pixels=1, pad_val=255, num_col=0):
     return imgs
 
 def expand_dims(x, axis):
+    #if axis == 0:
+     #   x =x.unsqueeze(0)
+
     for i in axis:
         x = x.unsqueeze(i)
     return x
