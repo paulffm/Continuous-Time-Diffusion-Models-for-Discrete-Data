@@ -8,6 +8,7 @@ import torch.nn as nn
 from lib.utils import utils
 import torch.nn.functional as F
 import torch.nn.init as init
+import functorch
 
 
 class MLP(nn.Module):
@@ -110,54 +111,6 @@ def transformer_timestep_embedding(timesteps, embedding_dim, max_positions=10000
     return emb
 
 
-class TransformerMlpBlock(nn.Module): # directly used in FFResidual in TAU
-    def __init__(
-        self,
-        mlp_dim,
-        out_dim=None,
-        dtype=torch.float32,
-        dropout_rate=0.0,
-        dropout_deterministic=False,
-        kernel_init=None,
-        bias_init=None,
-    ):
-        super(TransformerMlpBlock, self).__init__()
-        self.mlp_dim = mlp_dim
-        self.out_dim = out_dim
-        self.dtype = dtype
-        self.dropout_rate = dropout_rate
-        self.dropout_deterministic = dropout_deterministic
-
-        if dropout_deterministic:
-            torch.backends.cudnn.deterministic = True
-
-        self.kernel_init = (
-            kernel_init if kernel_init is not None else nn.init.xavier_uniform_
-        )
-        self.bias_init = bias_init if bias_init is not None else nn.init.normal_
-
-        self.fc1 = nn.Linear(mlp_dim, mlp_dim, bias=False) # mlp_dim => d_model in TAU
-        self.activation = nn.ReLU()
-        self.dropout1 = nn.Dropout(p=dropout_rate)
-        self.fc2 = nn.Linear(
-            mlp_dim, self.out_dim if self.out_dim is not None else mlp_dim, bias=False
-        )
-        self.dropout2 = nn.Dropout(p=dropout_rate)
-
-        # Apply initializations
-        self.kernel_init(self.fc1.weight)
-        self.kernel_init(self.fc2.weight)
-
-    def forward(self, inputs):
-        inputs = inputs.to(self.dtype)
-        x = self.fc1(inputs)
-        x = self.activation(x)
-        x = self.dropout1(x)
-        x = self.fc2(x)
-        x = self.dropout2(x)
-        return x
-
-
 class CrossAttention(nn.Module):
     def __init__(self, config):
         super(CrossAttention, self).__init__()
@@ -234,6 +187,7 @@ class SelfAttentionBlock(nn.Module):
             dropout=config.attention_dropout_rate,
         )
         self.dropout = nn.Dropout(config.dropout_rate)
+        # ToDo: LayerNorm
         self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
 
     def forward(self, inputs, masks):
@@ -244,11 +198,59 @@ class SelfAttentionBlock(nn.Module):
             )  # adjust the input as needed
             x = self.dropout(x)
             x = x + inputs
-        elif self.config.transformer_norm_type == "postnorm": # used in _sa_block
+        elif self.config.transformer_norm_type == "postnorm":  # used in _sa_block
             x, _ = self.self_attention(inputs, inputs, inputs, key_padding_mask=masks)
             x = self.dropout(x)
-            x = x + inputs # not in _sa_block
-            x = self.norm(x) # not in _sa_block
+            x = x + inputs  # not in _sa_block
+            x = self.norm(x)  # not in _sa_block
+        return x
+
+
+class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
+    def __init__(
+        self,
+        mlp_dim,
+        out_dim=None,
+        dtype=torch.float32,
+        dropout_rate=0.0,
+        dropout_deterministic=False,
+        kernel_init=None,
+        bias_init=None,
+    ):
+        super(TransformerMlpBlock, self).__init__()
+        self.mlp_dim = mlp_dim
+        self.out_dim = out_dim
+        self.dtype = dtype
+        self.dropout_rate = dropout_rate
+        self.dropout_deterministic = dropout_deterministic
+
+        if dropout_deterministic:
+            torch.backends.cudnn.deterministic = True
+
+        self.kernel_init = (
+            kernel_init if kernel_init is not None else nn.init.xavier_uniform_
+        )
+        self.bias_init = bias_init if bias_init is not None else nn.init.normal_
+
+        self.fc1 = nn.Linear(mlp_dim, mlp_dim, bias=False)  # mlp_dim => d_model in TAU
+        self.activation = nn.ReLU()
+        self.dropout1 = nn.Dropout(p=dropout_rate)
+        self.fc2 = nn.Linear(
+            mlp_dim, self.out_dim if self.out_dim is not None else mlp_dim, bias=False
+        )
+        self.dropout2 = nn.Dropout(p=dropout_rate)
+
+        # Apply initializations
+        self.kernel_init(self.fc1.weight)
+        self.kernel_init(self.fc2.weight)
+
+    def forward(self, inputs):
+        inputs = inputs.to(self.dtype)
+        x = self.fc1(inputs)
+        x = self.activation(x)
+        x = self.dropout1(x)
+        x = self.fc2(x)
+        x = self.dropout2(x)
         return x
 
 
@@ -260,6 +262,7 @@ class FeedForwardBlock(nn.Module):
             mlp_dim=config.mlp_dim,  # make sure to pass the necessary parameters
             dropout_rate=config.dropout_rate,
         )
+        # ToDO: dim in nn.LayerNorm
         self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
 
     def forward(self, x):
@@ -267,66 +270,27 @@ class FeedForwardBlock(nn.Module):
             z = self.norm(x)
             z = self.mlp(z)
             z = x + z
-        elif self.config.transformer_norm_type == "postnorm": # used in ff_
+        elif self.config.transformer_norm_type == "postnorm":  # used in ff_
             z = self.mlp(x)
             z = x + z
             z = self.norm(z)
         return z
 
 
-class TransformerBlock2(nn.Module):
-    def __init__(self, config):
-        super(TransformerBlock, self).__init__()
-        self.config = config
-        self.multi_head_attn = nn.MultiheadAttention(
-            config.qkv_dim, config.num_heads, dropout=config.attention_dropout_rate
-        )
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.trans_mlp_block = TransformerMlpBlock(
-            config.mlp_dim,
-            dtype=config.dtype,
-            dropout_rate=config.dropout_rate,
-            dropout_deterministic=config.dropout_deterministic,
-        )
-
-    def forward(self, inputs, masks):
-        assert inputs.ndim == 3
-
-        if self.config.transformer_norm_type == "prenorm":
-            # sa
-            x = nn.LayerNorm(inputs.shape[-1])(inputs)
-            x = self.multi_head_attn(x, x, x, attn_mask=masks)
-            x = self.dropout(x)
-            x = x + inputs
-
-            # ff
-            z = nn.LayerNorm(x.shape[-1])(x)
-            z = self.trans_mlp_block(z)
-            z = x + z
-        else:
-            # sa
-            x = self.multi_head_attn(inputs, inputs, inputs, attn_mask=masks)
-            x = self.dropout(x)
-            x = x + inputs
-            x = nn.LayerNorm(inputs.shape[-1])(x)
-            # ff
-            z = self.trans_mlp_block(x)
-            z = x + z
-            z = nn.LayerNorm(z.shape[-1])(z)
-
-        return z
-
-
-class TransformerBlock(nn.Module): #
+class TransformerBlock(nn.Module):  #
     def __init__(self, config):
         super(TransformerBlock, self).__init__()
         self.config = config
         self.self_attention_block = SelfAttentionBlock(config)
+
         self.feed_forward_block = FeedForwardBlock(config)
 
     def forward(self, inputs, masks):
+        # inputs = B, D + 1, E
         x = self.self_attention_block(inputs, masks)
+        # x shape?
         z = self.feed_forward_block(x)
+        # z shape?
         return z
 
 
@@ -350,16 +314,9 @@ class TransformerEncoder(nn.Module):
             conditioner = torch.cat([conditioner, temb], dim=1)
         x = torch.cat([conditioner, x], dim=1)
 
-        if not hasattr(self, "pos_embed"):
-            self.pos_embed = nn.Parameter(
-                torch.nn.init.xavier_uniform_(
-                    torch.empty(1, x.size(1), x.size(2), device=x.device, dtype=x.dtype)
-                ),
-                requires_grad=True,
-            )
-            self.register_parameter("pos_embed", self.pos_embed)
+        # ToDO: Positional Embedding
 
-        x = x + self.pos_embed
+        # x = x + self.pos_embed
         x = self.dropout(x)
         for layer_idx in range(self.config.num_layers):
             x = self.transformer_block(x, masks=None)
@@ -396,6 +353,7 @@ class MaskedTransformer(nn.Module):
         return logits
 
 
+# concat_dim in config, embed_dim in config = D + 1, dytpe
 class UniDirectionalTransformer(nn.Module):
     """Transformer in one direction."""
 
@@ -406,6 +364,12 @@ class UniDirectionalTransformer(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
         self.trans_block = TransformerBlock(config)
 
+        self.pos_embed = nn.Parameter(
+            torch.nn.init.xavier_uniform_(
+                torch.empty(1, config.concat_dim, config.embed_dim, dtype=config.dtype)
+            )
+        )
+
     def forward(self, x, temb, conditioner=None):
         assert x.ndim == 3 and temb.ndim == 2  # B, D, E and B, E
         temb = temb.unsqueeze(1)
@@ -415,10 +379,14 @@ class UniDirectionalTransformer(nn.Module):
             conditioner = torch.cat([conditioner, temb], dim=1)  # B, 2, E
         cond_dim = conditioner.size(1)  # 2
         concat_dim = x.size(1) + cond_dim - 1  # D + 2 - 1
-        pos_idx = utils.expand_dims(torch.arange(concat_dim, dtype=torch.int32), axis=0) # 0 bis D (inclusive)
+        pos_idx = utils.expand_dims(
+            torch.arange(concat_dim, dtype=torch.int32), axis=0
+        )  # 0 bis D (inclusive)
 
         if self.direction == "l2r":
-            x = torch.cat([conditioner, x[:, :-1]], dim=1) # x[:, :-1] B, D-1, E; condtioner B, 2 E => B, D+1, E
+            x = torch.cat(
+                [conditioner, x[:, :-1]], dim=1
+            )  # x[:, :-1] B, D-1, E; condtioner B, 2 E => B, D+1, E
             mask = pos_idx.unsqueeze(-1) >= pos_idx.unsqueeze(-2)
             mask = mask.unsqueeze(-3)
             mask[:, :, :cond_dim, :cond_dim] = 1.0
@@ -426,15 +394,10 @@ class UniDirectionalTransformer(nn.Module):
             x = torch.cat([x[:, 1:], conditioner], dim=1)
             mask = pos_idx.unsqueeze(-1) <= pos_idx.unsqueeze(-2)
             mask = mask[:, :, -cond_dim:, -cond_dim:] = 1.0
-        
+
         # equivalent to Positional encoding: yes d_model =x.size(2) = config.embed_dim
-        pos_embed = nn.Parameter(
-            init.xavier_uniform_(
-                torch.empty(1, concat_dim, x.size(2), dtype=config.dtype)
-            )
-        )
-        #
-        x = x + pos_embed
+        x = x + self.pos_embed
+
         x = self.dropout(x)
         for layer_idx in range(self.config.num_layers):
             x = self.trans_block(x, masks=mask)
@@ -445,8 +408,9 @@ class BidirectionalTransformer(nn.Module):
     def __init__(self, config, readout_dim=None):
         super(BidirectionalTransformer, self).__init__()
         self.config = config
+        self.S = config.data.S
         self.embedding = nn.Embedding(
-            config.vocab_size, config.embed_dim
+            self.S, config.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.time_scale_factor
 
@@ -475,20 +439,36 @@ class BidirectionalTransformer(nn.Module):
         else:
             raise ValueError("Unknown bidir_readout: %s" % self.config.bidir_readout)
 
+        if self.config.use_one_hot_input:
+            self.input_embedding = nn.Linear(self.S, config.embed_dim)
+        else:
+            self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+
+        # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
+        # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
+
     def forward(self, x, t):
         temb = (
             transformer_timestep_embedding(t * self.temb_scale, self.config.embed_dim),
         )  # B, E
-        x_embed = self.embedding(x)
+
+        # way to use disrupt ordinality?
+        if self.use_one_hot:
+            x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
+            x_embed = self.input_embedding(x_one_hot)
+
+        else:
+            x_embed = self.embedding(x)
+
         input_shape = list(x_embed.shape)[:-1]
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
 
         l2r_embed = self.module_l2r(x_embed, temb)
-        r2l_embed = self.module_r2l(x_embed, temb)
+        r2l_embed = self.module_r2l(x_embed, temb) # output shape?
 
-        self.readout_module(l2r_embed, r2l_embed, temb)
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape? 
 
-        logits = logits.view(input_shape + [self.readout_dim])
+        logits = logits.view(input_shape + [self.readout_dim]) # B, D, S
         return logits
 
 

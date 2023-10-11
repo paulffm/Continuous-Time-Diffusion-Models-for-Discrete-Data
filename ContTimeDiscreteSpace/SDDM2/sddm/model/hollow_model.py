@@ -38,7 +38,7 @@ def bidir_transformer(config, x, temb, readout_dim=None):
   logits = readout_module(config, readout_dim=readout_dim)(
       l2r_embed, r2l_embed, temb)
   logits = jnp.reshape(logits, input_shape + [readout_dim]) # (B, D, )
-  return logits # fehler bei concat_dim - 1 irgendwo: shape hier muss B, D ,S sein
+  return logits 
 
 
 class BidirectionalTransformer(nn.Module):

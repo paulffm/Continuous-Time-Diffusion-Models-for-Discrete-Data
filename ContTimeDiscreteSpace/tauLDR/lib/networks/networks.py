@@ -572,7 +572,7 @@ class TransformerEncoder(nn.Module):
 
         if self.use_one_hot_input:
             # wird gemacht, weil: like nn.Embed(cfg.data.S, cfg.embed_dim)
-            x = self.input_embedding(one_hot_x.float()) # (B, L, K)
+            x = self.input_embedding(one_hot_x.float()) # (B, L, K) B, L, d_model
         else:
             x = self.normalize_input(x)
             x = x.view(B, L, 1)
