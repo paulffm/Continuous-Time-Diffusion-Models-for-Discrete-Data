@@ -13,6 +13,7 @@ import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 from lib.networks.hollow import BidirectionalTransformer
 
+
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, use_net: bool = True, rank=None):
         super().__init__()
@@ -44,7 +45,7 @@ class ImageX0PredBasePaul(nn.Module):
                 attn_resolutions=[16],
                 num_heads=1,
                 dropout=cfg.model.dropout,
-                model_output = cfg.model.model_output,  # 'logits' or 'logistic_pars'
+                model_output=cfg.model.model_output,  # 'logits' or 'logistic_pars'
                 num_classes=self.S,
                 x_min_max=data_min_max,
                 img_size=self.data_shape[2],
@@ -276,7 +277,7 @@ class BirthDeathForwardBase:
         # is probably inaccurate and should be zero anyway
         transitions[transitions < 1e-8] = 0.0
 
-        return transitions # [B, S, S] 
+        return transitions  # [B, S, S]
 
 
 class UniformRate:
@@ -286,8 +287,8 @@ class UniformRate:
         self.device = device
 
         rate = self.rate_const * np.ones((S, S))
-        rate = rate - np.diag(np.diag(rate)) # diag = 0
-        rate = rate - np.diag(np.sum(rate, axis=1)) # diag = - sum of rows
+        rate = rate - np.diag(np.diag(rate))  # diag = 0
+        rate = rate - np.diag(np.sum(rate, axis=1))  # diag = - sum of rows
         eigvals, eigvecs = np.linalg.eigh(rate)
 
         self.rate_matrix = torch.from_numpy(rate).float().to(self.device)
@@ -300,15 +301,23 @@ class UniformRate:
         B = t.shape[0]
         S = self.S
 
-        return torch.tile(self.rate_matrix.view(1, S, S), (B, 1, 1)) # dimension from 1, S, S to B, S, S
+        return torch.tile(
+            self.rate_matrix.view(1, S, S), (B, 1, 1)
+        )  # dimension from 1, S, S to B, S, S
+
+    def rate_mat(self, y, t):
+        return self.rate_matrix[y]
+
     # func usvt from forward model
     def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]
         S = self.S
         transitions = (
-            self.eigvecs.view(1, S, S) # Q 
-            @ torch.diag_embed(torch.exp(self.eigvals.view(1, S) * t.view(B, 1))) # 3d or 2d tensor such that dimension fit (lambda)
-            @ self.eigvecs.T.view(1, S, S) # Q^-1
+            self.eigvecs.view(1, S, S)  # Q
+            @ torch.diag_embed(
+                torch.exp(self.eigvals.view(1, S) * t.view(B, 1))
+            )  # 3d or 2d tensor such that dimension fit (lambda)
+            @ self.eigvecs.T.view(1, S, S)  # Q^-1
         )
 
         if torch.min(transitions) < -1e-6:
@@ -318,8 +327,8 @@ class UniformRate:
 
         transitions[transitions < 1e-8] = 0.0
 
-        return transitions # q_{t | 0}
-    
+        return transitions  # q_{t | 0}
+
     def transit_between(self, t1, t2):
         return self.transition(t2 - t1)
 
@@ -405,7 +414,7 @@ class GaussianTargetRate:
         transitions[transitions < 1e-8] = 0.0
 
         return transitions
-    
+
     def transit_between(self, t1, t2):
         return self.transition(t2 - t1)
 
@@ -498,6 +507,7 @@ class ResidualMLP(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
+
 
 def HTransformer():
     pass
@@ -609,6 +619,7 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
@@ -617,6 +628,7 @@ class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):
@@ -627,8 +639,11 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
 
         self.init_ema()
 
+
 @model_utils.register_model
-class GaussianTargetRateImageX0PredEMAPaul(EMA, ImageX0PredBasePaul, GaussianTargetRate):
+class GaussianTargetRateImageX0PredEMAPaul(
+    EMA, ImageX0PredBasePaul, GaussianTargetRate
+):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)

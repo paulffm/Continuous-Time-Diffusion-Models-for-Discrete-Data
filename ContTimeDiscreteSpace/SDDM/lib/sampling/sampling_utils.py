@@ -26,6 +26,9 @@ def lbjf_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
     fwd_rate = cls.fwd_model.rate(xt, t)
 
     xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size)
+    print("fwd_rate", type(fwd_rate), fwd_rate.shape)
+    print("torch.exp(log_weight)", type(jnp.exp(log_weight)), jnp.exp(log_weight).shape)
+    print("h", type(tau), tau)
     posterior = tau * jnp.exp(log_weight) * fwd_rate
     off_diag = jnp.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
     diag = jnp.clip(1.0 - off_diag, a_min=0)

@@ -580,7 +580,7 @@ class ExactSampling:
         start_sample = time.time()
 
         t = 1.0
-        initial_dist_std = model.Q_sigma
+        initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
         with torch.no_grad():
@@ -646,7 +646,7 @@ def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
     logits = model(xt, t * torch.ones((N,), device=device))
     ll_all, ll_xt = get_logprob_with_logits(cfg=cfg, model=model, xt=xt, t=t, logits=logits)
     log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
-    fwd_rate = model.rate(xt, t)
+    fwd_rate = model.rate(t)
 
     xt_onehot = F.one_hot(xt_target, cfg.data.S)
     posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
@@ -674,7 +674,7 @@ class LBJFSampling:
 
     def sample(self, model, N, num_intermediates):
         t = 1.0
-        initial_dist_std = model.Q_sigma
+        initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
         with torch.no_grad():
             x = get_initial_samples(N, self.D, device, self.S, self.initial_dist, initial_dist_std)
@@ -693,15 +693,20 @@ class LBJFSampling:
                 logits = model(x, t * torch.ones((N,), device=device))
                 ll_all, ll_xt = get_logprob_with_logits(cfg=self.cfg, model=model, xt=x, t=t, logits=logits)
 
-                log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
-                fwd_rate = model.rate(x, t)
+                log_weight = ll_all - ll_xt.unsqueeze(-1)
+                fwd_rate = model.rate_mat(x, t * torch.ones((N,)))
 
                 xt_onehot = F.one_hot(x, self.S)
+                
+                print("fwd_rate", type(fwd_rate), fwd_rate.shape)
+                print("torch.exp(log_weight)", type(torch.exp(log_weight)), torch.exp(log_weight).shape)
+                print("h", type(h), h)
+
                 posterior = h * torch.exp(log_weight) * fwd_rate
                 off_diag = torch.sum(
                     posterior * (1 - xt_onehot), axis=-1, keepdims=True
                 )
-                diag = torch.clip(1.0 - off_diag, a_min=0)
+                diag = torch.clip(1.0 - off_diag, min=0, max=float('inf'))
                 posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
@@ -717,13 +722,13 @@ class LBJFSampling:
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         logits = model(x, t * torch.ones((N,), device=device))
                         ll_all, ll_xt = get_logprob_with_logits(cfg=self.cfg, model=model, xt=x, t=t, logits=logits)
-                        log_weight = ll_all - utils.expand_dims(ll_xt, axis=-1)
-                        fwd_rate = model.rate(x, t)
+                        log_weight = ll_all - ll_xt.unsqueeze(-1)
+                        fwd_rate = model.rate_mat(x, t * torch.ones((N,)))
 
                         xt_onehot = F.one_hot(x, self.S)
                         posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
                         off_diag = torch.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
-                        diag = torch.clip(1.0 - off_diag, a_min=0)
+                        diag = torch.clip(1.0 - off_diag, min=0, max=float('inf'))
                         posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
                         posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                         log_posterior = torch.log(posterior + 1e-35)

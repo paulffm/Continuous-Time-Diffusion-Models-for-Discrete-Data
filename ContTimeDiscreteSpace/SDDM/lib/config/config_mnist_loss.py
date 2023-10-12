@@ -26,8 +26,8 @@ def get_config():
     config.discrete_dim = config.image_size * config.image_size * 1  #
     # only for cond_backward_model
     config.lambda_t = "const"
-    config.logit_type = "reverse_logscale"
-    config.loss_type = "elbo"
+    config.logit_type = "direct"
+    config.loss_type = "rm"
 
     # model
     config.model_type = "hollow" #, 'cond_hollow, ebm
@@ -86,7 +86,7 @@ def get_config():
     config.grad_norm = 5 #5
 
     # training
-    config.total_train_steps = 2 #000 # 1000
+    config.total_train_steps = 1 #000 # 1000
     config.phase = "train"
     config.sample_freq = 2 #000 #00
     config.checkpoint_freq = 2#00 #00
@@ -111,7 +111,7 @@ def get_config():
     config.sampling_steps = 2 #1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
     config.corrector_steps = 0 #0 #10
-    config.sampler_type = "exact"
+    config.sampler_type = "lbjf"
 
     # nets
     """

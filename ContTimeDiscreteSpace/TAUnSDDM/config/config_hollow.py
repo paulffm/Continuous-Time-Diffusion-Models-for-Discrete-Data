@@ -31,7 +31,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 10 #2000 #2000000
+    training.n_iters = 1 #2000 #2000000
 
     training.clip_grad = True
     training.warmup = 0 #50 # 5000
@@ -68,7 +68,7 @@ def get_config():
     config.num_layers = 1
     # TransformerBlock
     ## SA
-    config.num_heads = 2
+    config.num_heads = 1
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm" # prenorm
     ## FF
@@ -81,7 +81,7 @@ def get_config():
     # features, activation
 
     # ResidualReadout
-    config.num_output_ffresiduals = 2
+    config.num_output_ffresiduals = 1
 
     # AttentionReadout
     ## CrossAttention
@@ -130,7 +130,7 @@ def get_config():
     model.fix_logistic = False
     model.ema_decay = 0.9999 #0.9999
     model.model_output = "logistic_pars"
-    
+    model.Q_sigma = 512.0
     """
     model.rate_sigma = 6.0
     model.Q_sigma = 512.0
@@ -148,15 +148,15 @@ def get_config():
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = 'ExactSampling' # TauLeaping or PCTauLeaping
+    sampler.name = 'LBJFSampling' # TauLeaping or PCTauLeaping
     sampler.num_steps = 2
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = 'uniform'
-    sampler.num_corrector_steps = 10
+    sampler.num_corrector_steps = 2
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.01
 
-    sampler.sample_freq = 10
+    sampler.sample_freq = 2
 
     return config

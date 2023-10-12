@@ -636,7 +636,7 @@ class HollowAux:
         weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
         loss = loss * weight
         end = time.time()
-        #print("_comp_loss ", end - start)
+        #c("_comp_loss ", end - start)
         return loss
 
     def calc_loss(self, minibatch, state, writer=None):

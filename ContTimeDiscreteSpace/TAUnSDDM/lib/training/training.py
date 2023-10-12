@@ -15,13 +15,13 @@ class Standard():
         state['optimizer'].zero_grad()
         l = loss.calc_loss(minibatch, state, writer)
         start_back = time.time()
-        print("loss train", type(l), l)
+        #print("loss train", type(l), l)
         if l.isnan().any() or l.isinf().any():
-            print("Loss is nan")
+            #print("Loss is nan")
             assert False
         l.backward()
         end_back = time.time()
-        print("backwards", end_back - start_back)
+        #print("backwards", end_back - start_back)
         start_step = time.time()
         if self.clip_grad:
             torch.nn.utils.clip_grad_norm_(state['model'].parameters(), 1.0)

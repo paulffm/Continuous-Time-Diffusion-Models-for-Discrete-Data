@@ -204,4 +204,5 @@ class TauLDRBackward(backward_model.BackwardModel):
         reg_mean = jnp.mean(reg_term)
         neg_elbo = sig_mean + reg_mean
         aux = {"loss": neg_elbo}
+        print("loss", neg_elbo)
         return neg_elbo, aux
