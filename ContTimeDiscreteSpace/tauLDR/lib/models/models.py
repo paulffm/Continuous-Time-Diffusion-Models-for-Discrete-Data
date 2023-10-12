@@ -11,6 +11,7 @@ from torchtyping import patch_typeguard, TensorType
 import torch.autograd.profiler as profiler
 import math
 from torch.nn.parallel import DistributedDataParallel as DDP
+from lib.networks.hollow import BidirectionalTransformer
 
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, use_net: bool = True, rank=None):
@@ -604,6 +605,15 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
+class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BidirectionalTransformer.__init__(self, cfg)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()

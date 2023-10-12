@@ -683,7 +683,7 @@ class LBJFSampling:
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-
+                start = time.time()
                 # p_theta(x_0|x_t) ?
                 # in HollowModel: get_logits = model()
                 # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
@@ -709,8 +709,10 @@ class LBJFSampling:
                 x = torch.distributions.categorical.Categorical(
                     log_posterior
                 ).sample()
-            
+                end = time.time()
+                print("LBJF Time", end - start)
                 if t <= self.corrector_entry_time:
+                    print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         logits = model(x, t * torch.ones((N,), device=device))

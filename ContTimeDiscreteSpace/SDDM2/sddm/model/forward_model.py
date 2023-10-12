@@ -23,7 +23,7 @@ class ForwardModel(object):
 
   def transit_between(self, t1, t2):
     raise NotImplementedError
-
+  # checken, in wv dims sich unterscheiden
   def sample_xt_with_aux(self, x0, time_duration, rng):
     """Sample x_t and t with aux info returned."""
     bsize = x0.shape[0]

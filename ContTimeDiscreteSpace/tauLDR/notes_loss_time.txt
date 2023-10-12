@@ -16,3 +16,14 @@ reverse_prob + elbo => + loss < 10sek   (loss = 880)
 reverse_logscale + rm =>
 reverse_logscale + mle =>  + loss < 10sek
 reverse_logscale + elbo => - loss < 10sek 
+
+
+sample t
+x0
+x0 -----------> xt --------> x_tilde
+    q_{t|0}          R_t
+
+masking/hollow transformer deckt d einfach nur ab ?
+
+first forward pass: logits_x_tilde ? = net(xt)
+

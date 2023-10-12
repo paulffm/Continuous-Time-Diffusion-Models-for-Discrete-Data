@@ -485,7 +485,7 @@ class TransformerEncoderLayer(nn.Module):
         return x
 
     def _sa_block(self, x, masks=0):
-        x = self.self_attn(x,x,x)[masks]
+        x = self.self_attn(x,x,x)[0]
         return self.dropout1(x)
 
     def _ff_block(self, x):

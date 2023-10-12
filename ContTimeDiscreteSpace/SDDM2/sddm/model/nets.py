@@ -57,7 +57,7 @@ class ResidualReadout(nn.Module):
   def __call__(self, x, temb):
     config = self.config
     embed_dim = x.shape[-1]
-    temb = MLP([config.mlp_dim, 4 * temb.shape[1]], activation=nn.gelu)(temb)
+    temb = MLP([config.mlp_dim, 4 * temb.shape[1]], activation=nn.gelu)(temb) #
     for _ in range(config.num_output_ffresiduals):
       film_params = nn.Dense(2 * embed_dim)(temb)
       z = MLP([config.mlp_dim, embed_dim], activation=nn.gelu)(x)
