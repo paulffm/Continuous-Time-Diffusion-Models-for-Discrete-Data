@@ -313,11 +313,9 @@ class GenericAux:
             writer.add_scalar("reg", reg_mean.detach(), state["n_iter"])
 
         neg_elbo = sig_mean + reg_mean
-        print("neg_elbo", type(neg_elbo), neg_elbo)
         perm_x_logits = torch.permute(x_logits, (0, 2, 1))
-
         nll = self.cross_ent(perm_x_logits, minibatch.long())
-        print("nll", type(nll), nll)
+
         return neg_elbo + self.nll_weight * nll
 
 
@@ -591,7 +589,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
     end = time.time()
-    print("get_logprob_logits time", end - start)
+    #print("get_logprob_logits time", end - start)
     return log_prob, log_xt
 
 
@@ -638,7 +636,7 @@ class HollowAux:
         weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
         loss = loss * weight
         end = time.time()
-        print("_comp_loss ", end - start)
+        #print("_comp_loss ", end - start)
         return loss
 
     def calc_loss(self, minibatch, state, writer=None):
@@ -677,11 +675,11 @@ class HollowAux:
             loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
                 1 - self.cfg.ce_coeff
             )
-        print("type")
-        print(type(loss), loss)
-        print(type(B), B)
+        #print("type")
+        #print(type(loss), loss)
+        #print(type(B), B)
             # loss type new param
         end_calc = time.time()
-        print("calc loss time", end_calc - start_calc)
+        #print("calc loss time", end_calc - start_calc)
         return torch.sum(loss) / B
         # calc loss from CondFactorizedBackwardModel
