@@ -14,9 +14,8 @@ class Standard():
     def step(self, state, minibatch, loss, writer=None):
         state['optimizer'].zero_grad()
         l = loss.calc_loss(minibatch, state, writer)
-        start_back = time.time()
-        print("Loss in train", l)
-        #print("loss train", type(l), l)
+
+        #print("Loss in train", l)
         if l.isnan().any() or l.isinf().any():
             #print("Loss is nan")
             assert False
@@ -40,7 +39,5 @@ class Standard():
             
         if writer is not None:
             writer.add_scalar('loss', l.detach(), state['n_iter'])
-        end_step = time.time()
-            
-        print("time train step", end_step - start_step)
+
         return l.detach()

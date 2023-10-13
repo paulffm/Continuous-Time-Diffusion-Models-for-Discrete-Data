@@ -640,12 +640,12 @@ class ExactSampling:
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
                 # axis kein parameter? fehler hier
                 end_opt = time.time()
-                print("sampling operations time", end_opt - start_opt)
+                #print("sampling operations time", end_opt - start_opt)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 xt = cat_dist.sample()
-                print("new_sample", xt, xt.shape)
+                #print("new_sample", xt, xt.shape)
             end_sample = time.time()
-            print("sample time", end_sample - start_sample)
+            #print("sample time", end_sample - start_sample)
             return xt.detach().cpu().numpy().astype(int)
 
 
@@ -726,7 +726,7 @@ class LBJFSampling:
                 log_posterior = torch.log(posterior + 1e-35)
                 x = torch.distributions.categorical.Categorical(log_posterior).sample()
                 end = time.time()
-                print("x sampling", x)
+                #print("x sampling", x)
                 # print("LBJF Time", end - start)
                 if t <= self.corrector_entry_time:
                     print("corrector")

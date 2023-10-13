@@ -20,7 +20,7 @@ def get_config():
     loss.name = 'HollowAux'
     config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = -0.5 # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 1 # >0 whole train_step with backward < 10 sek
     
 
     loss.eps_ratio = 1e-9
@@ -58,21 +58,21 @@ def get_config():
     
     # BiDir
     model.use_one_hot = False
-    config.embed_dim = 128
+    config.embed_dim = 64
     config.bidir_readout = "res_concat" # res_concat, attention, concat
     config.use_one_hot_input = False
     # UniDirectional
-    config.dropout_rate = 0.1
+    config.dropout_rate = 0.0
     config.concat_dim = 28 * 28 *1
     # config.dtype = torch.float32
-    config.num_layers = 2
+    config.num_layers = 4
     # TransformerBlock
     ## SA
     config.num_heads = 4
-    config.attention_dropout_rate = 0.1
+    config.attention_dropout_rate = 0.0
     config.transformer_norm_type = "postnorm" # prenorm
     ## FF
-    config.mlp_dim = 1024 # d_model in TAU => embed_dim?
+    config.mlp_dim = 256 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     config.out_dim = data.S
     # ConcatReadout

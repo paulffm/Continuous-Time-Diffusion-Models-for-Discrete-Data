@@ -429,14 +429,15 @@ class UniDirectionalTransformer(nn.Module):
             x = torch.cat(
                 [conditioner, x[:, :-1]], dim=1
             )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E
-            mask = torch.triu(
-                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1
-            )
+            mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1) # right mask
+
+
+            #mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)
-            mask = torch.tril(
-                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1
-            )
+            mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1) # right mask
+
+            #mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
 
         # equivalent to Positional encoding: yes d_model =x.size(2) = config.embed_dim
         #x = x + self.pos_embed
@@ -448,6 +449,10 @@ class UniDirectionalTransformer(nn.Module):
             x = self.trans_block(x, masks=mask)
         return x
 
+def normalize_input(x, S):
+    x = x/S # (0, 1)
+    x = x*2 - 1 # (-1, 1)
+    return x
 
 class BidirectionalTransformer(nn.Module):
     def __init__(self, config, readout_dim=None):
@@ -501,8 +506,8 @@ class BidirectionalTransformer(nn.Module):
         )
 
     def forward(self, x, t):
-        # temb = self.temb_net(transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2)))  # B, E
-        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
+        temb = self.temb_net(transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2)))  # B, E
+        # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
         # way to use disrupt ordinality?
         if self.use_one_hot:
@@ -510,6 +515,7 @@ class BidirectionalTransformer(nn.Module):
             x_embed = self.input_embedding(x_one_hot)
 
         else:
+            x = normalize_input(x, self.S)
             x_embed = self.embedding(x)
 
         input_shape = list(x_embed.shape)[:-1]
