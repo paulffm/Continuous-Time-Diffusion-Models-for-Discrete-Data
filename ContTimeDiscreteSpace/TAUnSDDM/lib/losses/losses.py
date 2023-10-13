@@ -645,6 +645,7 @@ class HollowAux:
         start_calc = time.time()
         model = state["model"]
         S = self.cfg.data.S
+        print("S in Loss", S)
         # if 4 Dim => like images: True
         if len(minibatch.shape) == 4:
             B, C, H, W = minibatch.shape
@@ -654,15 +655,16 @@ class HollowAux:
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
         qt0 = model.transition(ts)  # (B, S, S)
-
+        print("qt0", qt0.shape)
         # rate = model.rate(ts)  # (B, S, S)
 
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
         qt0 = qt0[b, minibatch.long()]
+        print("qt0 expand ", qt0.shape)
         # log loss
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(logits=log_qt0).sample() # bis hierhin <1 sek
-        print("xt", xt)
+        print("xt", xt, xt.shape)
         # get logits from CondFactorizedBackwardModel
         logits = model(xt, ts)  # B, D, S <10 sek
         # check

@@ -1,16 +1,16 @@
+
+
+
 import ml_collections
 import torch
 def get_config():
-    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/' # '../../SavedModels/MNIST/'
+    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/BIN-MNIST/' #../../SavedModels/MNIST/'
     dataset_path = '../lib/datasets'
 
 
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = 'mnist'
     config.save_location = save_directory
-
-    config.init_model_path = None
 
     config.device = 'cpu'
     config.distributed = False
@@ -18,9 +18,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = -0.1 # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = -0.5 # >0 whole train_step with backward < 10 sek
     
 
     loss.eps_ratio = 1e-9
@@ -38,16 +38,16 @@ def get_config():
     training.resume = True 
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = 'DiscreteMNIST'
+    data.name = 'BINMNIST'
     data.root = dataset_path
     data.train = True
     data.download = True
-    data.S = 256
-    data.batch_size = 32 # use 128 if you have enough memory or use distributed
+    data.S = 2
+    data.batch_size = 64 # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.shape = [1,32,32]
+    data.shape = [1,28,28]
     data.random_flips = True
-    data.image_size = 32
+    data.image_size = 28
 
     config.model = model = ml_collections.ConfigDict()
     model.name = 'UniformBDTEMA'
@@ -58,14 +58,14 @@ def get_config():
     
     # BiDir
     model.use_one_hot = False
-    config.embed_dim = 512
-    config.bidir_readout = "concat" # res_concat, attention, concat
+    config.embed_dim = 128
+    config.bidir_readout = "res_concat" # res_concat, attention, concat
     config.use_one_hot_input = False
     # UniDirectional
     config.dropout_rate = 0.1
-    config.concat_dim = 32 * 32 *1
+    config.concat_dim = 28 * 28 *1
     # config.dtype = torch.float32
-    config.num_layers = 1
+    config.num_layers = 2
     # TransformerBlock
     ## SA
     config.num_heads = 4
@@ -81,7 +81,7 @@ def get_config():
     # features, activation
 
     # ResidualReadout
-    config.num_output_ffresiduals = 1
+    config.num_output_ffresiduals = 2
 
     # AttentionReadout
     ## CrossAttention
@@ -145,7 +145,7 @@ def get_config():
     optimizer.lr = 2e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
+    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/BIN-MNIST/PNGs'
     saving.checkpoint_freq = 5
 
 
@@ -158,6 +158,10 @@ def get_config():
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.00
+
     sampler.sample_freq = 2
 
     return config
+
+
+

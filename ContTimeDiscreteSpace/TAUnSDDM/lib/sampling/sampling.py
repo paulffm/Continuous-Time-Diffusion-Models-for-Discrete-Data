@@ -702,14 +702,12 @@ class LBJFSampling:
                 h = ts[idx] - ts[idx + 1]
                 start = time.time()
                 # p_theta(x_0|x_t) ?
-                # in HollowModel: get_logits = model()
-                # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
 
                 # stellt sich frage:
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 logits = model(x, t * torch.ones((N,), device=device))
                 ll_all, ll_xt = get_logprob_with_logits(
-                    cfg=self.cfg, model=model, xt=x, t=t, logits=logits
+                    cfg=self.cfg, model=model, xt=x, t=t * torch.ones((N,)), logits=logits
                 )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)

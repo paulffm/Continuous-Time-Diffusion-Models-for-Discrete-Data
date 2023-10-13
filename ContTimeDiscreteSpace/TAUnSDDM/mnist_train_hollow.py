@@ -3,7 +3,7 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow import get_config
+from config.config_bin_hollow import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os 
@@ -23,9 +23,10 @@ import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import time
+from torch.utils.data import DataLoader
 from lib.datasets.datasets import (
     create_train_discrete_mnist_dataloader,
-    create_train_discrete_cifar10_dataloader,
+    get_binmnist_datasets,
 )
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
@@ -40,7 +41,7 @@ def main():
         bookkeeping.save_config(cfg, cfg.save_location)
    
     else:
-        path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
+        path = cfg.save_location
         date = '2023-09-08'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)
@@ -62,8 +63,10 @@ def main():
     sampler = sampling_utils.get_sampler(cfg)
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
-
-    dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
+    
+    # dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
+    train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
+    dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
         checkpoint_path = 'SavedModels/MNIST/'
@@ -113,7 +116,7 @@ def main():
             ):
                 state["model"].eval()
                 samples = sampler.sample(state["model"], n_samples, 10)
-                samples = samples.reshape(n_samples, 1, 32, 32)
+                samples = samples.reshape(n_samples, 1, cfg.data.image_size, cfg.data.image_size)
                 #x_hist = x_hist.reshape(10, n_samples, 1, 32, 32)
                 #x0_hist = x0_hist.reshape(10, n_samples, 1, 32, 32)
                 state["model"].train()
@@ -137,9 +140,10 @@ def main():
         if exit_flag:
             break
 
+    saving_train_path = os.path.join(cfg.saving.sample_plot_path, f"training_loss_hollow_{state['n_iter']}.png")
     plt.plot(training_loss)
     plt.title("Training loss")
-    plt.savefig("/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs/training_loss_hollow.png")
+    plt.savefig(saving_train_path)
     plt.close()
 
 

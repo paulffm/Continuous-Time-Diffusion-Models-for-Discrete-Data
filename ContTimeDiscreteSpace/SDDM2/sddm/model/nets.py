@@ -309,7 +309,7 @@ class MaskedTransformer(nn.Module):
     config = self.config
 
     # fügt eine dim hinzu: B, D => B, D, emb
-    x = nn.Embed(config.vocab_size + 1, config.embed_dim)(x)
+    x = nn.Embed(config.vocab_size + 1, config.embed_dim)(x) #, B, D, E
 
     # für TransformerEncoder muss x 3dim sein 
     embed = TransformerEncoder(config)(x, temb)
