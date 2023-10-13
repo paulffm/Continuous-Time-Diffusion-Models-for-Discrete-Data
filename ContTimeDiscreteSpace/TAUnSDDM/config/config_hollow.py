@@ -87,6 +87,9 @@ def get_config():
     ## CrossAttention
     config.qkv_dim = config.embed_dim
     #config.num_heads = 4
+    model.ema_decay = 0.9999 #0.9999
+    model.Q_sigma = 20.0
+    model.time_scale_factor = 1000
     
     """
     model.num_layers = 6
@@ -113,9 +116,8 @@ def get_config():
     """
     # unet
 
-
+    """
     model.rate_const = 0.03
-
     model.ch = 32 #128
     model.num_res_blocks = 2
     model.num_scales = 4
@@ -131,7 +133,7 @@ def get_config():
     model.ema_decay = 0.9999 #0.9999
     model.model_output = "logistic_pars"
     model.Q_sigma = 512.0
-    """
+    
     model.rate_sigma = 6.0
     model.Q_sigma = 512.0
     model.time_exponential = 100.0
@@ -143,7 +145,7 @@ def get_config():
     optimizer.lr = 2e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST/PNGs'
+    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
     saving.checkpoint_freq = 5
 
 

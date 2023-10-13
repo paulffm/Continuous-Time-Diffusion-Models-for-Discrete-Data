@@ -144,7 +144,8 @@ class HollowModel(backward_model.CondFactorizedBackwardModel):
     def __init__(self, config):
         super(HollowModel, self).__init__(config)
         if "bidir" in config.net_arch and "transformer" in config.net_arch:
-            # self.net = BidirectionalTransformer(config)
+            self.net = BidirectionalTransformer(config)
+            """
             self.net = UNet(
                 shape=config.unet_data_shape,
                 num_classes=config.unet_num_classes,
@@ -159,6 +160,7 @@ class HollowModel(backward_model.CondFactorizedBackwardModel):
                 max_time=config.unet_max_time,
                 num_pixel_vals=config.vocab_size,
             )
+            """
         elif config.net_arch == "enum_transformer":
             self.net = EnumerativeTransformer(config)
         else:

@@ -398,10 +398,10 @@ class UniDirectionalTransformer(nn.Module):
             x = torch.cat(
                 [conditioner, x[:, :-1]], dim=1
             )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E
-            mask = torch.triu(torch.ones((concat_dim, concat_dim)), diagonal=1).bool()
+            mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)
-            mask = torch.tril(torch.ones((concat_dim, concat_dim)), diagonal=-1).bool()
+            mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
 
         # equivalent to Positional encoding: yes d_model =x.size(2) = config.embed_dim
         x = x + self.pos_embed

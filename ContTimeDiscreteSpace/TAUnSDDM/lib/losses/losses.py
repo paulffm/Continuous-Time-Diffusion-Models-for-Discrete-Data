@@ -590,6 +590,8 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
     end = time.time()
     #print("get_logprob_logits time", end - start)
+    print("log_prob=ll_all", log_prob, log_prob.shape)
+    print("log_xt = ll_xt", log_xt, log_xt.shape)
     return log_prob, log_xt
 
 
@@ -658,11 +660,13 @@ class HollowAux:
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
         qt0 = qt0[b, minibatch.long()]
         # log loss
-        logits = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.distributions.categorical.Categorical(logits=logits).sample() # bis hierhin <1 sek
+        log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = torch.distributions.categorical.Categorical(logits=log_qt0).sample() # bis hierhin <1 sek
+        print("xt", xt)
         # get logits from CondFactorizedBackwardModel
         logits = model(xt, ts)  # B, D, S <10 sek
         # check
+        print("logits net", logits)
         # ce_coeff < 0
         if self.cfg.ce_coeff > 0: # whole train step <10 sek
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)

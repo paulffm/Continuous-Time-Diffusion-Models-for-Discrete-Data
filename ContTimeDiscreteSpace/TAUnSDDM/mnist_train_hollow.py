@@ -139,7 +139,7 @@ def main():
 
     plt.plot(training_loss)
     plt.title("Training loss")
-    plt.savefig("SavedModels/MNIST/PNGs/training_loss_hollow.png")
+    plt.savefig("/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs/training_loss_hollow.png")
     plt.close()
 
 

@@ -149,6 +149,6 @@ class CondFactorizedBackwardModel(BackwardModel):
         loss = jnp.sum(loss) / xt.shape[0]
         aux = {"loss": loss}
         end = time.time()
-        print("loss ", type(loss), loss)
-        print("loss time", end - start)
+        #print("loss ", type(loss), loss)
+        #print("loss time", end - start)
         return loss, aux

@@ -38,7 +38,7 @@ class ConcatReadout(nn.Module):
     def __call__(self, l2r_embed, r2l_embed, _):
         config = self.config
         state = jnp.concatenate([l2r_embed, r2l_embed], axis=-1)
-        print("COncatReadout")
+        #print("COncatReadout")
         out_dim = self.readout_dim
         if out_dim == 0:
             out_dim = config.vocab_size
@@ -58,7 +58,7 @@ class ResidualReadout(nn.Module):
         config = self.config
         embed_dim = x.shape[-1]
         temb = MLP([config.mlp_dim, 4 * temb.shape[1]], activation=nn.gelu)(temb)
-        print("ResReadout")
+        #print("ResReadout")
         for _ in range(config.num_output_ffresiduals):
             film_params = nn.Dense(2 * embed_dim)(temb)
             z = MLP([config.mlp_dim, embed_dim], activation=nn.gelu)(x)
@@ -118,7 +118,7 @@ class TransformerMlpBlock(nn.Module):
 
     @nn.compact
     def __call__(self, inputs):
-        # inputs shape: B, D-1 + 2E , E
+        # inputs shape: B, D, E
         """Applies Transformer MlpBlock module."""
         actual_out_dim = inputs.shape[-1] if self.out_dim is None else self.out_dim
         x = nn.Dense(
@@ -354,7 +354,7 @@ class UniDirectionalTransformer(nn.Module):
             conditioner = temb
         else:
             conditioner = jnp.concatenate([conditioner, temb], axis=1) # B, 2E
-        print("UNI")
+        # print("UNI")
         config = self.config
         cond_dim = conditioner.shape[1] # 2E
         concat_dim = x.shape[1] + cond_dim - 1 # concat_dim = D + 2E - 1
@@ -367,12 +367,12 @@ class UniDirectionalTransformer(nn.Module):
             x = jnp.concatenate([x[:, 1:], conditioner], axis=1) # B,(D−1)+2E,E)
             mask = nn.attention.make_attention_mask(pos_idx, pos_idx, jnp.less_equal)
             mask = mask.at[:, :, -cond_dim:, -cond_dim:].set(1.0)
-        print("Concat in uni")
+        #print("Concat in uni")
         pos_embed = self.param(
             "pos_embed",
             nn.initializers.xavier_uniform(),
             (1, concat_dim, x.shape[2]),
-            config.dtype,   # 1, D + 2E -1 
+            config.dtype,   # 
         )
         x = x + pos_embed
         x = nn.Dropout(config.dropout_rate)(
@@ -383,8 +383,7 @@ class UniDirectionalTransformer(nn.Module):
                 x, masks=mask
             )
         # cond_dim = emb_dim
-        return x  # shape:  B, (D-1) + 2E, E
-
+        return x  # shape:  B, (
 
 
 class UNet:

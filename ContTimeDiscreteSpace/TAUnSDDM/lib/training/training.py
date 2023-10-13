@@ -15,6 +15,7 @@ class Standard():
         state['optimizer'].zero_grad()
         l = loss.calc_loss(minibatch, state, writer)
         start_back = time.time()
+        print("Loss in train", l)
         #print("loss train", type(l), l)
         if l.isnan().any() or l.isinf().any():
             #print("Loss is nan")

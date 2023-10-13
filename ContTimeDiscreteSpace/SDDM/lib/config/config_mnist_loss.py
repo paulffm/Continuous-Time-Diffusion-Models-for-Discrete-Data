@@ -10,10 +10,10 @@ def get_config():
     config.data_aug = False
 
     # forward
-    config.uniform_rate_const = 0.01 # 0.007
+    config.uniform_rate_const = 0.01  # 0.007
     config.vocab_size = 256
     config.t_func = "sqrt_cos"  # univariant
-    config.diffuse_type = "uniform"#_variant" # uniform_variant
+    config.diffuse_type = "uniform"  # _variant" # uniform_variant
 
     # gaussian forward rate
     config.rate_sigma = 6.0
@@ -30,31 +30,31 @@ def get_config():
     config.loss_type = "rm"
 
     # model
-    config.model_type = "hollow" #, 'cond_hollow, ebm
-    config.net_arch = 'bidir_transformer'
-    """
+    config.model_type = "hollow"  # , 'cond_hollow, ebm
+    config.net_arch = "bidir_transformer"
+
     # for hollow and 'cond_hollow: bidir_transformer or enum_transformer
-    
+
     # bidir_transformer inputs:
-    config.bidir_readout = 'res_concat'
+    config.bidir_readout = "concat"  # res_concat
     config.conditional_dim = 0
     config.embed_dim = 512
-    
+
     config.mlp_dim = 256
-    config.num_output_ffresiduals = 2
-    config.transformer_norm_type = 'prenorm'
-    config.num_heads = 4
-    config.qkv_dim = 64
+    config.num_output_ffresiduals = 1
+    config.transformer_norm_type = "prenorm"
+    config.num_heads = 2
+    config.qkv_dim = 256
     config.attention_dropout_rate = 0.0
     config.dropout_deterministic = False
     config.dropout_rate = 0.0
-    config.num_layers = 2
-    config.readout = 'mlp'
+    config.num_layers = 1
+    config.readout = "mlp"
 
-    """
     # enum_transformer
 
     # unet
+    """
     config.unet_dim = 32
     config.unet_data_shape = (config.image_size, config.image_size, 1)
     config.unet_outdim = 1
@@ -69,27 +69,25 @@ def get_config():
     config.unet_dropout = 0
     """
     # for ebm: if config.vocab_size > 2: automatic CatScoreMLP takes following inputs:
-    
+
     config.vocab_size = 256
     config.cat_embed_size = 512
-    config.num_layers = 2
-    config.embed_dim = 512 # hidden_size
-    """
+
     config.time_scale_factor = 1000
 
     # optimizer
     config.lr_schedule = "constant"
-    config.learning_rate = 1e-4 #1e-4
+    config.learning_rate = 1e-4  # 1e-4
     config.warmup_frac = 0.00
-    config.optimizer = 'adam' #"adamw"
+    config.optimizer = "adam"  # "adamw"
     config.weight_decay = 0
-    config.grad_norm = 5 #5
+    config.grad_norm = 5  # 5
 
     # training
-    config.total_train_steps = 1 #000 # 1000
+    config.total_train_steps = 1  # 000 # 1000
     config.phase = "train"
-    config.sample_freq = 2 #000 #00
-    config.checkpoint_freq = 2#00 #00
+    config.sample_freq = 2  # 000 #00
+    config.checkpoint_freq = 2  # 00 #00
 
     # saving
     config.save_dir = "SavedModels/MNIST"  #
@@ -108,9 +106,9 @@ def get_config():
 
     # sampler
     # config.plot_sample = 4096
-    config.sampling_steps = 2 #1000  # 1000 #400 # mabye 10000
+    config.sampling_steps = 2  # 1000  # 1000 #400 # mabye 10000
     config.corrector_scale = 1.0
-    config.corrector_steps = 0 #0 #10
+    config.corrector_steps = 0  # 0 #10
     config.sampler_type = "lbjf"
 
     # nets
