@@ -12,7 +12,7 @@ import torch.autograd.profiler as profiler
 import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 from lib.networks.hollow import BidirectionalTransformer
-
+from lib.utils import utils
 
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, use_net: bool = True, rank=None):
@@ -333,6 +333,62 @@ class UniformRate:
         return self.transition(t2 - t1)
 
 
+class UniformVariantRate(UniformRate):
+    """Variants of uniform."""
+
+    def __init__(self, config, device):
+        super(UniformVariantRate, self).__init__(config, device)
+        self.t_func = config.model.t_func
+
+    def _integral(self, t):
+        if self.t_func == "log_sqr":
+            return torch.log(t**2 + 1)
+        elif self.t_func == "sqrt_cos":
+            return -torch.sqrt(torch.cos(torch.pi / 2 * t))
+        else:
+            raise ValueError("Unknown t_func %s" % self.t_func)
+
+    def _rate(self, t):
+        if self.t_func == "log_sqr":
+            return 2 * t / (t**2 + 1)
+        elif self.t_func == "sqrt_cos":
+            t = torch.pi / 2 * t
+            tmp = torch.sin(t) / torch.sqrt(torch.cos(t))
+            return torch.pi / 4.0 * tmp
+        else:
+            raise ValueError("Unknown t_func %s" % self.t_func)
+
+    def rate(self, t):
+        rate_scalars = self._rate(t).view(t.size(0), 1, 1)
+        base = self.rate_matrix.t().view(1, self.S, self.S)
+        r = base * rate_scalars
+        return r
+
+    def rate_mat(self, y, t):
+        r = self.rate(t)
+        bidx = utils.expand_dims(
+            torch.arange(t.size(0)), axis=tuple(range(1, y.dim()))
+        )
+        result = r[bidx, y]
+        return result
+
+    def transit_between(self, t1, t2):
+        B = t2.size(0)
+        d_integral = self._integral(t2) - self._integral(t1)
+
+        transitions = (
+            self.eigvecs.view(1, self.S, self.S)  # Q
+            @ torch.diag_embed(
+                torch.exp(self.eigvals.view(1, self.S) * d_integral.view(B, 1))
+            )  
+            @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
+        )
+        return transitions
+
+    def transition(self, t):
+        # difference to jnp => they give only 0
+        return self.transit_between(torch.zeros_like(t), t)
+
 class GaussianTargetRate:
     def __init__(self, cfg, device):
         self.S = S = cfg.data.S
@@ -619,6 +675,14 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniformVariantBDTEMA(EMA, BidirectionalTransformer, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BidirectionalTransformer.__init__(self, cfg)
+        UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 @model_utils.register_model
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):

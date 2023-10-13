@@ -39,7 +39,9 @@ def main():
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, cfg.save_location)
-   
+
+    
+
     else:
         path = cfg.save_location
         date = '2023-09-08'
@@ -48,7 +50,7 @@ def main():
 
         cfg = bookkeeping.load_config(config_path)
     
-
+    print(cfg.model.t_func)
     device = torch.device(cfg.device)
 
     model = model_utils.create_model(cfg, device)

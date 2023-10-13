@@ -18,7 +18,7 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
     config.ce_coeff = 1 # >0 whole train_step with backward < 10 sek
     
@@ -31,7 +31,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 1 #2000 #2000000
+    training.n_iters = 1000 #000 #2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5 # 1
@@ -52,9 +52,12 @@ def get_config():
     data.image_size = 28
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = 'UniformBDTEMA'
+    model.name = 'UniformVariantBDTEMA'
 
+    # Forward model
     model.rate_const = 0.01
+    model.t_func = "log_sqr" # log_sqr
+
     # hollow:
     config.net_arch = "bidir_transformer"
     
@@ -72,7 +75,7 @@ def get_config():
     ## SA
     config.num_heads = 4
     config.attention_dropout_rate = 0.0
-    config.transformer_norm_type = "postnorm" # prenorm
+    config.transformer_norm_type = "prenorm" # prenorm
     ## FF
     config.mlp_dim = 256 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
@@ -144,16 +147,16 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = 'Adam'
-    optimizer.lr = 2e-4 #2e-4
+    optimizer.lr = 1e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/BIN-MNIST/PNGs'
-    saving.checkpoint_freq = 5
+    saving.checkpoint_freq = 150
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = 'LBJFSampling' # TauLeaping or PCTauLeaping
-    sampler.num_steps = 2
+    sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = 'uniform'
@@ -161,7 +164,7 @@ def get_config():
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.00
 
-    sampler.sample_freq = 2
+    sampler.sample_freq = 500
 
     return config
 
