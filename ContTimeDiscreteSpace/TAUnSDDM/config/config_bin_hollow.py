@@ -34,6 +34,8 @@ def get_config():
     training.n_iters = 1 #2000 #2000000
 
     training.clip_grad = True
+    training.grad_norm = 5 # 1
+
     training.warmup = 0 #50 # 5000
     training.resume = True 
 

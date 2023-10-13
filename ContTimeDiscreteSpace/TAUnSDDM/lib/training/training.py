@@ -8,6 +8,7 @@ class Standard():
     def __init__(self, cfg):
         self.do_ema = 'ema_decay' in cfg.model
         self.clip_grad = cfg.training.clip_grad
+        self.grad_norm = cfg.training.grad_norm
         self.warmup = cfg.training.warmup
         self.lr = cfg.optimizer.lr
 
@@ -24,7 +25,7 @@ class Standard():
         #print("backwards", end_back - start_back)
         start_step = time.time()
         if self.clip_grad:
-            torch.nn.utils.clip_grad_norm_(state['model'].parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(state['model'].parameters(), self.grad_norm)
 
 
         if self.warmup > 0:

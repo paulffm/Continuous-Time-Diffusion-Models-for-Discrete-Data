@@ -495,7 +495,9 @@ class BidirectionalTransformer(nn.Module):
         if self.config.use_one_hot_input:
             self.input_embedding = nn.Linear(self.S, config.embed_dim)
         else:
-            self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+            #self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+            # if i normalize i cant use embedding
+            self.input_embedding = nn.Linear(1, config.embed_dim)
 
         # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
         # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
@@ -516,7 +518,8 @@ class BidirectionalTransformer(nn.Module):
 
         else:
             x = normalize_input(x, self.S)
-            x_embed = self.embedding(x)
+            x = x.unsqueeze(-1)
+            x_embed = self.input_embedding(x)
 
         input_shape = list(x_embed.shape)[:-1]
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
