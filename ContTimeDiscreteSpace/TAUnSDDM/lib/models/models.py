@@ -306,6 +306,7 @@ class UniformRate:
         )  # dimension from 1, S, S to B, S, S
 
     def rate_mat(self, y, t):
+        del t
         return self.rate_matrix[y]
 
     # func usvt from forward model

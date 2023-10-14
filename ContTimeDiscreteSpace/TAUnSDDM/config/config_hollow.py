@@ -18,9 +18,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = 1 # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 0 # >0 whole train_step with backward < 10 sek
     
 
     loss.eps_ratio = 1e-9
@@ -31,7 +31,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 20 #2000 #2000000
+    training.n_iters = 2 #2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5 # 1
@@ -46,7 +46,7 @@ def get_config():
     data.S = 256
     data.batch_size = 32 # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.image_size = 24
+    data.image_size = 28
     data.shape = [1,data.image_size,data.image_size]
     data.use_augm = False
     
@@ -92,7 +92,27 @@ def get_config():
     model.ema_decay = 0.9999 #0.9999
     model.Q_sigma = 20.0
     model.time_scale_factor = 1000
-    
+
+    config.optimizer = optimizer = ml_collections.ConfigDict()
+    optimizer.name = 'Adam'
+    optimizer.lr = 1.5e-4 #2e-4
+
+    config.saving = saving = ml_collections.ConfigDict()
+    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
+    saving.checkpoint_freq = 5
+
+
+    config.sampler = sampler = ml_collections.ConfigDict()
+    sampler.name = 'TauLeaping' # TauLeaping or PCTauLeaping
+    sampler.num_steps = 2
+    sampler.min_t = 0.01
+    sampler.eps_ratio = 1e-9
+    sampler.initial_dist = 'uniform'
+    sampler.num_corrector_steps = 10
+    sampler.corrector_step_size_multiplier = 1.5
+    sampler.corrector_entry_time = 0.00
+    sampler.sample_freq = 20
+
     """
     model.num_layers = 6
     model.d_model = 256
@@ -117,7 +137,6 @@ def get_config():
     model.sigma_max = 100.0
     """
     # unet
-
     """
     model.rate_const = 0.03
     model.ch = 32 #128
@@ -141,25 +160,5 @@ def get_config():
     model.time_exponential = 100.0
     model.time_base = 3.0
     """
-
-    config.optimizer = optimizer = ml_collections.ConfigDict()
-    optimizer.name = 'Adam'
-    optimizer.lr = 1.5e-4 #2e-4
-
-    config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
-    saving.checkpoint_freq = 5
-
-
-    config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = 'TauLeaping' # TauLeaping or PCTauLeaping
-    sampler.num_steps = 2
-    sampler.min_t = 0.01
-    sampler.eps_ratio = 1e-9
-    sampler.initial_dist = 'uniform'
-    sampler.num_corrector_steps = 10
-    sampler.corrector_step_size_multiplier = 1.5
-    sampler.corrector_entry_time = 0.00
-    sampler.sample_freq = 20
 
     return config

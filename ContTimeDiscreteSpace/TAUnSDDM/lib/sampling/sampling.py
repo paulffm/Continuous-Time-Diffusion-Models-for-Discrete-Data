@@ -709,18 +709,18 @@ class LBJFSampling:
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-                start = time.time()
                 # p_theta(x_0|x_t) ?
 
                 # stellt sich frage:
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 logits = model(x, t * torch.ones((N,), device=device))
+
                 ll_all, ll_xt = get_logprob_with_logits(
                     cfg=self.cfg, model=model, xt=x, t=t * torch.ones((N,)), logits=logits
                 )
 
-                log_weight = ll_all - ll_xt.unsqueeze(-1)
-                fwd_rate = model.rate_mat(x, t * torch.ones((N,)))
+                log_weight = ll_all - ll_xt.unsqueeze(-1) # B, D, S - B, D, 1
+                fwd_rate = model.rate_mat(x, t * torch.ones((N,))) # B, D, S?
 
                 xt_onehot = F.one_hot(x, self.S)
 
@@ -734,9 +734,7 @@ class LBJFSampling:
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35)
                 x = torch.distributions.categorical.Categorical(log_posterior).sample()
-                end = time.time()
-                #print("x sampling", x)
-                # print("LBJF Time", end - start)
+
                 """
                 if t <= self.corrector_entry_time:
                     print("corrector")

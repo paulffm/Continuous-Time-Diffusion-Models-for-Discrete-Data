@@ -45,7 +45,6 @@ def main():
         date = "2023-09-08"
         config_name = "config_001.yaml"
         config_path = os.path.join(path, date, config_name)
-
         cfg = bookkeeping.load_config(config_path)
 
     device = torch.device(cfg.device)
@@ -63,7 +62,7 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     dataloader = create_train_discrete_mnist_dataloader(
-        batch_size=32, image_size=cfg.data.image_size, use_augmentation=cfg.data.use_augm
+        batch_size=cfg.data.batch_size, image_size=cfg.data.image_size, use_augmentation=cfg.data.use_augm
     )
     # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
@@ -99,18 +98,11 @@ def main():
     training_loss = []
     exit_flag = False
     while True:
-        # for minibatch, _ in tqdm(dataloader):
         for minibatch, _ in tqdm(dataloader):
-            # print("minibatch", minibatch, minibatch.shape)
-            start_train = time.time()
             l = training_step.step(state, minibatch, loss)
-            end_train = time.time()
-            print("train_step", end_train - start_train)
-            # print("Loss:", l.item())
+
             training_loss.append(l.item())
-            # print('ter', state["n_iter"])
-            # print(state["n_iter"] % cfg.saving.checkpoint_freq)
-            # just to save model
+
             if (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
@@ -125,8 +117,7 @@ def main():
                 samples = samples.reshape(
                     n_samples, 1, cfg.data.image_size, cfg.data.image_size
                 )
-                # x_hist = x_hist.reshape(10, n_samples, 1, 32, 32)
-                # x0_hist = x0_hist.reshape(10, n_samples, 1, 32, 32)
+
                 state["model"].train()
 
                 fig = plt.figure(figsize=(9, 9))
