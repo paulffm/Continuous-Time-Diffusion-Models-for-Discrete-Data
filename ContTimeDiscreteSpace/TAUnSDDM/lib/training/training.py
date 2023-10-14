@@ -21,9 +21,6 @@ class Standard():
             #print("Loss is nan")
             assert False
         l.backward()
-        end_back = time.time()
-        #print("backwards", end_back - start_back)
-        start_step = time.time()
         if self.clip_grad:
             torch.nn.utils.clip_grad_norm_(state['model'].parameters(), self.grad_norm)
 

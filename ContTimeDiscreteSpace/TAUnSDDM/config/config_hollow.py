@@ -31,7 +31,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 1 #2000 #2000000
+    training.n_iters = 20 #2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5 # 1
@@ -48,7 +48,7 @@ def get_config():
     data.shuffle = True
     data.image_size = 24
     data.shape = [1,data.image_size,data.image_size]
-    data.random_flips = True
+    data.use_augm = False
     
 
     config.model = model = ml_collections.ConfigDict()
@@ -60,10 +60,9 @@ def get_config():
     config.net_arch = "bidir_transformer"
     
     # BiDir
-    model.use_one_hot = False
     config.embed_dim = 512
     config.bidir_readout = "res_concat" # res_concat, attention, concat
-    config.use_one_hot_input = False
+    config.model.use_one_hot_input = False
     # UniDirectional
     config.dropout_rate = 0.1
     config.concat_dim = data.image_size * data.image_size * 1
@@ -145,7 +144,7 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = 'Adam'
-    optimizer.lr = 2e-4 #2e-4
+    optimizer.lr = 1.5e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
@@ -153,7 +152,7 @@ def get_config():
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = 'LBJFSampling' # TauLeaping or PCTauLeaping
+    sampler.name = 'TauLeaping' # TauLeaping or PCTauLeaping
     sampler.num_steps = 2
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
@@ -161,6 +160,6 @@ def get_config():
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.00
-    sampler.sample_freq = 2
+    sampler.sample_freq = 20
 
     return config

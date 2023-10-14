@@ -79,6 +79,7 @@ class TauLeaping:
         self.initial_dist = cfg.sampler.initial_dist
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.eps_ratio = cfg.sampler.eps_ratio
 
     def sample(self, model, N, num_intermediates):
         # in init

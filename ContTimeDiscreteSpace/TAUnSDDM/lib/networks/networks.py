@@ -691,8 +691,6 @@ class SinusoidalPosEmb(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-
-
         Args:
             x (torch.Tensor): Shape (Batch_size, 1)
 

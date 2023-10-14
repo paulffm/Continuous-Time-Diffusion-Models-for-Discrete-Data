@@ -151,6 +151,7 @@ def cross_attention(config, l2r_embed, r2l_embed, temb):
   all_embed = jnp.concatenate([temb, l2r_embed, r2l_embed], axis=1)
   key = dense(name='key')(all_embed)
   val = dense(name='val')(all_embed)
+  
   query = query / jnp.sqrt(query.shape[-1]).astype(config.dtype)
   logits = jnp.einsum('bqhd,bkhd->bhqk', query, key)
 

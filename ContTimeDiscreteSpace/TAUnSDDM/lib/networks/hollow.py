@@ -11,6 +11,7 @@ import torch.nn.init as init
 import functorch
 from torchtyping import TensorType
 
+
 class MLP(nn.Module):
     def __init__(self, features, activation=nn.ReLU):
         super(MLP, self).__init__()
@@ -155,34 +156,54 @@ class CrossAttention(nn.Module):
     def __init__(self, config):
         super(CrossAttention, self).__init__()
         self.config = config
-        self.head_dim = config.qkv_dim // config.num_heads
-        self.dense = nn.Linear(
+        self.num_heads = config.num_heads
+        self.head_dim = config.qkv_dim // config.num_heads  #
+        self.dense_query = nn.Linear(
             config.qkv_dim, config.num_heads * self.head_dim, bias=False
         )
+        self.dense_key = nn.Linear(config.qkv_dim, self.num_heads * self.head_dim)
+        self.dense_val = nn.Linear(config.qkv_dim, self.num_heads * self.head_dim)
 
         self.out_linear = nn.Linear(config.qkv_dim, config.embed_dim)
 
     def forward(self, l2r_embed, r2l_embed, temb):
         seq_len = l2r_embed.shape[1]
-        temb = temb.unsqueeze(1)
+        temb = temb.unsqueeze(1)  # B, 1, D
 
-        query = self.dense(l2r_embed + r2l_embed)
-        all_embed = torch.cat([temb, l2r_embed, r2l_embed], dim=1)
-        key = self.dense(all_embed)
-        val = self.dense(all_embed)
+        query = self.dense_query(l2r_embed + r2l_embed).view(
+            l2r_embed.size(0), l2r_embed.size(1), self.num_heads, self.head_dim
+        )  # B, D, E => B, D, E
+        all_embed = torch.cat([temb, l2r_embed, r2l_embed], dim=1)  # B, 2D + 1, E
+
+        key = self.dense_key(all_embed).view(
+            all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim
+        )
+        val = self.dense_val(all_embed).view(
+            all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim
+        )
 
         query = query / torch.sqrt(torch.tensor(query.shape[-1], dtype=torch.float32))
         logits = torch.einsum("bqhd,bkhd->bhqk", query, key)
+        # logits = torch.einsum("bqe,bke->bkq", query, key) # without view
+        
 
-        idx = torch.arange(seq_len, dtype=torch.int32)
-        att_l2r_mask = torch.ge(idx.unsqueeze(-1), idx.unsqueeze(-2))
-        att_r2l_mask = torch.le(idx.unsqueeze(-1), idx.unsqueeze(-2))
+        att_l2r_mask = torch.triu(
+            torch.ones((seq_len, seq_len), dtype=torch.bool), diagonal=1
+        ).unsqueeze(0)
+        att_r2l_mask = torch.tril(
+            torch.ones((seq_len, seq_len), dtype=torch.bool), diagonal=-1
+        ).unsqueeze(0)
         att_t = torch.ones((1, seq_len, 1))
-        joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(0)
+
+        joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(
+            0
+        )  # 1, 1, seq_len, 2 * seq_len + 1
         attn_weights = torch.where(joint_mask, logits, torch.finfo(torch.float32).min)
         attn_weights = F.softmax(attn_weights, dim=-1)
 
-        x = torch.einsum("bhqk,bkhd->bqhd", attn_weights, val)
+        x = torch.einsum("bhqk,bkhd->bqhd", attn_weights, val) # B, D, self.num_heads, self.head_dim
+        # x = torch.einsum("bkq,bke->bqe", attn_weights, val) # without view
+        x = x.view(x.shape[0], x.shape[1], self.num_heads * self.head_dim)
         x = self.out_linear(x)
         return x
 
@@ -198,7 +219,7 @@ class AttentionReadout(nn.Module):
         self.ln2 = nn.LayerNorm(config.embed_dim)  # l2r_embed.shape[-1]
 
     def forward(self, l2r_embed, r2l_embed, temb):
-        inputs = l2r_embed + r2l_embed
+        inputs = l2r_embed + r2l_embed  # B, D, E
         if self.config.transformer_norm_type == "prenorm":
             l2r_embed = self.ln1(l2r_embed)
             r2l_embed = self.ln2(r2l_embed)
@@ -411,8 +432,10 @@ class UniDirectionalTransformer(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
         self.trans_block = TransformerBlock(config)
         # concat_dim in
-        #self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
-        self.pos_embed = PositionalEncoding('cpu', config.embed_dim, config.dropout_rate, config.concat_dim)
+        # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
+        self.pos_embed = PositionalEncoding(
+            "cpu", config.embed_dim, config.dropout_rate, config.concat_dim
+        )
 
     def forward(self, x, temb, conditioner=None):
         assert x.ndim == 3 and temb.ndim == 2  # B, D, E and B, E
@@ -429,18 +452,21 @@ class UniDirectionalTransformer(nn.Module):
             x = torch.cat(
                 [conditioner, x[:, :-1]], dim=1
             )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E
-            mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1) # right mask
+            mask = torch.triu(
+                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1
+            )  # right mask
 
-
-            #mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
+            # mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)
-            mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1) # right mask
+            mask = torch.tril(
+                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1
+            )  # right mask
 
-            #mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
+            # mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
 
         # equivalent to Positional encoding: yes d_model =x.size(2) = config.embed_dim
-        #x = x + self.pos_embed
+        # x = x + self.pos_embed
         # if use PositionalEncoding
         x = self.pos_embed(x)
 
@@ -449,10 +475,12 @@ class UniDirectionalTransformer(nn.Module):
             x = self.trans_block(x, masks=mask)
         return x
 
+
 def normalize_input(x, S):
-    x = x/S # (0, 1)
-    x = x*2 - 1 # (-1, 1)
+    x = x / S  # (0, 1)
+    x = x * 2 - 1  # (-1, 1)
     return x
+
 
 class BidirectionalTransformer(nn.Module):
     def __init__(self, config, readout_dim=None):
@@ -465,7 +493,7 @@ class BidirectionalTransformer(nn.Module):
             self.S, config.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
-        self.use_one_hot = config.model.use_one_hot
+        self.use_one_hot_input = config.model.use_one_hot_input
 
         if self.config.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
@@ -492,10 +520,10 @@ class BidirectionalTransformer(nn.Module):
         else:
             raise ValueError("Unknown bidir_readout: %s" % self.config.bidir_readout)
 
-        if self.config.use_one_hot_input:
+        if self.use_one_hot_input:
             self.input_embedding = nn.Linear(self.S, config.embed_dim)
         else:
-            #self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+            # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
             self.input_embedding = nn.Linear(1, config.embed_dim)
 
@@ -508,13 +536,15 @@ class BidirectionalTransformer(nn.Module):
         )
 
     def forward(self, x, t):
-        temb = self.temb_net(transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2)))  # B, E
+        temb = self.temb_net(
+            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
+        )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
         # way to use disrupt ordinality?
-        if self.use_one_hot:
+        if self.use_one_hot_input:
             x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
-            x_embed = self.input_embedding(x_one_hot)
+            x_embed = self.input_embedding(x_one_hot.float())
 
         else:
             x = normalize_input(x, self.S)
@@ -620,23 +650,23 @@ class PrefixConditionalBidirTransformer(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-
     def __init__(self, device, d_model: int, dropout: float = 0.1, max_len: int = 5000):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
 
         position = torch.arange(max_len, device=device).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2, device=device) * (-math.log(10000.0) / d_model))
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2, device=device) * (-math.log(10000.0) / d_model)
+        )
         pe = torch.zeros(1, max_len, d_model, device=device)
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
         self.pe = pe
 
-    def forward(self, x: TensorType["B", "L", "K"]
-    ) -> TensorType["B", "L", "K"]:
+    def forward(self, x: TensorType["B", "L", "K"]) -> TensorType["B", "L", "K"]:
         """
         Args:
             x: Tensor, shape [batch_size, seq_len, embedding_dim]
         """
-        x = x + self.pe[:, 0:x.size(1), :]
+        x = x + self.pe[:, 0 : x.size(1), :]
         return self.dropout(x)
