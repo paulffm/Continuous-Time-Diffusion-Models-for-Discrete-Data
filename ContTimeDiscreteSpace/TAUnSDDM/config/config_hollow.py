@@ -18,9 +18,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = -0.1 # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 1 # >0 whole train_step with backward < 10 sek
     
 
     loss.eps_ratio = 1e-9
@@ -34,6 +34,7 @@ def get_config():
     training.n_iters = 1 #2000 #2000000
 
     training.clip_grad = True
+    training.grad_norm = 5 # 1
     training.warmup = 0 #50 # 5000
     training.resume = True 
 
@@ -45,9 +46,10 @@ def get_config():
     data.S = 256
     data.batch_size = 32 # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.shape = [1,32,32]
+    data.image_size = 24
+    data.shape = [1,data.image_size,data.image_size]
     data.random_flips = True
-    data.image_size = 32
+    
 
     config.model = model = ml_collections.ConfigDict()
     model.name = 'UniformBDTEMA'
@@ -60,20 +62,20 @@ def get_config():
     # BiDir
     model.use_one_hot = False
     config.embed_dim = 512
-    config.bidir_readout = "concat" # res_concat, attention, concat
+    config.bidir_readout = "res_concat" # res_concat, attention, concat
     config.use_one_hot_input = False
     # UniDirectional
     config.dropout_rate = 0.1
-    config.concat_dim = 32 * 32 *1
+    config.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
     config.num_layers = 1
     # TransformerBlock
     ## SA
-    config.num_heads = 4
+    config.num_heads = 1
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm" # prenorm
     ## FF
-    config.mlp_dim = 1024 # d_model in TAU => embed_dim?
+    config.mlp_dim = 512 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     config.out_dim = data.S
     # ConcatReadout

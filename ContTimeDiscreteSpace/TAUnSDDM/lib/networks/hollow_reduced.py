@@ -631,12 +631,16 @@ class PositionalEncoding(nn.Module):
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
         self.pe = pe
+        print("pe", pe.shape)
 
     def forward(self, x: TensorType["B", "L", "K"]
     ) -> TensorType["B", "L", "K"]:
         """
+        
         Args:
             x: Tensor, shape [batch_size, seq_len, embedding_dim]
         """
+        print("pos encoding")
+        print("x", x.shape)
         x = x + self.pe[:, 0:x.size(1), :]
         return self.dropout(x)

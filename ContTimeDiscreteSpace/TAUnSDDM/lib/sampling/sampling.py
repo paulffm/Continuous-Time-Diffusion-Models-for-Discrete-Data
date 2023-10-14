@@ -12,7 +12,7 @@ import time
 
 def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     """Get logprob with logits."""
-    start = time.time()
+    #start = time.time()
     # checked
     if xt_target is None:
         xt_target = xt
@@ -37,8 +37,8 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
         else:
             raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-    end = time.time()
-    print("get_logprob_logits time", end - start)
+    #end = time.time()
+    #print("get_logprob_logits time", end - start)
     return log_prob, log_xt
 
 
@@ -736,6 +736,7 @@ class LBJFSampling:
                 end = time.time()
                 #print("x sampling", x)
                 # print("LBJF Time", end - start)
+                """
                 if t <= self.corrector_entry_time:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
@@ -761,5 +762,5 @@ class LBJFSampling:
                         x = torch.distributions.categorical.Categorical(
                             log_posterior
                         ).sample()
-
+                """
             return x.detach().cpu().numpy().astype(int)

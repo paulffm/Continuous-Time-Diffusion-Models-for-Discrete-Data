@@ -3,7 +3,7 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_bin_hollow import get_config
+from config.config_hollow import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os 
@@ -66,20 +66,20 @@ def main():
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
     
-    # dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
-    train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
-    dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
+    dataloader = create_train_discrete_mnist_dataloader(batch_size=32, image_size=cfg.data.image_size, use_augmentation=False)
+    #train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
+    #dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
         checkpoint_path = 'SavedModels/MNIST/'
-        model_name = 'model_33999.pt'
+        model_name = 'model_999.pt'
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 37000
-        cfg.sampler.sample_freq = 37000
-        cfg.saving.checkpoint_freq = 1000
+        cfg.training.n_iters = 1000
+        cfg.sampler.sample_freq = 1000
+        cfg.saving.checkpoint_freq = 100
     
-        
+    print("Name Dataset", cfg.experiment_name)
     print(state["n_iter"])
     print("loss_name", cfg.loss.name)
     print("loss type", cfg.loss.loss_type)
@@ -99,7 +99,7 @@ def main():
             start_train = time.time()
             l = training_step.step(state, minibatch, loss)
             end_train = time.time()
-            #print("whole train_step", end_train - start_train)
+            print("train_step", end_train - start_train)
             #print("Loss:", l.item())
             training_loss.append(l.item())
             #print('ter', state["n_iter"])

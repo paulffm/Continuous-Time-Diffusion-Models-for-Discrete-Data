@@ -122,7 +122,7 @@ def denormalize_image(image):
 # data 
 def create_train_discrete_mnist_dataloader(
     batch_size: int,
-    image_size: int = 32,
+    image_size: int,
     num_workers: int = 4,
     use_augmentation: bool = False,
 ) -> DataLoader:
