@@ -71,10 +71,18 @@ class TauLeaping:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
+        C, H, W = self.cfg.data.shape
+        self.D = C * H * W
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
 
     def sample(self, model, N, num_intermediates):
         # in init
-        initial_dist_std = model.Q_sigma
+        initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
         with torch.no_grad():
