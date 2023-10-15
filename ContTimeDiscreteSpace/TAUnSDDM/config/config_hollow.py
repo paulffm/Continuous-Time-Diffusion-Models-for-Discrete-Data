@@ -112,6 +112,7 @@ def get_config():
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.00
     sampler.sample_freq = 20
+    sampler.is_ordinal = True
 
     """
     model.num_layers = 6

@@ -14,6 +14,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from lib.networks.hollow import BidirectionalTransformer
 from lib.utils import utils
 
+
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, use_net: bool = True, rank=None):
         super().__init__()
@@ -367,28 +368,36 @@ class UniformVariantRate(UniformRate):
 
     def rate_mat(self, y, t):
         r = self.rate(t)
-        bidx = utils.expand_dims(
-            torch.arange(t.size(0)), axis=tuple(range(1, y.dim()))
-        )
+        bidx = utils.expand_dims(torch.arange(t.size(0)), axis=tuple(range(1, y.dim())))
         result = r[bidx, y]
         return result
 
     def transit_between(self, t1, t2):
         B = t2.size(0)
         d_integral = self._integral(t2) - self._integral(t1)
-
+        # torch.exp(self.eigvals.view(1, self.S) * d_integral.view(B, 1)) in TAULDR andersrum
+        # d_integral.view(B, 1)) * torch.exp(self.eigvals.view(1, self.S)
         transitions = (
             self.eigvecs.view(1, self.S, self.S)  # Q
             @ torch.diag_embed(
                 torch.exp(self.eigvals.view(1, self.S) * d_integral.view(B, 1))
-            )  
+            )
             @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
         )
+        if torch.min(transitions) < -1e-6:
+            print(
+                f"[Warning] UniformVariantRate, large negative transition values {torch.min(transitions)}"
+            )
+
+        # Clamping at 1e-8 because at float level accuracy anything lower than that
+        # is probably inaccurate and should be zero anyway
+        transitions[transitions < 1e-8] = 0.0
         return transitions
 
     def transition(self, t):
         # difference to jnp => they give only 0
         return self.transit_between(torch.zeros_like(t), t)
+
 
 class GaussianTargetRate:
     def __init__(self, cfg, device):
@@ -676,6 +685,7 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformVariantBDTEMA(EMA, BidirectionalTransformer, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
@@ -684,6 +694,7 @@ class UniformVariantBDTEMA(EMA, BidirectionalTransformer, UniformVariantRate):
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):

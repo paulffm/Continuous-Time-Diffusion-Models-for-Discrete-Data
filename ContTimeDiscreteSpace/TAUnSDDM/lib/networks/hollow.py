@@ -604,42 +604,90 @@ class EnumerativeTransformer(nn.Module):
 
         return logits
 
-
+# loss noch anpassen in HollowAux => ConditionalLoss => erben 
 class PrefixConditionalBidirTransformer(nn.Module):
     def __init__(self, config):
         super(PrefixConditionalBidirTransformer, self).__init__()
         self.config = config
-        self.embedding = nn.Embedding(config.data.S, config.embed_dim)
+        self.S = config.data.S
+        self.embed_dim = config.embed_dim
+        self.mlp_dim = config.mlp_dim
+        self.embedding = nn.Embedding(
+            self.S, config.embed_dim
+        )  # B, D with values to  B, D, E
+        self.temb_scale = config.model.time_scale_factor
+        self.use_one_hot_input = config.model.use_one_hot_input
+        self.conditional_dim = config.conditional_dim
 
         if self.config.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
         # elif self.config.net_arch == "bidir_combiner_transformer":
-        #    self.module_l2r = CombinerAxial(self.config, "l2r")
-        #    self.module_r2l = CombinerAxial(self.config, "r2l")
+        #    self.module_l2r = torch_nets.CombinerAxial(self.config, "l2r")
+        #    self.module_r2l = torch_nets.CombinerAxial(self.config, "r2l")
         else:
             raise ValueError("Unknown net_arch: %s" % self.config.net_arch)
 
+        if readout_dim is None:
+            readout_dim = self.S
+
+        self.readout_dim = readout_dim
+
         if self.config.bidir_readout == "concat":
-            self.readout_module = ConcatReadout(self.config)
+            self.readout_module = ConcatReadout(self.config, readout_dim=readout_dim)
         elif self.config.bidir_readout == "res_concat":
-            self.readout_module = ConcatResidualReadout(self.config)
+            self.readout_module = ConcatResidualReadout(
+                self.config, readout_dim=readout_dim
+            )
         elif self.config.bidir_readout == "attention":
-            self.readout_module = AttentionReadout(self.config)
+            self.readout_module = AttentionReadout(self.config, readout_dim=readout_dim)
         else:
             raise ValueError("Unknown bidir_readout: %s" % self.config.bidir_readout)
 
-    def forward(self, x, t):
-        temb = transformer_timestep_embedding(
-            t * self.config.time_scale_factor, self.config.embed_dim
+        if self.use_one_hot_input:
+            self.input_embedding = nn.Linear(self.S, config.embed_dim)
+        else:
+            # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+            # if i normalize i cant use embedding
+            self.input_embedding = nn.Linear(1, config.embed_dim)
+
+        # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
+        # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
+        self.temb_net = nn.Sequential(
+            nn.Linear(int(self.embed_dim / 2), self.mlp_dim),
+            nn.ReLU(),
+            nn.Linear(self.mlp_dim, self.embed_dim),
         )
-        conditioner, x = torch.split(x, [self.config.conditional_dim], dim=1)
-        x = self.embedding(x)
 
-        l2r_embed = self.module_l2r(x, temb, conditioner)[:, -x.shape[1] :]
-        r2l_embed = self.module_r2l(x, temb, conditioner)[:, : x.shape[1]]
+    def forward(self, x, t, conditioner=None):
+        temb = self.temb_net(
+            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
+        )  # B, E
+        # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
-        logits = self.readout_module(l2r_embed, r2l_embed, temb)
+        # way to use disrupt ordinality?
+        if self.use_one_hot_input:
+            x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
+            x_embed = self.input_embedding(x_one_hot.float())
+
+        else:
+            x = normalize_input(x, self.S)
+            x = x.unsqueeze(-1)
+            x_embed = self.input_embedding(x)
+
+        input_shape = list(x_embed.shape)[:-1]
+        x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
+
+        # oder direkt conditioner mit geben => y?
+        conditioner, x = torch.split(x, [self.conditional_dim], axis=1)
+
+        l2r_embed = self.module_l2r(x_embed, temb, conditioner)[:, -x.shape[1]:]
+        r2l_embed = self.module_r2l(x_embed, temb, conditioner)[:, :x.shape[1]]
+        # print("l2r_embed", l2r_embed.shape)
+        # print("r2l_embed", r2l_embed.shape)
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape?
+        #logits = logits.view(input_shape + [self.readout_dim])  # B, D, 
+
         dummy_logits = torch.zeros(
             [x.shape[0], self.config.conditional_dim] + list(logits.shape[2:]),
             dtype=torch.float32,

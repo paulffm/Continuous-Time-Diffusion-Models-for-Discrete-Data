@@ -588,8 +588,6 @@ class TransformerEncoder(nn.Module):
         for resid_layer in self.output_resid_layers:
             x = resid_layer(x, temb)
 
-        # masking 
-        # embed = jnp.expand_dims(embed[:, pos], axis=1)
         x = self.output_linear(x) # (B, L, S)
 
         x = x + one_hot_x #  addition to instill a residual bias into the network

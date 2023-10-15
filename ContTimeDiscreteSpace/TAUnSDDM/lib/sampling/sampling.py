@@ -80,9 +80,13 @@ class TauLeaping:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
+        self.is_ordinal = cfg.sampler.is_ordinal
 
     def sample(self, model, N, num_intermediates):
         # in init
+        # x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{i} P_{i} (\tilde{x^{1:D}_{i} - x^{1:D}_{t})
+        #  x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{d} sum_{s\x^{d}_{t}} P_{ds} (s - x^{d}_{t})
+        # Pds changes in in dim d zu während time spanne t-h
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
@@ -108,7 +112,7 @@ class TauLeaping:
 
                 p0t = F.softmax(
                     model(x, t * torch.ones((N,), device=device)), dim=2
-                )  # (N, D, S)
+                )  # (N, D, S) (not log_softmax)
 
                 x_0max = torch.max(p0t, dim=2)[1]
                 # if t in save_ts:
@@ -153,6 +157,14 @@ class TauLeaping:
                 )  # choices -
                 poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)
                 jump_nums = poisson_dist.sample()  # wv flips
+                print("jump_nums", jump_nums, jump_nums.shape)
+                if not self.is_ordinal:
+                    tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
+                    print("tot_jumps", tot_jumps, tot_jumps.shape)
+                    jump_mask = (tot_jumps <= 1).astype(torch.int32)
+                    print("jump_mask", jump_mask, jump_mask.shape)
+                    jump_nums = jump_nums * jump_mask
+                    print("jump_nums", jump_nums, jump_nums.shape)
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
@@ -621,7 +633,7 @@ class ExactSampling:
                 log_p0t = F.log_softmax(
                     model(xt, t * torch.ones((N,), device=device)), dim=2
                 )  # (N, D, S)
-                start_opt = time.time()
+                
                 t_eps = t - h  # tau
 
                 q_teps_0 = model.transition(
@@ -640,21 +652,17 @@ class ExactSampling:
                 )
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
 
-                #
+                start_opt = time.time()
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-                #
-
+                end_opt = time.time()
+                print("sampling operations time", end_opt - start_opt)
+                
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-                # axis kein parameter? fehler hier
-                end_opt = time.time()
-                #print("sampling operations time", end_opt - start_opt)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 xt = cat_dist.sample()
-                #print("new_sample", xt, xt.shape)
-            end_sample = time.time()
-            #print("sample time", end_sample - start_sample)
+
             return xt.detach().cpu().numpy().astype(int)
 
 
