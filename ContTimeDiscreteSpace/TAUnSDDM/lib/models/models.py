@@ -716,6 +716,47 @@ class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniformBDTEMAGetLogProb(EMA, BidirectionalTransformer, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BidirectionalTransformer.__init__(self, cfg)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+    def get_logprob_with_logits(self, xt, t, logits, xt_target=None):
+        """Get logprob with logits."""
+        
+        #checked
+        if xt_target is None:
+            xt_target = xt
+        xt_onehot = F.one_hot(xt_target.long(), self.cfg.data.S)
+        if self.cfg.logit_type == "direct":
+            log_prob = F.log_softmax(logits, dim=-1)
+        else:
+            qt0 = self.transition(t) 
+            if self.cfg.logit_type == "reverse_prob":
+                p0t = F.softmax(logits, dim=-1)
+                qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
+                prob_all = p0t @ qt0
+                log_prob = torch.log(prob_all + 1e-35)
+                # check
+            elif self.cfg.logit_type == "reverse_logscale":
+                log_p0t = F.log_softmax(logits, dim=-1)
+                log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
+                log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
+                log_p0t = log_p0t.unsqueeze(-1)
+                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
+                # check
+            else:
+                raise ValueError("Unknown logit_type: %s" % self.cfg.logit_type)
+        log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+        #print("xt_onehot", xt_onehot, xt_onehot.shape)
+        #print("log_prob/ll_all", log_prob, log_prob.shape)
+        #print("log_prob * xt_onehot", log_prob * xt_onehot, (log_prob * xt_onehot).shape)
+        #print("log_xt/ll_xt", log_xt, log_xt.shape)
+        return log_prob, log_xt
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):

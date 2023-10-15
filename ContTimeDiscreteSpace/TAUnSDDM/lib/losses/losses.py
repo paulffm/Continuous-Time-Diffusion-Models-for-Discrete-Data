@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import lib.utils.utils as utils
 import time
+from lib.models.model_utils import get_logprob_with_logits
 
 @losses_utils.register_loss
 class GenericAux:
@@ -561,38 +562,6 @@ class ConditionalAux:
         return neg_elbo + self.nll_weight * nll
 
 
-def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
-    """Get logprob with logits."""
-    #checked
-    if xt_target is None:
-        xt_target = xt
-    xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
-    if cfg.logit_type == "direct":
-        log_prob = F.log_softmax(logits, dim=-1)
-    else:
-        qt0 = model.transition(t) 
-        if cfg.logit_type == "reverse_prob":
-            p0t = F.softmax(logits, dim=-1)
-            qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
-            prob_all = p0t @ qt0
-            log_prob = torch.log(prob_all + 1e-35)
-            # check
-        elif cfg.logit_type == "reverse_logscale":
-            log_p0t = F.log_softmax(logits, dim=-1)
-            log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
-            log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
-            log_p0t = log_p0t.unsqueeze(-1)
-            log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-            # check
-        else:
-            raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
-    log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-    #print("xt_onehot", xt_onehot, xt_onehot.shape)
-    #print("log_prob/ll_all", log_prob, log_prob.shape)
-    #print("log_prob * xt_onehot", log_prob * xt_onehot, (log_prob * xt_onehot).shape)
-    #print("log_xt/ll_xt", log_xt, log_xt.shape)
-    return log_prob, log_xt
-
 
 # checked
 @losses_utils.register_loss
@@ -603,8 +572,8 @@ class HollowAux:
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
 
-    def _comp_loss(self, model, xt, t, ll_all, ll_xt): # <1sec
-
+    def _comp_loss(self, state, xt, t, ll_all, ll_xt): # <1sec
+        model = state["model"]
         B = xt.shape[0]
         if self.cfg.loss.loss_type == "rm":
             loss = -ll_xt 
@@ -684,8 +653,9 @@ class HollowAux:
             ll = F.log_softmax(logits, dim=-1)
             loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff
         else:
-            ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, xt, ts, logits) # 
-            loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (1 - self.cfg.ce_coeff)
+            ll_all, ll_xt = get_logprob_with_logits(self.cfg, state, xt, ts, logits) # copy expensive?
+            # ll_all, ll_xt = model.get_logprob_with_logits(xt, ts, logits)
+            loss = loss + self._comp_loss(state, xt, ts, ll_all, ll_xt) * (1 - self.cfg.ce_coeff)
         #print("loss", loss, loss.shape)
         #print("torch.sum(loss)", torch.sum(loss))
         return torch.sum(loss) / B

@@ -8,39 +8,7 @@ from tqdm import tqdm
 import lib.sampling.sampling_utils as sampling_utils
 import lib.utils.utils as utils
 import time
-
-
-def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
-    """Get logprob with logits."""
-    #start = time.time()
-    # checked
-    if xt_target is None:
-        xt_target = xt
-    xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
-    if cfg.logit_type == "direct":
-        log_prob = F.log_softmax(logits, dim=-1)
-    else:
-        qt0 = model.transition(t)
-        if cfg.logit_type == "reverse_prob":
-            p0t = F.softmax(logits, dim=-1)
-            qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
-            prob_all = p0t @ qt0
-            log_prob = torch.log(prob_all + 1e-35)
-            # check
-        elif cfg.logit_type == "reverse_logscale":
-            log_p0t = F.log_softmax(logits, dim=-1)
-            log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
-            log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
-            log_p0t = log_p0t.unsqueeze(-1)
-            log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-            # check
-        else:
-            raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
-    log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-    #end = time.time()
-    #print("get_logprob_logits time", end - start)
-    return log_prob, log_xt
-
+from lib.models.model_utils import get_logprob_with_logits
 
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
@@ -657,7 +625,8 @@ class ExactSampling:
                 # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
 
                 qt0 = q_teps_0 * q_t_teps
-                log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                log_qt0 = torch.log(qt0)
+                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
                 end_opt = time.time()
                 print("sampling operations time", end_opt - start_opt)
@@ -775,3 +744,90 @@ class LBJFSampling:
                         ).sample()
                 """
             return x.detach().cpu().numpy().astype(int)
+
+
+@sampling_utils.register_sampler
+class ExactSamplingNotLog:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        C, H, W = self.cfg.data.shape
+        self.D = C * H * W
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        eps_ratio = cfg.sampler.eps_ratio
+        self.initial_dist = cfg.sampler.initial_dist
+
+    def sample(self, model, N, num_intermediates):
+        start_sample = time.time()
+
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+
+        with torch.no_grad():
+            xt = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+            # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
+
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+
+                # p_theta(x_0|x_t) ?
+                # in HollowModel: get_logits = model()
+                # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
+
+                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
+                p0t = F.softmax(
+                    model(xt, t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
+                
+                t_eps = t - h  # tau
+
+                q_teps_0 = model.transition(
+                    t_eps * torch.ones((N,), device=device)
+                )  # (N, S, S)
+                q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
+                print("q_teps_0", q_teps_0.shape)
+                q_t_teps = model.transit_between(
+                    t_eps * torch.ones((N,), device=device),
+                    t * torch.ones((N,), device=device),
+                )  # (N, S, S
+                q_t_teps = q_t_teps.permute(0, 2, 1)
+
+                b = utils.expand_dims(
+                    torch.arange(xt.shape[0]), axis=list(range(1, xt.ndim))
+                )
+                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
+                print("q_t_teps", q_t_teps.shape)
+                print("p0t", p0t.shape)
+                start_opt = time.time()
+                # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
+                qt0 = q_teps_0 * q_t_teps # N, D, S, S
+                print("qt0", qt0.shape)
+                
+                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                p0t = p0t.unsqueeze(-1)
+                print("p0t", p0t.shape)
+                #prob = torch.logsumexp(p0t + qt0, dim=-2)
+
+                """
+                p0t = torch.exp(log_p0t)
+                qt0 = torch.exp(log_qt0)
+                prob = torch.sum(p0t * qt0, dim=-2)
+                """
+                
+                prob = p0t @ qt0
+                print("prob", prob, prob.shape)
+                end_opt = time.time()
+                print("sampling operations time", end_opt - start_opt)
+
+                cat_dist = torch.distributions.categorical.Categorical(prob)
+                xt = cat_dist.sample()
+
+            return xt.detach().cpu().numpy().astype(int)

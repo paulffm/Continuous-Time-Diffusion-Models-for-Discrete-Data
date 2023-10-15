@@ -55,7 +55,7 @@ def get_config():
     model.name = 'UniformBDTEMA'
     # Forward model
     model.rate_const = 0.01
-    model.t_func = "sqrt_cos" # log_sqr
+    model.t_func = "loq_sqr" # log_sqr
     # hollow:
     config.net_arch = "bidir_transformer"
     
