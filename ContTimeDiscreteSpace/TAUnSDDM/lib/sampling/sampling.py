@@ -80,7 +80,7 @@ class TauLeaping:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
-        self.is_ordinal = cfg.sampler.is_ordinal
+        #self.is_ordinal = cfg.sampler.is_ordinal
 
     def sample(self, model, N, num_intermediates):
         # in init
@@ -157,14 +157,16 @@ class TauLeaping:
                 )  # choices -
                 poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)
                 jump_nums = poisson_dist.sample()  # wv flips
-                print("jump_nums", jump_nums, jump_nums.shape)
-                if not self.is_ordinal:
+                """
+                #print("jump_nums", jump_nums, jump_nums.shape)
+                #if not self.is_ordinal:
                     tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
                     print("tot_jumps", tot_jumps, tot_jumps.shape)
                     jump_mask = (tot_jumps <= 1).astype(torch.int32)
                     print("jump_mask", jump_mask, jump_mask.shape)
                     jump_nums = jump_nums * jump_mask
                     print("jump_nums", jump_nums, jump_nums.shape)
+                """
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
@@ -203,7 +205,7 @@ class PCTauLeaping:
         device = model.device
 
         initial_dist = scfg.initial_dist
-        initial_dist_std = model.Q_sigma
+        initial_dist_std = 200#model.Q_sigma
 
         with torch.no_grad():
             x = get_initial_samples(N, D, device, S, initial_dist, initial_dist_std)
@@ -312,7 +314,7 @@ class PCTauLeaping:
                 model(x, min_t * torch.ones((N,), device=device)), dim=2
             )  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            return x_0max.detach().cpu().numpy().astype(int), x_hist, x0_hist
+            return x_0max.detach().cpu().numpy().astype(int)#, x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
@@ -628,7 +630,6 @@ class ExactSampling:
                 # in HollowModel: get_logits = model()
                 # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
 
-                # stellt sich frage:
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 log_p0t = F.log_softmax(
                     model(xt, t * torch.ones((N,), device=device)), dim=2
@@ -653,8 +654,11 @@ class ExactSampling:
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
 
                 start_opt = time.time()
+                # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
+
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+
                 end_opt = time.time()
                 print("sampling operations time", end_opt - start_opt)
                 
@@ -732,12 +736,12 @@ class LBJFSampling:
 
                 xt_onehot = F.one_hot(x, self.S)
 
-                posterior = h * torch.exp(log_weight) * fwd_rate
+                posterior = h * torch.exp(log_weight) * fwd_rate # eq.17 c != x^d_t
                 off_diag = torch.sum(
                     posterior * (1 - xt_onehot), axis=-1, keepdims=True
                 )
                 diag = torch.clip(1.0 - off_diag, min=0, max=float("inf"))
-                posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
+                posterior = posterior * (1 - xt_onehot) + diag * xt_onehot # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35)

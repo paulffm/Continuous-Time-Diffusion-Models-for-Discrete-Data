@@ -340,29 +340,41 @@ class UniformVariantRate(UniformRate):
 
     def __init__(self, config, device):
         super(UniformVariantRate, self).__init__(config, device)
+        self.config = config
         self.t_func = config.model.t_func
 
-    def _integral(self, t):
+    def _integral_rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
         if self.t_func == "log_sqr":
             return torch.log(t**2 + 1)
         elif self.t_func == "sqrt_cos":
             return -torch.sqrt(torch.cos(torch.pi / 2 * t))
+        elif self.t_func == "log":
+            (
+                self.config.time_base * (self.config.time_exponential**t)
+                - self.config.time_base
+            )
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
-    def _rate(self, t):
+    def _rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
         if self.t_func == "log_sqr":
             return 2 * t / (t**2 + 1)
         elif self.t_func == "sqrt_cos":
             t = torch.pi / 2 * t
             tmp = torch.sin(t) / torch.sqrt(torch.cos(t))
             return torch.pi / 4.0 * tmp
+        elif self.t_func == "log":
+            return (
+                self.config.time_base
+                * math.log(self.config.time_exponential)
+                * self.config.time_exponential**t
+            )
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
-    def rate(self, t):
-        rate_scalars = self._rate(t).view(t.size(0), 1, 1)
-        base = self.rate_matrix.t().view(1, self.S, self.S)
+    def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
+        rate_scalars = self._rate_scalar(t).view(t.size(0), 1, 1)
+        base = self.rate_matrix.t().view(1, self.S, self.S)  # why t()?
         r = base * rate_scalars
         return r
 
@@ -374,13 +386,12 @@ class UniformVariantRate(UniformRate):
 
     def transit_between(self, t1, t2):
         B = t2.size(0)
-        d_integral = self._integral(t2) - self._integral(t1)
-        # torch.exp(self.eigvals.view(1, self.S) * d_integral.view(B, 1)) in TAULDR andersrum
-        # d_integral.view(B, 1)) * torch.exp(self.eigvals.view(1, self.S)
+        d_integral = self._integral_rate_scalar(t2) - self._integral_rate_scalar(t1)
+
         transitions = (
             self.eigvecs.view(1, self.S, self.S)  # Q
             @ torch.diag_embed(
-                torch.exp(self.eigvals.view(1, self.S) * d_integral.view(B, 1))
+                torch.exp(d_integral.view(B, 1) * self.eigvals.view(1, self.S))
             )
             @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
         )
@@ -394,7 +405,7 @@ class UniformVariantRate(UniformRate):
         transitions[transitions < 1e-8] = 0.0
         return transitions
 
-    def transition(self, t):
+    def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         # difference to jnp => they give only 0
         return self.transit_between(torch.zeros_like(t), t)
 

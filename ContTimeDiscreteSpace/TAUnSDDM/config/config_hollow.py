@@ -109,8 +109,8 @@ def get_config():
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = 'uniform'
     sampler.num_corrector_steps = 10
-    sampler.corrector_step_size_multiplier = 1.5
-    sampler.corrector_entry_time = 0.00
+    sampler.corrector_step_size_multiplier = float(1.5)
+    sampler.corrector_entry_time = float(0.0)
     sampler.sample_freq = 20
     sampler.is_ordinal = True
 
