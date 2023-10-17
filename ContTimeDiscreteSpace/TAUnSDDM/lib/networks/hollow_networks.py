@@ -542,7 +542,7 @@ class BidirectionalTransformer(nn.Module):
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
         # way to use disrupt ordinality?
-        x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
+        x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
         if self.use_one_hot_input:
             #x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
             x_embed = self.input_embedding(x_one_hot.float())
@@ -563,7 +563,7 @@ class BidirectionalTransformer(nn.Module):
         logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape?
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
-        logits = logits + x_one_hot
+        #logits = logits + x_one_hot
         return logits
 
 

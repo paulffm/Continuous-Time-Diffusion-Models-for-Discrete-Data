@@ -621,15 +621,15 @@ class ExactSampling:
                 )
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
 
-                start_opt = time.time()
+                #start_opt = time.time()
                 # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
 
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.log(qt0)
                 #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
-                end_opt = time.time()
-                print("sampling operations time", end_opt - start_opt)
+                #end_opt = time.time()
+                #print("sampling operations time", end_opt - start_opt)
                 
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)

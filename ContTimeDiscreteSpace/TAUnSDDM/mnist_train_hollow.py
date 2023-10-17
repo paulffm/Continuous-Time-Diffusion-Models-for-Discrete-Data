@@ -34,18 +34,19 @@ import numpy as np
 
 
 def main():
-    train_resume = False
-
+    train_resume = True
+    save_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/'
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, cfg.save_location)
 
     else:
-        path = cfg.save_location
-        date = "2023-09-08"
-        config_name = "config_001.yaml"
+        path = save_location
+        date = "HRate001-2023-10-15"
+        config_name = "config_001_rate001.yaml"
         config_path = os.path.join(path, date, config_name)
         cfg = bookkeeping.load_config(config_path)
+        cfg.save_location = save_location
 
     device = torch.device(cfg.device)
 
@@ -69,12 +70,13 @@ def main():
 
     if train_resume:
         checkpoint_path = "SavedModels/MNIST/"
-        model_name = "model_999.pt"
+        model_name = "model_7499_rate001.pt"
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 1000
-        cfg.sampler.sample_freq = 1000
-        cfg.saving.checkpoint_freq = 100
+        cfg.training.n_iters = 9000
+        cfg.sampler.sample_freq = 9000
+        cfg.saving.checkpoint_freq = 500
+        bookkeeping.save_config(cfg, cfg.save_location)
 
     print("Info:")
     print("--------------------------------")
