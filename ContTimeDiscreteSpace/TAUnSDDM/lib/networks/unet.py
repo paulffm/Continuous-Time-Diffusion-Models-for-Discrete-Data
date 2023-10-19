@@ -7,102 +7,8 @@ import torch.nn.functional as F
 import numpy as np
 
 
-class MiniUNet(nn.Module):
-    def __init__(self, dim, input_channels, output_channels):
-        super().__init__()
-
-        self.encoder = nn.Sequential(
-            nn.Conv2d(input_channels, dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
-        
-        self.middle = nn.Sequential(
-            nn.Conv2d(dim, dim * 2, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(dim * 2, dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-        )
-
-        self.decoder = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="nearest"),
-            nn.Conv2d(dim, output_channels, kernel_size=3, padding=1),
-        )
-
-
-    def forward(self, x):
-        encoder_output = self.encoder(x)
-        print('after encoder:', encoder_output.shape)
-        middle_output = self.middle(encoder_output)
-        print('after middle:', middle_output.shape)
-        decoder_input = self.decoder(middle_output)
-        return decoder_input
-    
-
-class MiniUNetDiscrete(nn.Module):
-    def __init__(self, dim, in_channel: int, out_channel: int, model_output: str, num_classes: int, x_min_max):
-        super().__init__()
-        self.out_channel = out_channel
-        self.num_classes = num_classes
-        self.model_output = model_output
-        self.x_min_max = x_min_max
-
-        self.encoder = nn.Sequential(
-            nn.Conv2d(in_channel, dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
-        
-        self.middle = nn.Sequential(
-            nn.Conv2d(dim, dim * 2, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(dim * 2, dim, kernel_size=3, padding=1),
-            nn.ReLU(),
-        )
-
-        if self.model_output == 'logistic_pars':
-            # The output represents logits or the log scale and loc of a
-            # logistic distribution.
-            self.decoder = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode="nearest"),
-                nn.Conv2d(dim, out_channel * 2, kernel_size=3, padding=1),
-            )
-        else:
-            self.decoder = nn.Sequential(
-                nn.Upsample(scale_factor=2, mode="nearest"),
-                nn.Conv2d(dim, out_channel * self.num_classes, kernel_size=3, padding=1),
-            ) 
-
-    def forward(self, x, t):
-        batch_size, _, img_size, _= x.shape
-        x_onehot = F.one_hot(x.to(torch.int64), num_classes=self.num_classes)
-        x = x_centered = network_utils.center_data(x, self.x_min_max)
-
-        encoder_output = self.encoder(x)
-        #print('after encoder:', encoder_output.shape)
-        middle_output = self.middle(encoder_output)
-        #print('after middle:', middle_output.shape)
-        out = self.decoder(middle_output)
-
-        #print('out after decode', out.shape)
-        if self.model_output == 'logistic_pars':
-            loc, log_scale = torch.chunk(out, 2, dim=1)
-            out = torch.tanh(loc + x_centered), log_scale # (B, C * 2, H, W)
-        else:
-            print("before reshape:", out.shape)
-            out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, img_size, img_size))
-            print("after reshape:", out.shape)
-            #print('out after reshape', out.shape)
-            out = out.permute(0, 1, 3, 4, 2).contiguous()
-            #print('out after cont', out.shape)
-            out = out + x_onehot # (B, C, H, W, num_classes)
-
-        return out
-
-    
 
 #----------------------------Unet from D3PM--------------------------------------------
-
 
 def swish(input):
     return input * torch.sigmoid(input)
@@ -531,17 +437,13 @@ class UNet(nn.Module):
                 hid = layer(hid)
 
         out = self.out(hid)
-        #print('out shape', out.shape)
-        # out = spatial_unfold(out, self.fold)
+
         if self.model_output == 'logistic_pars':
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
-            print("before reshape:", out.shape)
             out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, height, width))
-            print('out after reshape', out.shape)
             out = out.permute(0, 1, 3, 4, 2).contiguous()
-            print('out after cont', out.shape)
             out = out + input_onehot
 
         return out

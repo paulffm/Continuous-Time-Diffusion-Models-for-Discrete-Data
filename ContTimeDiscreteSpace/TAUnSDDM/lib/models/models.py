@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import lib.models.model_utils as model_utils
-import lib.networks.networks as networks
-import lib.networks.networks_paul as networks_paul
+import lib.networks.tau_networks as tau_networks
+import lib.networks.unet as unet
 from torchtyping import patch_typeguard, TensorType
 import torch.autograd.profiler as profiler
 import math
@@ -16,7 +16,7 @@ from lib.utils import utils
 
 
 class ImageX0PredBasePaul(nn.Module):
-    def __init__(self, cfg, device, use_net: bool = True, rank=None):
+    def __init__(self, cfg, device, rank=None):
         super().__init__()
 
         self.fix_logistic = cfg.model.fix_logistic
@@ -27,30 +27,21 @@ class ImageX0PredBasePaul(nn.Module):
 
         self.S = cfg.data.S
         self.data_shape = cfg.data.shape
-        if use_net:
-            self.net = networks_paul.MiniUNetDiscrete(
-                dim=ch,
-                in_channel=input_channels,
-                out_channel=output_channels,
-                model_output="logistic_pars",
-                num_classes=self.S,
-                x_min_max=data_min_max,
-            ).to(device)
-        else:
-            self.net = networks_paul.UNet(
-                in_channel=input_channels,
-                out_channel=output_channels,
-                channel=ch,
-                channel_multiplier=cfg.model.ch_mult,
-                n_res_blocks=cfg.model.num_res_blocks,
-                attn_resolutions=[16],
-                num_heads=1,
-                dropout=cfg.model.dropout,
-                model_output=cfg.model.model_output,  # 'logits' or 'logistic_pars'
-                num_classes=self.S,
-                x_min_max=data_min_max,
-                img_size=self.data_shape[2],
-            ).to(device)
+
+        self.net = unet.UNet(
+            in_channel=input_channels,
+            out_channel=output_channels,
+            channel=ch,
+            channel_multiplier=cfg.model.ch_mult,
+            n_res_blocks=cfg.model.num_res_blocks,
+            attn_resolutions=[16],
+            num_heads=1,
+            dropout=cfg.model.dropout,
+            model_output=cfg.model.model_output,  # 'logits' or 'logistic_pars'
+            num_classes=self.S,
+            x_min_max=data_min_max,
+            img_size=self.data_shape[2],
+        ).to(device)
 
     def forward(
         self, x: TensorType["B", "D"], times: TensorType["B"]
@@ -130,7 +121,7 @@ class ImageX0PredBase(nn.Module):
         time_scale_factor = cfg.model.time_scale_factor
         time_embed_dim = cfg.model.time_embed_dim
 
-        tmp_net = networks.UNet(
+        tmp_net = tau_networks.UNet(
             ch,
             num_res_blocks,
             num_scales,
@@ -514,7 +505,7 @@ class SequenceTransformer(nn.Module):
         # assert len(cfg.data.shape) == 1
         max_len = cfg.data.shape[0]
 
-        tmp_net = networks.TransformerEncoder(
+        tmp_net = tau_networks.TransformerEncoder(
             num_layers,
             d_model,
             num_heads,
@@ -563,7 +554,7 @@ class ResidualMLP(nn.Module):
         assert len(cfg.data.shape) == 1
         D = cfg.data.shape[0]
 
-        tmp_net = networks.ResidualMLP(
+        tmp_net = tau_networks.ResidualMLP(
             num_layers, d_model, hidden_dim, D, self.S, time_scale_factor, temb_dim
         ).to(device)
 
@@ -691,7 +682,7 @@ class EMA:
 class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
+        ImageX0PredBasePaul.__init__(self, cfg, device, rank=rank)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()

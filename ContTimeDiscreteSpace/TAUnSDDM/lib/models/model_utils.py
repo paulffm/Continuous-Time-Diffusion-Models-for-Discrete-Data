@@ -24,9 +24,9 @@ def create_model(cfg, device, rank=None):
     return model
 
 
-def get_logprob_with_logits(cfg, state, xt, t, logits, xt_target=None):
+def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     """Get logprob with logits."""
-    model = state["model"] # copy expensive?
+    #model = state["model"] # copy expensive?
     # mabye less expensive to insert qt0 = model.transition(t) ?
     # checked
     if xt_target is None:

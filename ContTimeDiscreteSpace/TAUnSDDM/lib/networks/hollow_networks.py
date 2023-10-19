@@ -554,13 +554,12 @@ class BidirectionalTransformer(nn.Module):
 
         input_shape = list(x_embed.shape)[:-1]
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
-        # print("x_embed", x_embed.shape)
 
         l2r_embed = self.module_l2r(x_embed, temb)
-        r2l_embed = self.module_r2l(x_embed, temb)  # output shape?
+        r2l_embed = self.module_r2l(x_embed, temb)  
         # print("l2r_embed", l2r_embed.shape)
         # print("r2l_embed", r2l_embed.shape)
-        logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape?
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)  
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
         #logits = logits + x_one_hot

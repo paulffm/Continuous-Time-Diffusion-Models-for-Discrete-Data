@@ -7,11 +7,11 @@ from sddm.model import torch_nets
 
 
 class BinaryMLPScoreFunc(nn.Module):
-    def __init__(self, num_layers, hidden_size, time_scale_factor=1000.0):
+    def __init__(self, cfg):
         super(BinaryMLPScoreFunc, self).__init__()
-        self.num_layers = num_layers
-        self.hidden_size = hidden_size
-        self.time_scale_factor = time_scale_factor
+        self.num_layers = cfg.num_layers
+        self.hidden_size = cfg.mlp_dim
+        self.time_scale_factor = cfg.model.time_scale_factor
         self.transformer_timestep_embedding = torch_nets.transformer_timestep_embedding
 
         self.layers = nn.ModuleList()
@@ -21,7 +21,7 @@ class BinaryMLPScoreFunc(nn.Module):
         self.final_layer = nn.Linear(self.hidden_size, 1)
 
     def forward(self, x, t):
-        temb = self.transformer_timestep_embedding(
+        temb = transformer_timestep_embedding(
             t * self.time_scale_factor, self.hidden_size
         )
         x = x.float()
@@ -36,11 +36,10 @@ class BinaryTransformerScoreFunc(nn.Module):
     def __init__(self, config):
         super(BinaryTransformerScoreFunc, self).__init__()
         self.config = config
-        self.transformer_timestep_embedding = torch_nets.transformer_timestep_embedding
         self.masked_transformer = torch_nets.MaskedTransformer(config)
 
     def forward(self, x, t):
-        temb = self.transformer_timestep_embedding(
+        temb = transformer_timestep_embedding(
             t * self.config.time_scale_factor, self.config.embed_dim
         )
         x = x.view(x.size(0), -1).long()
@@ -53,23 +52,16 @@ class BinaryTransformerScoreFunc(nn.Module):
 
 
 class CatMLPScoreFunc(nn.Module):
-    def __init__(
-        self,
-        vocab_size,
-        cat_embed_size,
-        num_layers,
-        hidden_size,
-        time_scale_factor=1000.0,
+    def __init__(self, cfg
     ):
         super(CatMLPScoreFunc, self).__init__()
-        self.vocab_size = vocab_size
-        self.cat_embed_size = cat_embed_size
-        self.num_layers = num_layers
-        self.hidden_size = hidden_size
-        self.time_scale_factor = time_scale_factor
-        self.transformer_timestep_embedding = torch_nets.transformer_timestep_embedding
+        self.S = cfg.data.S
+        self.cat_embed_size = cfg.embed_dim
+        self.num_layers = cfg.num_layers
+        self.hidden_size = cfg.mlp_dim
+        self.time_scale_factor = cfg.model.time_scale_factor
 
-        self.embed = nn.Embedding(self.vocab_size, self.cat_embed_size)
+        self.embed = nn.Embedding(self.S, self.cat_embed_size)
         self.layers = nn.ModuleList()
         for _ in range(self.num_layers):
             self.layers.append(nn.Linear(self.hidden_size, self.hidden_size))
@@ -77,7 +69,7 @@ class CatMLPScoreFunc(nn.Module):
         self.final_layer = nn.Linear(self.hidden_size, 1)
 
     def forward(self, x, t):
-        temb = self.transformer_timestep_embedding(
+        temb = transformer_timestep_embedding(
             t * self.time_scale_factor, self.hidden_size
         )
         x = self.embed(x)
