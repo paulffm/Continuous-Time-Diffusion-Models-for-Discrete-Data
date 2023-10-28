@@ -811,3 +811,67 @@ class ExactSamplingNotLog:
                 xt = cat_dist.sample()
 
             return xt.detach().cpu().numpy().astype(int)
+
+
+@sampling_utils.register_sampler
+class TauLeaping2:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.D = cfg.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.is_ordinal = cfg.sampler.is_ordinal
+
+    def sample(self, model, N, num_intermediates):
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+        with torch.no_grad():
+            x = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+                # p_theta(x_0|x_t) ?
+
+                # stellt sich frage:
+                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
+                logits = model(x, t * torch.ones((N,), device=device))
+
+                ll_all, ll_xt = get_logprob_with_logits(
+                    cfg=self.cfg,
+                    model=model,
+                    xt=x,
+                    t=t * torch.ones((N,)),
+                    logits=logits,
+                )
+
+                log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
+                fwd_rate = model.rate_mat(x, t * torch.ones((N,)))  # B, D, S?
+
+                xt_onehot = F.one_hot(x, self.S)
+                posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
+                posterior = posterior * (1 - xt_onehot)
+
+                flips = torch.distributions.poisson.Poisson(posterior).sample()
+                choices = utils.expand_dims(torch.arange(self.S, dtype=torch.int32), axis=list(range(1, x.ndim)))
+
+                if not self.is_ordinal:
+                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                    flip_mask = (tot_flips <=1).astype(torch.int32)
+                    flips = flips * flip_mask
+                diff = choices - x.unsqueeze(-1)
+                avg_offset = torch.sum(flips * diff, axis=-1)
+                x = x + avg_offset
+                x = torch.clip(x, min=0, max=self.S-1)
+                
+            return x.detach().cpu().numpy().astype(int)
