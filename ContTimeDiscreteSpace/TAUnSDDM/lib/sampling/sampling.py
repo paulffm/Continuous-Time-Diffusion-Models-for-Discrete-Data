@@ -15,6 +15,7 @@ from lib.models.model_utils import get_logprob_with_logits
 # Euler funktioniert mit reverseprob und ohne log, vll auch mit log? noch testen
 # Euler sollte auch mit rm funktionieren => eigentlich training auf rm?
 
+
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
         x = torch.randint(low=0, high=S, size=(N, D), device=device)
@@ -709,7 +710,6 @@ class LBJFSampling:
                 # log_posterior = torch.log(posterior + 1e-35)
                 x = torch.distributions.categorical.Categorical(posterior).sample()
 
-                
                 if t <= self.corrector_entry_time:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
@@ -731,9 +731,11 @@ class LBJFSampling:
                         posterior = posterior / torch.sum(
                             posterior, axis=-1, keepdims=True
                         )
-                        #log_posterior = torch.log(posterior + 1e-35)
-                        x = torch.distributions.categorical.Categorical(posterior).sample()
-                
+                        # log_posterior = torch.log(posterior + 1e-35)
+                        x = torch.distributions.categorical.Categorical(
+                            posterior
+                        ).sample()
+
             return x.detach().cpu().numpy().astype(int)
 
 
@@ -863,15 +865,17 @@ class TauLeaping2:
                 posterior = posterior * (1 - xt_onehot)
 
                 flips = torch.distributions.poisson.Poisson(posterior).sample()
-                choices = utils.expand_dims(torch.arange(self.S, dtype=torch.int32), axis=list(range(1, x.ndim)))
+                choices = utils.expand_dims(
+                    torch.arange(self.S, dtype=torch.int32), axis=list(range(1, x.ndim))
+                )
 
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
-                    flip_mask = (tot_flips <=1).astype(torch.int32)
+                    flip_mask = (tot_flips <= 1).astype(torch.int32)
                     flips = flips * flip_mask
                 diff = choices - x.unsqueeze(-1)
                 avg_offset = torch.sum(flips * diff, axis=-1)
                 x = x + avg_offset
-                x = torch.clip(x, min=0, max=self.S-1)
-                
+                x = torch.clip(x, min=0, max=self.S - 1)
+
             return x.detach().cpu().numpy().astype(int)
