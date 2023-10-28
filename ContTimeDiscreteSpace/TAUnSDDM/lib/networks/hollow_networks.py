@@ -185,7 +185,6 @@ class CrossAttention(nn.Module):
         query = query / torch.sqrt(torch.tensor(query.shape[-1], dtype=torch.float32))
         logits = torch.einsum("bqhd,bkhd->bhqk", query, key)
         # logits = torch.einsum("bqe,bke->bkq", query, key) # without view
-        
 
         att_l2r_mask = torch.triu(
             torch.ones((seq_len, seq_len), dtype=torch.bool), diagonal=1
@@ -201,7 +200,9 @@ class CrossAttention(nn.Module):
         attn_weights = torch.where(joint_mask, logits, torch.finfo(torch.float32).min)
         attn_weights = F.softmax(attn_weights, dim=-1)
 
-        x = torch.einsum("bhqk,bkhd->bqhd", attn_weights, val) # B, D, self.num_heads, self.head_dim
+        x = torch.einsum(
+            "bhqk,bkhd->bqhd", attn_weights, val
+        )  # B, D, self.num_heads, self.head_dim
         # x = torch.einsum("bkq,bke->bqe", attn_weights, val) # without view
         x = x.view(x.shape[0], x.shape[1], self.num_heads * self.head_dim)
         x = self.out_linear(x)
@@ -245,12 +246,10 @@ class SelfAttentionBlock(nn.Module):
             batch_first=True,
         )
         self.dropout = nn.Dropout(config.dropout_rate)
-        # ToDo: LayerNorm
         self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
 
     # input shape == output shape
     def forward(self, inputs, masks):
-        # print("inputs SA", inputs.shape)
         if self.config.transformer_norm_type == "prenorm":
             x = self.norm(inputs)
             x, _ = self.self_attention(
@@ -328,7 +327,6 @@ class FeedForwardBlock(nn.Module):
             embed_dim=config.embed_dim,
             out_dim=None,  # config.out_dim => muss gleich embed_dim sein oder zwischen z = z+x noch linear layer
         )
-        # ToDO: dim in nn.LayerNorm
         self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
 
     def forward(self, x):
@@ -354,9 +352,7 @@ class TransformerBlock(nn.Module):  #
     def forward(self, inputs, masks):
         # inputs = B, D + 1, E
         x = self.self_attention_block(inputs, masks)
-        # x shape?
         z = self.feed_forward_block(x)
-        # z shape?
         return z
 
 
@@ -368,6 +364,9 @@ class TransformerEncoder(nn.Module):
         self.config = config
         self.dropout = nn.Dropout(config.dropout_rate)
         self.transformer_block = TransformerBlock(config)
+        self.pos_embed = PositionalEncoding(
+            config.device, config.embed_dim, config.dropout_rate, config.concat_dim
+        )
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
 
@@ -380,9 +379,7 @@ class TransformerEncoder(nn.Module):
             conditioner = torch.cat([conditioner, temb], dim=1)  # B, 1, E
         x = torch.cat([conditioner, x], dim=1)
 
-        # ToDO: Positional Embedding
-
-        # x = x + self.pos_embed
+        x = self.pos_embed(x)
         x = self.dropout(x)
         for layer_idx in range(self.config.num_layers):
             x = self.transformer_block(x, masks=None)
@@ -434,7 +431,7 @@ class UniDirectionalTransformer(nn.Module):
         # concat_dim in
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
         self.pos_embed = PositionalEncoding(
-            "cpu", config.embed_dim, config.dropout_rate, config.concat_dim
+            config.device, config.embed_dim, config.dropout_rate, config.concat_dim
         )
 
     def forward(self, x, temb, conditioner=None):
@@ -498,9 +495,6 @@ class BidirectionalTransformer(nn.Module):
         if self.config.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
-        # elif self.config.net_arch == "bidir_combiner_transformer":
-        #    self.module_l2r = torch_nets.CombinerAxial(self.config, "l2r")
-        #    self.module_r2l = torch_nets.CombinerAxial(self.config, "r2l")
         else:
             raise ValueError("Unknown net_arch: %s" % self.config.net_arch)
 
@@ -541,10 +535,9 @@ class BidirectionalTransformer(nn.Module):
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
-        # way to use disrupt ordinality?
+        # isrupt ordinality
         x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
         if self.use_one_hot_input:
-            #x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
             x_embed = self.input_embedding(x_one_hot.float())
 
         else:
@@ -556,13 +549,12 @@ class BidirectionalTransformer(nn.Module):
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
 
         l2r_embed = self.module_l2r(x_embed, temb)
-        r2l_embed = self.module_r2l(x_embed, temb)  
-        # print("l2r_embed", l2r_embed.shape)
-        # print("r2l_embed", r2l_embed.shape)
-        logits = self.readout_module(l2r_embed, r2l_embed, temb)  
+        r2l_embed = self.module_r2l(x_embed, temb)
+
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
-        #logits = logits + x_one_hot
+        # logits = logits + x_one_hot
         return logits
 
 
@@ -605,7 +597,8 @@ class EnumerativeTransformer(nn.Module):
 
         return logits
 
-# loss noch anpassen in HollowAux => ConditionalLoss => erben 
+
+# loss noch anpassen in HollowAux => ConditionalLoss => erben
 class PrefixConditionalBidirTransformer(nn.Module):
     def __init__(self, config):
         super(PrefixConditionalBidirTransformer, self).__init__()
@@ -623,9 +616,6 @@ class PrefixConditionalBidirTransformer(nn.Module):
         if self.config.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
-        # elif self.config.net_arch == "bidir_combiner_transformer":
-        #    self.module_l2r = torch_nets.CombinerAxial(self.config, "l2r")
-        #    self.module_r2l = torch_nets.CombinerAxial(self.config, "r2l")
         else:
             raise ValueError("Unknown net_arch: %s" % self.config.net_arch)
 
@@ -669,7 +659,6 @@ class PrefixConditionalBidirTransformer(nn.Module):
         # way to use disrupt ordinality?
         x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
         if self.use_one_hot_input:
-            
             x_embed = self.input_embedding(x_one_hot.float())
 
         else:
@@ -683,12 +672,10 @@ class PrefixConditionalBidirTransformer(nn.Module):
         # oder direkt conditioner mit geben => y?
         conditioner, x = torch.split(x, [self.conditional_dim], axis=1)
 
-        l2r_embed = self.module_l2r(x_embed, temb, conditioner)[:, -x.shape[1]:]
-        r2l_embed = self.module_r2l(x_embed, temb, conditioner)[:, :x.shape[1]]
-        # print("l2r_embed", l2r_embed.shape)
-        # print("r2l_embed", r2l_embed.shape)
+        l2r_embed = self.module_l2r(x_embed, temb, conditioner)[:, -x.shape[1] :]
+        r2l_embed = self.module_r2l(x_embed, temb, conditioner)[:, : x.shape[1]]
         logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape?
-        #logits = logits.view(input_shape + [self.readout_dim])  # B, D, 
+        # logits = logits.view(input_shape + [self.readout_dim])  # B, D,
 
         dummy_logits = torch.zeros(
             [x.shape[0], self.config.conditional_dim] + list(logits.shape[2:]),

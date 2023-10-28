@@ -573,8 +573,7 @@ class HollowAux:
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
 
-    def _comp_loss(self, state, xt, t, ll_all, ll_xt):  # <1sec
-        model = state["model"]
+    def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         B = xt.shape[0]
         if self.cfg.loss.loss_type == "rm":
             loss = -ll_xt
@@ -659,15 +658,14 @@ class HollowAux:
                 self.cfg, model, xt, ts, logits
             )  # copy expensive?
             # ll_all, ll_xt = model.get_logprob_with_logits(xt, ts, logits)
-            loss = loss + self._comp_loss(state, xt, ts, ll_all, ll_xt) * (
+            loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
                 1 - self.cfg.ce_coeff
             )
-        # print("loss", loss, loss.shape)
-        # print("torch.sum(loss)", torch.sum(loss))
+
         return torch.sum(loss) / B
 
 
-# ToDo: Check if torch.Tile does the same and check if , check ddim? what is that => D?
+# ToDo: Check if torch.Tile does the same and check if works, check ddim? what is that => D?
 @losses_utils.register_loss
 class EBMAux:
     def __init__(self, cfg):

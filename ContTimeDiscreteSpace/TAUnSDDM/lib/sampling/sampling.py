@@ -10,6 +10,11 @@ import lib.utils.utils as utils
 import time
 from lib.models.model_utils import get_logprob_with_logits
 
+# Sampling observations:
+# Exact, Tau_leaping: applyen: p0t = reverseprob
+# Euler funktioniert mit reverseprob und ohne log, vll auch mit log? noch testen
+# Euler sollte auch mit rm funktionieren => eigentlich training auf rm?
+
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
         x = torch.randint(low=0, high=S, size=(N, D), device=device)
@@ -39,8 +44,8 @@ class TauLeaping:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
-        C, H, W = self.cfg.data.shape
-        self.D = C * H * W
+        # C, H, W = self.cfg.data.shape
+        self.D = cfg.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -48,7 +53,7 @@ class TauLeaping:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
-        #self.is_ordinal = cfg.sampler.is_ordinal
+        # self.is_ordinal = cfg.sampler.is_ordinal
 
     def sample(self, model, N, num_intermediates):
         # in init
@@ -159,9 +164,7 @@ class PCTauLeaping:
 
     def sample(self, model, N, num_intermediates):
         t = 1.0
-
-        C, H, W = self.cfg.data.shape
-        D = C * H * W
+        D = self.cfg.concat_dim
         S = self.cfg.data.S
         scfg = self.cfg.sampler
         num_steps = scfg.num_steps
@@ -173,7 +176,7 @@ class PCTauLeaping:
         device = model.device
 
         initial_dist = scfg.initial_dist
-        initial_dist_std = 200#model.Q_sigma
+        initial_dist_std = 200  # model.Q_sigma
 
         with torch.no_grad():
             x = get_initial_samples(N, D, device, S, initial_dist, initial_dist_std)
@@ -282,7 +285,7 @@ class PCTauLeaping:
                 model(x, min_t * torch.ones((N,), device=device)), dim=2
             )  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            return x_0max.detach().cpu().numpy().astype(int)#, x_hist, x0_hist
+            return x_0max.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
@@ -566,8 +569,7 @@ class ConditionalPCTauLeaping:
 class ExactSampling:
     def __init__(self, cfg):
         self.cfg = cfg
-        C, H, W = self.cfg.data.shape
-        self.D = C * H * W
+        self.D = cfg.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -575,8 +577,6 @@ class ExactSampling:
         self.initial_dist = cfg.sampler.initial_dist
 
     def sample(self, model, N, num_intermediates):
-        start_sample = time.time()
-
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -594,15 +594,11 @@ class ExactSampling:
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
 
-                # p_theta(x_0|x_t) ?
-                # in HollowModel: get_logits = model()
-                # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
-
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 log_p0t = F.log_softmax(
                     model(xt, t * torch.ones((N,), device=device)), dim=2
                 )  # (N, D, S)
-                
+
                 t_eps = t - h  # tau
 
                 q_teps_0 = model.transition(
@@ -621,16 +617,10 @@ class ExactSampling:
                 )
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
 
-                #start_opt = time.time()
-                # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
-
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.log(qt0)
-                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                # log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
-                #end_opt = time.time()
-                #print("sampling operations time", end_opt - start_opt)
-                
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
@@ -666,8 +656,7 @@ def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
 class LBJFSampling:
     def __init__(self, cfg):
         self.cfg = cfg
-        C, H, W = self.cfg.data.shape
-        self.D = C * H * W
+        self.D = cfg.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -697,26 +686,30 @@ class LBJFSampling:
                 logits = model(x, t * torch.ones((N,), device=device))
 
                 ll_all, ll_xt = get_logprob_with_logits(
-                    cfg=self.cfg, model=model, xt=x, t=t * torch.ones((N,)), logits=logits
+                    cfg=self.cfg,
+                    model=model,
+                    xt=x,
+                    t=t * torch.ones((N,)),
+                    logits=logits,
                 )
 
-                log_weight = ll_all - ll_xt.unsqueeze(-1) # B, D, S - B, D, 1
-                fwd_rate = model.rate_mat(x, t * torch.ones((N,))) # B, D, S?
+                log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
+                fwd_rate = model.rate_mat(x, t * torch.ones((N,)))  # B, D, S?
 
                 xt_onehot = F.one_hot(x, self.S)
 
-                posterior = h * torch.exp(log_weight) * fwd_rate # eq.17 c != x^d_t
+                posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
                 off_diag = torch.sum(
                     posterior * (1 - xt_onehot), axis=-1, keepdims=True
                 )
                 diag = torch.clip(1.0 - off_diag, min=0, max=float("inf"))
-                posterior = posterior * (1 - xt_onehot) + diag * xt_onehot # eq.17
+                posterior = posterior * (1 - xt_onehot) + diag * xt_onehot  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
-                log_posterior = torch.log(posterior + 1e-35)
-                x = torch.distributions.categorical.Categorical(log_posterior).sample()
+                # log_posterior = torch.log(posterior + 1e-35)
+                x = torch.distributions.categorical.Categorical(posterior).sample()
 
-                """
+                
                 if t <= self.corrector_entry_time:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
@@ -738,11 +731,9 @@ class LBJFSampling:
                         posterior = posterior / torch.sum(
                             posterior, axis=-1, keepdims=True
                         )
-                        log_posterior = torch.log(posterior + 1e-35)
-                        x = torch.distributions.categorical.Categorical(
-                            log_posterior
-                        ).sample()
-                """
+                        #log_posterior = torch.log(posterior + 1e-35)
+                        x = torch.distributions.categorical.Categorical(posterior).sample()
+                
             return x.detach().cpu().numpy().astype(int)
 
 
@@ -750,8 +741,7 @@ class LBJFSampling:
 class ExactSamplingNotLog:
     def __init__(self, cfg):
         self.cfg = cfg
-        C, H, W = self.cfg.data.shape
-        self.D = C * H * W
+        self.D = cfg.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -759,8 +749,6 @@ class ExactSamplingNotLog:
         self.initial_dist = cfg.sampler.initial_dist
 
     def sample(self, model, N, num_intermediates):
-        start_sample = time.time()
-
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -773,27 +761,22 @@ class ExactSamplingNotLog:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
-            # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-
-                # p_theta(x_0|x_t) ?
-                # in HollowModel: get_logits = model()
-                # hier x shape von (B, D) => aber in model.forward() wird x umgewandelt zu B, C, h, W für image
 
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 p0t = F.softmax(
                     model(xt, t * torch.ones((N,), device=device)), dim=2
                 )  # (N, D, S)
-                
+
                 t_eps = t - h  # tau
 
                 q_teps_0 = model.transition(
                     t_eps * torch.ones((N,), device=device)
                 )  # (N, S, S)
                 q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
-                print("q_teps_0", q_teps_0.shape)
+
                 q_t_teps = model.transit_between(
                     t_eps * torch.ones((N,), device=device),
                     t * torch.ones((N,), device=device),
@@ -804,24 +787,21 @@ class ExactSamplingNotLog:
                     torch.arange(xt.shape[0]), axis=list(range(1, xt.ndim))
                 )
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
-                print("q_t_teps", q_t_teps.shape)
-                print("p0t", p0t.shape)
                 start_opt = time.time()
                 # extreme slow: mabye p0t = softmax(model(x, t)) and then pt0 @ qt0
-                qt0 = q_teps_0 * q_t_teps # N, D, S, S
-                print("qt0", qt0.shape)
-                
-                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                qt0 = q_teps_0 * q_t_teps  # N, D, S, S
+
+                # log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
                 p0t = p0t.unsqueeze(-1)
                 print("p0t", p0t.shape)
-                #prob = torch.logsumexp(p0t + qt0, dim=-2)
+                # prob = torch.logsumexp(p0t + qt0, dim=-2)
 
                 """
                 p0t = torch.exp(log_p0t)
                 qt0 = torch.exp(log_qt0)
                 prob = torch.sum(p0t * qt0, dim=-2)
                 """
-                
+
                 prob = p0t @ qt0
                 print("prob", prob, prob.shape)
                 end_opt = time.time()

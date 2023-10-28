@@ -3,7 +3,7 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow import get_config
+from config.config_hollow2 import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -34,7 +34,7 @@ import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     save_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/'
     if not train_resume:
         cfg = get_config()
