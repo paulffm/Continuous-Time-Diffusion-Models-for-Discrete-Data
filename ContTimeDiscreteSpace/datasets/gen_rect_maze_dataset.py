@@ -380,6 +380,9 @@ class RectangularDataset:
         log_file.close()
         tree_file.close()
 
+def create_maze_data(num_cells_in_row, side_length, num_items):
+    ds = RectangularDataset(num_cells_in_row, side_length, num_items)
+    ds.create_dataset()
 
 if __name__ == '__main__':
     # number of cells in a single row

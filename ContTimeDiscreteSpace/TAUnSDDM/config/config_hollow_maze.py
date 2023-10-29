@@ -18,9 +18,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = 'HollowAux'
-    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = 0 #0 # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 0 # >0 whole train_step with backward < 10 sek
     
 
     loss.eps_ratio = 1e-9
@@ -31,7 +31,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 10 #2000 #2000000
+    training.n_iters = 2 #2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5 # 1
@@ -99,7 +99,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
-    saving.checkpoint_freq = 10
+    saving.checkpoint_freq = 5
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
@@ -111,7 +111,7 @@ def get_config():
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 10
+    sampler.sample_freq = 20
     sampler.is_ordinal = True
 
     """
