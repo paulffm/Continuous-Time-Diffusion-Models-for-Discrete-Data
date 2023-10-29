@@ -150,8 +150,8 @@ class ConcatResidualReadout(nn.Module):
 
         for i in range(self.config.num_output_ffresiduals):
             film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
-            z = self.resid_layers[i](x)  # B, D, 2E -> B, D, 2E
-            x = self.resid_layers[i + 1](x + z)
+            z = self.resid_layers[i*2](x)  # B, D, 2E -> B, D, 2E
+            x = self.resid_layers[i*2 + 1](x + z)
             x = apply_film(
                 film_params, x  # B, 4 E -> B, 2 E
             )  # ensure the apply_film function is properly defined

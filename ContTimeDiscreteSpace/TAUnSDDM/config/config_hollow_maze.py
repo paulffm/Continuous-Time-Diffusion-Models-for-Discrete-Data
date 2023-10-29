@@ -61,7 +61,7 @@ def get_config():
     config.num_layers = 2
     # TransformerBlock
     ## SA
-    config.num_heads = 2
+    config.num_heads = 4
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm" # prenorm
     ## FF
@@ -89,7 +89,7 @@ def get_config():
     optimizer.lr = 1.5e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
+    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MAZE/PNGs'
     saving.checkpoint_freq = 15
 
 

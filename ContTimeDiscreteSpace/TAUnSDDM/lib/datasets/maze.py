@@ -765,7 +765,7 @@ def maze_gen(
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
         img_tensor = transform(mazeImageBW) * 1
         image_list.append(img_tensor)
-        newMaze.saveImage(mazeImageBW, n)
+        #newMaze.saveImage(mazeImageBW, n)
         if n == limit:
             break
         n += 1
