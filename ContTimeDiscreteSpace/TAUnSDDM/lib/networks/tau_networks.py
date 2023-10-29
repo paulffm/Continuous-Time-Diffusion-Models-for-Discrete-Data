@@ -678,7 +678,7 @@ class ResidualMLP(nn.Module):
         return logits
 
     def normalize_input(self, x):
-        x = x/self.S # (0, 1)
+        x = x/(self.S - 1) # (0, 1)
         x = x*2 - 1 # (-1, 1)
         return x
 

@@ -17,15 +17,12 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.features = features
         self.activation = activation
-        # E, MlP
-        # Gelu
-        # MLP, E
 
         layers = []
         for i in range(len(features) - 1):
             layers.append(nn.Linear(features[i], features[i + 1]))
 
-            if i != len(features) - 2:  # -2
+            if i != len(features) - 1:
                 layers.append(self.activation)
 
         # layers.append(nn.Linear(features[-1], features[-1]))
@@ -69,39 +66,29 @@ class ResidualReadout(nn.Module):
         self.embed_dim = config.embed_dim
 
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
-        self.input_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)
+
         self.mlp = MLP(
             [self.embed_dim, self.config.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
+        )  #
+        self.input_layer = nn.Linear(2 * self.embed_dim, self.embed_dim)
+        self.film_params_layer = nn.Linear(4 * self.embed_dim, 4 * self.embed_dim)
+        self.z_layer = MLP(
+            [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
+            activation=nn.GELU(),
         )
-        self.resid_layers = []
-        for _ in range(config.num_output_ffresiduals):
-            self.resid_layers.append(
-                MLP(
-                    [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
-                    activation=nn.GELU(),
-                )
-            )
-            self.resid_layers.append(nn.LayerNorm(2 * self.embed_dim))
-        self.resid_layers = nn.ModuleList(self.resid_layers)
-
-        self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
-            self.film_layer.append(nn.Linear(4 * self.embed_dim, 4 * self.embed_dim))
-        self.film_layer = nn.ModuleList(self.film_layer)
-
+        self.norm_layer = nn.LayerNorm(2 * self.embed_dim)
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
 
     def forward(self, x, temb):  # x=state => shape von l2r_embed, r2l_embed
-        # x: B, D, 2 E
-        temb = self.mlp(temb)  # B, E -> # B, 4 E
-        x = self.input_layer(x)
-        for i in range(self.config.num_output_ffresiduals):
-            film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
-            z = self.resid_layers[i](x)  # B, D, 2E -> B, D, 2E
-            x = self.resid_layers[i + 1](x + z)
+        temb = self.mlp(temb)  # B, 4 E
+
+        for _ in range(self.config.num_output_ffresiduals):
+            film_params = self.film_params_layer(temb)  # B, 2E
+            z = self.z_layer(x)  # B, D, E
+            x = self.norm_layer(x + z)
             x = apply_film(
-                film_params, x  # B, 4 E -> B, 2 E
+                film_params, x
             )  # ensure the apply_film function is properly defined
         logits = self.logits_layer(x)
         return logits  # B, D, S
@@ -119,24 +106,16 @@ class ConcatResidualReadout(nn.Module):
         self.mlp = MLP(
             [self.embed_dim, self.config.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
+        )  #
+
+        self.film_params_layer = nn.Linear(4 * self.embed_dim, 4 * self.embed_dim)
+        self.z_layer = MLP(
+            [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
+            activation=nn.GELU(),
         )
-        self.resid_layers = []
-        for _ in range(config.num_output_ffresiduals):
-            self.resid_layers.append(
-                MLP(
-                    [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
-                    activation=nn.GELU(),
-                )
-            )
-            self.resid_layers.append(nn.LayerNorm(2 * self.embed_dim))
-        self.resid_layers = nn.ModuleList(self.resid_layers)
-
-        self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
-            self.film_layer.append(nn.Linear(4 * self.embed_dim, 4 * self.embed_dim))
-        self.film_layer = nn.ModuleList(self.film_layer)
-
+        self.norm_layer = nn.LayerNorm(2 * self.embed_dim)
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
+        # self.model = ResidualReadout(self.config, readout_dim=self.readout_dim)
 
     def forward(
         self, l2r_embed: torch.Tensor, r2l_embed: torch.Tensor, temb: torch.Tensor
@@ -148,12 +127,12 @@ class ConcatResidualReadout(nn.Module):
 
         temb = self.mlp(temb)  # B, 4 E
 
-        for i in range(self.config.num_output_ffresiduals):
-            film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
-            z = self.resid_layers[i](x)  # B, D, 2E -> B, D, 2E
-            x = self.resid_layers[i + 1](x + z)
+        for _ in range(self.config.num_output_ffresiduals):
+            film_params = self.film_params_layer(temb)  # B, 2E
+            z = self.z_layer(x)  # B, D, 2E
+            x = self.norm_layer(x + z)
             x = apply_film(
-                film_params, x  # B, 4 E -> B, 2 E
+                film_params, x
             )  # ensure the apply_film function is properly defined
         logits = self.logits_layer(x)
         return logits
@@ -448,12 +427,7 @@ class UniDirectionalTransformer(nn.Module):
         self.config = config
         self.direction = direction
         self.dropout = nn.Dropout(config.dropout_rate)
-
-        self.trans_block_layers = []
-        for i in range(config.num_layers):
-            self.trans_block_layers.append(TransformerBlock(config))
-        self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
-
+        self.trans_block = TransformerBlock(config)
         # concat_dim in
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
         self.pos_embed = PositionalEncoding(
@@ -487,16 +461,20 @@ class UniDirectionalTransformer(nn.Module):
             )  # right mask
 
             # mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
+
+        # equivalent to Positional encoding: yes d_model =x.size(2) = config.embed_dim
+        # x = x + self.pos_embed
+        # if use PositionalEncoding
         x = self.pos_embed(x)
 
         x = self.dropout(x)
-        for trans_block_layers in self.trans_block_layers:
-            x = trans_block_layers(x, masks=mask)
+        for layer_idx in range(self.config.num_layers):
+            x = self.trans_block(x, masks=mask)
         return x
 
 
 def normalize_input(x, S):
-    x = x / (S - 1)  # (0, 1)
+    x = x / S  # (0, 1)
     x = x * 2 - 1  # (-1, 1)
     return x
 
