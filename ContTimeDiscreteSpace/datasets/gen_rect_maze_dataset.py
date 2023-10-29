@@ -310,12 +310,12 @@ class RectangularDataset:
         start_time = time.time()
 
         seconds = math.floor(time.time())
-        cwd_path = './'
-        ds_name = f'rectangular_mazes_{seconds}'
+        cwd_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/datasets/'
+        ds_name = f'rectangular_mazes'
 
         # create a folder for this dataset in current directory
         dataset_directory = cwd_path + ds_name
-        Path(dataset_directory).mkdir(parents=True)
+        Path(dataset_directory).mkdir(exist_ok=True)
 
         # add logs.txt
         log_file_name = f'{dataset_directory}/logs.txt'
@@ -390,7 +390,7 @@ if __name__ == '__main__':
     side_length = 10
 
     # number of mazes to generate in the dataset
-    num_items = 1000
+    num_items = 10
 
     ds = RectangularDataset(num_cells_in_row, side_length, num_items)
 

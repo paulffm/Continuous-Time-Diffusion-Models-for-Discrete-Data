@@ -9,6 +9,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader, random_split
 import os
 import joblib
+import tensorflow as tf
 from urllib.request import urlretrieve
 
 
@@ -306,3 +307,28 @@ def get_binmnist_datasets(root, device="cpu"):
         BinMNIST(x_valid, device=device),
         BinMNIST(x_test, device=device),
     )
+
+
+def denormalize_image(image):
+    return image * 255   
+    
+#ToDo: load dataset: load dataset with pytorch
+
+class BinMazeDataset(Dataset):
+    def __init__(self, dataset):
+        # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
+        self.images = dataset
+        self.labels = []
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        return self.images[idx]
+
+def get_maze_data(config, train_ds):
+
+    torch_ds = BinMazeDataset(train_ds)
+    torch_dataloader = DataLoader(torch_ds, batch_size=config.data.batch_size, shuffle=True)
+
+    return torch_dataloader
