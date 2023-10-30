@@ -55,8 +55,6 @@ class ConcatReadout(nn.Module):
 
     def forward(self, l2r_embed, r2l_embed, _):
         state = torch.cat([l2r_embed, r2l_embed], dim=-1)
-        # out_dim = self.readout_dim if self.readout_dim != 0 else self.config.vocab_size
-        # predictor = MLP([2 * self.config.embed_dim, out_dim], activation=nn.GELU())
         logits = self.predictor(state)
         return logits
 
@@ -75,6 +73,7 @@ class ResidualReadout(nn.Module):
             activation=nn.GELU(),
         )
         self.resid_layers = []
+        self.film_layer = []
         for _ in range(config.num_output_ffresiduals):
             self.resid_layers.append(
                 MLP(
@@ -83,23 +82,20 @@ class ResidualReadout(nn.Module):
                 )
             )
             self.resid_layers.append(nn.LayerNorm(2 * self.embed_dim))
-        self.resid_layers = nn.ModuleList(self.resid_layers)
-
-        self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
             self.film_layer.append(nn.Linear(4 * self.embed_dim, 4 * self.embed_dim))
+        self.resid_layers = nn.ModuleList(self.resid_layers)
         self.film_layer = nn.ModuleList(self.film_layer)
 
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
 
     def forward(self, x, temb):  # x=state => shape von l2r_embed, r2l_embed
-        # x: B, D, 2 E
+        # x: B, D, E
         temb = self.mlp(temb)  # B, E -> # B, 4 E
         x = self.input_layer(x)
         for i in range(self.config.num_output_ffresiduals):
             film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
-            z = self.resid_layers[i](x)  # B, D, 2E -> B, D, 2E
-            x = self.resid_layers[i + 1](x + z)
+            z = self.resid_layers[2 * i](x)  # B, D, 2E -> B, D, 2E
+            x = self.resid_layers[2 * i + 1](x + z)
             x = apply_film(
                 film_params, x  # B, 4 E -> B, 2 E
             )  # ensure the apply_film function is properly defined
@@ -121,6 +117,7 @@ class ConcatResidualReadout(nn.Module):
             activation=nn.GELU(),
         )
         self.resid_layers = []
+        self.film_layer = []
         for _ in range(config.num_output_ffresiduals):
             self.resid_layers.append(
                 MLP(
@@ -129,11 +126,8 @@ class ConcatResidualReadout(nn.Module):
                 )
             )
             self.resid_layers.append(nn.LayerNorm(2 * self.embed_dim))
-        self.resid_layers = nn.ModuleList(self.resid_layers)
-
-        self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
             self.film_layer.append(nn.Linear(4 * self.embed_dim, 4 * self.embed_dim))
+        self.resid_layers = nn.ModuleList(self.resid_layers)
         self.film_layer = nn.ModuleList(self.film_layer)
 
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
@@ -150,8 +144,8 @@ class ConcatResidualReadout(nn.Module):
 
         for i in range(self.config.num_output_ffresiduals):
             film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
-            z = self.resid_layers[i*2](x)  # B, D, 2E -> B, D, 2E
-            x = self.resid_layers[i*2 + 1](x + z)
+            z = self.resid_layers[i * 2](x)  # B, D, 2E -> B, D, 2E
+            x = self.resid_layers[i * 2 + 1](x + z)
             x = apply_film(
                 film_params, x  # B, 4 E -> B, 2 E
             )  # ensure the apply_film function is properly defined
@@ -261,13 +255,13 @@ class SelfAttentionBlock(nn.Module):
         super(SelfAttentionBlock, self).__init__()
         self.config = config
         self.self_attention = nn.MultiheadAttention(
-            embed_dim=config.embed_dim,  # make sure to set these parameters according to your needs
+            embed_dim=config.embed_dim,  
             num_heads=config.num_heads,
             dropout=config.attention_dropout_rate,
             batch_first=True,
         )
         self.dropout = nn.Dropout(config.dropout_rate)
-        self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
+        self.norm = nn.LayerNorm(config.embed_dim)  
 
     # input shape == output shape
     def forward(self, inputs, masks):
@@ -367,7 +361,6 @@ class TransformerBlock(nn.Module):  #
         super(TransformerBlock, self).__init__()
         self.config = config
         self.self_attention_block = SelfAttentionBlock(config)
-
         self.feed_forward_block = FeedForwardBlock(config)
 
     def forward(self, inputs, masks):
@@ -384,7 +377,10 @@ class TransformerEncoder(nn.Module):
         super(TransformerEncoder, self).__init__()
         self.config = config
         self.dropout = nn.Dropout(config.dropout_rate)
-        self.transformer_block = TransformerBlock(config)
+        self.trans_block_layers = []
+        for _ in range(config.num_layers):
+            self.trans_block_layers.append(TransformerBlock(config))
+        self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
         self.pos_embed = PositionalEncoding(
             config.device, config.embed_dim, config.dropout_rate, config.concat_dim
         )
@@ -402,8 +398,8 @@ class TransformerEncoder(nn.Module):
 
         x = self.pos_embed(x)
         x = self.dropout(x)
-        for layer_idx in range(self.config.num_layers):
-            x = self.transformer_block(x, masks=None)
+        for trans_block_layers in self.trans_block_layers:
+            x = trans_block_layers(x, masks=None)
         x = x[:, 1:]
         return x
 
