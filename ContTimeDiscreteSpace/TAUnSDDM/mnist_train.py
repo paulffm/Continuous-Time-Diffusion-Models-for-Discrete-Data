@@ -86,11 +86,8 @@ def main():
         for minibatch, _ in tqdm(dataloader):
             # print("minibatch", minibatch, minibatch.shape)
             l = training_step.step(state, minibatch, loss)
-            print("Loss:", l.item())
             training_loss.append(l.item())
-            #print('ter', state["n_iter"])
-            #print(state["n_iter"] % cfg.saving.checkpoint_freq)
-            # just to save model
+
             if (
                 (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0
                 or state["n_iter"] == cfg.training.n_iters - 1
@@ -116,7 +113,7 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
                 n_iter = state["n_iter"]
                 
-                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"samples_epoch_{state['n_iter']}.png")
+                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"epoch_{state['n_iter']}.png")
                 plt.savefig(saving_plot_path)
                 #plt.show()
                 plt.close()

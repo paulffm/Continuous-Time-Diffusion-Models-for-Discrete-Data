@@ -511,14 +511,12 @@ class FFResidual(nn.Module):
         x = film_params[:, None, 0:K] * x + film_params[:, None, K:]
         return x
     
-   # used for music example with: use_one_input = True => X shape (B, D, S)
-# equivalent to MaskedTransformer?
+
 class TransformerEncoder(nn.Module):
     def __init__(self, num_layers, d_model, num_heads, dim_feedforward,
         dropout, num_output_FFresiduals, time_scale_factor, S, max_len,
         temb_dim, use_one_hot_input, device):
         super().__init__()
-        #d_model = 128
 
         self.temb_dim = temb_dim
         self.use_one_hot_input = use_one_hot_input
@@ -566,19 +564,16 @@ class TransformerEncoder(nn.Module):
                 times*self.time_scale_factor, self.temb_dim
             )
         )
-        # dna hier eigene one hot?
-        print("input trans shape", x.shape)
+
         one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, L, S)
 
         if self.use_one_hot_input:
-            # wird gemacht, weil: like nn.Embed(cfg.data.S, cfg.embed_dim)
             x = self.input_embedding(one_hot_x.float()) # (B, L, K) B, L, d_model
         else:
             x = self.normalize_input(x)
             x = x.view(B, L, 1)
             x = self.input_embedding(x) # (B, L, K)
-        # until here: more or less the same as BidirectionalTransformer
-        # x = 
+
         x = self.pos_embed(x)
 
         for encoder_layer in self.encoder_layers:
@@ -591,11 +586,11 @@ class TransformerEncoder(nn.Module):
         x = self.output_linear(x) # (B, L, S)
 
         x = x + one_hot_x #  addition to instill a residual bias into the network
-        print("output shape", x.shape)
+
         return x
 
     def normalize_input(self, x):
-        x = x/self.S # (0, 1)
+        x = x/(self.S - 1) # (0, 1)
         x = x*2 - 1 # (-1, 1)
         return x
 

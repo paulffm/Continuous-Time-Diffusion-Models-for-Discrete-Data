@@ -54,7 +54,7 @@ class TauLeaping:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
-        # self.is_ordinal = cfg.sampler.is_ordinal
+        self.is_ordinal = cfg.sampler.is_ordinal
 
     def sample(self, model, N, num_intermediates):
         # in init
@@ -131,16 +131,16 @@ class TauLeaping:
                 )  # choices -
                 poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)
                 jump_nums = poisson_dist.sample()  # wv flips
-                """
+                
                 #print("jump_nums", jump_nums, jump_nums.shape)
-                #if not self.is_ordinal:
+                if not self.is_ordinal:
                     tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
-                    print("tot_jumps", tot_jumps, tot_jumps.shape)
-                    jump_mask = (tot_jumps <= 1).astype(torch.int32)
-                    print("jump_mask", jump_mask, jump_mask.shape)
+                    #print("tot_jumps", tot_jumps, tot_jumps.shape)
+                    jump_mask = (tot_jumps <= 1) * 1
+                    #print("jump_mask", jump_mask, jump_mask.shape)
                     jump_nums = jump_nums * jump_mask
-                    print("jump_nums", jump_nums, jump_nums.shape)
-                """
+                    #print("jump_nums", jump_nums, jump_nums.shape)
+                
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
