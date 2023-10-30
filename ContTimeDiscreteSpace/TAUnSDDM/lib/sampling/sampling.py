@@ -716,7 +716,7 @@ class LBJFSampling:
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         logits = model(x, t * torch.ones((N,), device=device))
                         ll_all, ll_xt = get_logprob_with_logits(
-                            cfg=self.cfg, model=model, xt=x, t=t, logits=logits
+                            cfg=self.cfg, model=model, xt=x, t=t * torch.ones((N,), device=device), logits=logits
                         )
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
                         fwd_rate = model.rate_mat(x, t * torch.ones((N,)))

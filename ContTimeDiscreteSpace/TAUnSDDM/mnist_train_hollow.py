@@ -129,7 +129,7 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
 
                 saving_plot_path = os.path.join(
-                    cfg.saving.sample_plot_path, f"samples_epoch_{state['n_iter']}.png"
+                    cfg.saving.sample_plot_path, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
                 )
                 plt.savefig(saving_plot_path)
                 # plt.show()
@@ -144,7 +144,7 @@ def main():
             break
 
     saving_train_path = os.path.join(
-        cfg.saving.sample_plot_path, f"training_loss_hollow_{state['n_iter']}.png"
+        cfg.saving.sample_plot_path, f"loss_{cfg.loss.name}{state['n_iter']}.png"
     )
     plt.plot(training_loss)
     plt.title("Training loss")

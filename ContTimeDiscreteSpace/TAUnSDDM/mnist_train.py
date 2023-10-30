@@ -113,7 +113,7 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
                 n_iter = state["n_iter"]
                 
-                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"epoch_{state['n_iter']}.png")
+                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"Tau_{state['n_iter']}.png")
                 plt.savefig(saving_plot_path)
                 #plt.show()
                 plt.close()
