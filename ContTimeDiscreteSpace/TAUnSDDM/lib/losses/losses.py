@@ -574,6 +574,7 @@ class HollowAux:
         self.S = self.cfg.data.S
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
+        device = model.device
         B = xt.shape[0]
         if self.cfg.loss.loss_type == "rm":
             loss = -ll_xt
@@ -586,7 +587,7 @@ class HollowAux:
             )
         elif self.cfg.loss.loss_type == "elbo":  # direct + elbo => - Loss
             xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
-            b = utils.expand_dims(torch.arange(xt.shape[0]), tuple(range(1, xt.dim())))
+            b = utils.expand_dims(torch.arange(xt.shape[0], device=device), tuple(range(1, xt.dim())))
             qt0_x2y = model.transition(t)
             qt0_y2x = qt0_x2y.permute(0, 2, 1)
             qt0_y2x = qt0_y2x[b, xt.long()]
@@ -602,7 +603,7 @@ class HollowAux:
 
         else:
             raise ValueError("Unknown loss_type: %s" % self.cfg.loss_type)
-        weight = torch.ones((B,), dtype=torch.float32)
+        weight = torch.ones((B,), device=device, dtype=torch.float32)
         weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
         loss = loss * weight
 
@@ -636,7 +637,7 @@ class HollowAux:
 
         # rate = model.rate(ts)  # (B, S, S)
 
-        b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
+        b = utils.expand_dims(torch.arange(B, device=device), (tuple(range(1, minibatch.dim()))))
         qt0 = qt0[b, minibatch.long()]
 
         # log loss
@@ -704,7 +705,7 @@ class EBMAux:
 
         # rate = model.rate(ts)  # (B, S, S)
 
-        b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
+        b = utils.expand_dims(torch.arange(B, device=device), (tuple(range(1, minibatch.dim()))))
         qt0 = qt0[b, minibatch.long()]
 
         # log loss
@@ -715,9 +716,9 @@ class EBMAux:
         # assert xt.ndim == 2
         # get logits from CondFactorizedBackwardMode
 
-        mask = torch.eye(self.ddim, dtype=torch.int32).repeat_interleave(B * self.S, 0)
+        mask = torch.eye(self.ddim, device=device, dtype=torch.int32).repeat_interleave(B * self.S, 0)
         xrep = torch.tile(xt, (self.ddim * self.S, 1))
-        candidate = torch.arange(self.S).repeat_interleave(B, 0)
+        candidate = torch.arange(self.S, device=device).repeat_interleave(B, 0)
         candidate = torch.tile(candidate.unsqueeze(1), ((self.ddim, 1)))
         xall = mask * candidate + (1 - mask) * xrep
         t = torch.tile(t, (self.ddim * self.S,))
@@ -727,7 +728,7 @@ class EBMAux:
 
         # calc loss
         ll_all = F.log_softmax(logits, dim=-1)
-        ll_xt = ll_all[torch.arange(B)[:, None], torch.arange(self.ddim)[None, :], xt]
+        ll_xt = ll_all[torch.arange(B, device=device)[:, None], torch.arange(self.ddim, device=device)[None, :], xt]
         loss = -ll_xt.sum(dim=-1)
         loss = loss.mean()
         return loss

@@ -614,7 +614,7 @@ class ExactSampling:
                 q_t_teps = q_t_teps.permute(0, 2, 1)
 
                 b = utils.expand_dims(
-                    torch.arange(xt.shape[0]), axis=list(range(1, xt.ndim))
+                    torch.arange(xt.shape[0], device=device), axis=list(range(1, xt.ndim))
                 )
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
 
@@ -690,12 +690,12 @@ class LBJFSampling:
                     cfg=self.cfg,
                     model=model,
                     xt=x,
-                    t=t * torch.ones((N,)),
+                    t=t * torch.ones((N,), device=device),
                     logits=logits,
                 )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
-                fwd_rate = model.rate_mat(x, t * torch.ones((N,)))  # B, D, S?
+                fwd_rate = model.rate_mat(x, t * torch.ones((N,), device=device))  # B, D, S?
 
                 xt_onehot = F.one_hot(x, self.S)
 
@@ -719,7 +719,7 @@ class LBJFSampling:
                             cfg=self.cfg, model=model, xt=x, t=t * torch.ones((N,), device=device), logits=logits
                         )
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
-                        fwd_rate = model.rate_mat(x, t * torch.ones((N,)))
+                        fwd_rate = model.rate_mat(x, t * torch.ones((N,), device=device))
 
                         xt_onehot = F.one_hot(x, self.S)
                         posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)

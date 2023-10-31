@@ -13,6 +13,7 @@ import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 from lib.networks.hollow_networks import BidirectionalTransformer
 from lib.utils import utils
+from lib.networks import hollow_networks
 
 
 class ImageX0PredBasePaul(nn.Module):
@@ -28,7 +29,7 @@ class ImageX0PredBasePaul(nn.Module):
         self.S = cfg.data.S
         self.data_shape = cfg.data.shape
 
-        self.net = unet.UNet(
+        net = unet.UNet(
             in_channel=input_channels,
             out_channel=output_channels,
             channel=ch,
@@ -42,6 +43,11 @@ class ImageX0PredBasePaul(nn.Module):
             x_min_max=data_min_max,
             img_size=self.data_shape[2],
         ).to(device)
+
+        if cfg.distributed:
+            self.net = DDP(net, device_ids=[rank])
+        else:
+            self.net = net
 
     def forward(
         self, x: TensorType["B", "D"], times: TensorType["B"]
@@ -577,9 +583,28 @@ class ResidualMLP(nn.Module):
         return logits
 
 
-def HollowTransformer():
-    pass
-    # self.net = bidirectional transformer
+class HollowTransformer(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
+
+        tmp_net = hollow_networks.BidirectionalTransformer(cfg, readout_dim=None).to(
+            device
+        )
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+
+        logits = self.net(x, times)  # (B, D, S)
+
+        return logits
 
 
 # Based on https://github.com/yang-song/score_sde_pytorch/blob/ef5cb679a4897a40d20e94d8d0e2124c3a48fb8c/models/ema.py
@@ -689,10 +714,10 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
 
 @model_utils.register_model
-class UniformVariantBDTEMA(EMA, BidirectionalTransformer, UniformVariantRate):
+class UniformVariantBDTEMA(EMA, HollowTransformer, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        BidirectionalTransformer.__init__(self, cfg)
+        HollowTransformer.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
@@ -702,11 +727,19 @@ class UniformVariantBDTEMA(EMA, BidirectionalTransformer, UniformVariantRate):
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        BidirectionalTransformer.__init__(self, cfg)
+        BidirectionalTransformer.__init__(self, cfg, readout_dim=None)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
 
+@model_utils.register_model
+class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        HollowTransformer.__init__(self, cfg, device, rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 @model_utils.register_model
 class UniformBDTEMAGetLogProb(EMA, BidirectionalTransformer, UniformRate):

@@ -133,8 +133,8 @@ class ConcatResidualReadout(nn.Module):
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
 
     def forward(
-        self, l2r_embed: torch.Tensor, r2l_embed: torch.Tensor, temb: torch.Tensor
-    ) -> torch.Tensor:
+        self, l2r_embed: TensorType["B", "D", "E"], r2l_embed: TensorType["B", "D", "E"], temb: TensorType["B", "E"]
+    ) -> TensorType["B", "D", "R"]:
         assert (
             l2r_embed.size()[:-1] == r2l_embed.size()[:-1]
         ), "Embeddings must have matching sizes except in the last dimension"
@@ -181,7 +181,7 @@ class CrossAttention(nn.Module):
 
         self.out_linear = nn.Linear(config.qkv_dim, config.embed_dim)
 
-    def forward(self, l2r_embed, r2l_embed, temb):
+    def forward(self, l2r_embed: TensorType["B", "D", "E"], r2l_embed: TensorType["B", "D", "E"], temb: TensorType["B", "E"]):
         seq_len = l2r_embed.shape[1]
         temb = temb.unsqueeze(1)  # B, 1, D
 
@@ -248,7 +248,7 @@ class AttentionReadout(nn.Module):
         else:
             raise ValueError("unknown norm type %s" % self.config.transformer_norm_type)
         return self.model(x, temb)  # B, D, S
-
+    
 
 class SelfAttentionBlock(nn.Module):
     def __init__(self, config):
@@ -264,7 +264,7 @@ class SelfAttentionBlock(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)  
 
     # input shape == output shape
-    def forward(self, inputs, masks):
+    def forward(self, inputs: TensorType["B", "D", "E"], masks):
         if self.config.transformer_norm_type == "prenorm":
             x = self.norm(inputs)
             x, _ = self.self_attention(
@@ -322,7 +322,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         self.kernel_init(self.fc1.weight)
         self.kernel_init(self.fc2.weight)
 
-    def forward(self, inputs):
+    def forward(self, inputs: TensorType["B", "D", "E"]) -> TensorType["B", "D", "R"]:
         inputs = inputs.to(self.dtype)
         x = self.fc1(inputs)
         x = self.activation(x)
@@ -340,11 +340,11 @@ class FeedForwardBlock(nn.Module):
             mlp_dim=config.mlp_dim,  # make sure to pass the necessary parameters
             dropout_rate=config.dropout_rate,
             embed_dim=config.embed_dim,
-            out_dim=None,  # config.out_dim => muss gleich embed_dim sein oder zwischen z = z+x noch linear layer
+            out_dim=None,  
         )
-        self.norm = nn.LayerNorm(config.embed_dim)  # adjust the normalization dimension
+        self.norm = nn.LayerNorm(config.embed_dim)  
 
-    def forward(self, x):
+    def forward(self, x: TensorType["B", "D", "E"]) -> TensorType["B", "D", "E"]:
         if self.config.transformer_norm_type == "prenorm":
             z = self.norm(x)
             z = self.mlp(z)
@@ -456,7 +456,7 @@ class UniDirectionalTransformer(nn.Module):
             config.device, config.embed_dim, config.dropout_rate, config.concat_dim
         )
 
-    def forward(self, x, temb, conditioner=None):
+    def forward(self, x: TensorType["B", "D", "E"], temb: TensorType["B", "E"], conditioner=None) -> TensorType["B", "D", "E"]:
         assert x.ndim == 3 and temb.ndim == 2  # B, D, E and B, E
         temb = temb.unsqueeze(1)
         if conditioner is None:
@@ -547,7 +547,7 @@ class BidirectionalTransformer(nn.Module):
             nn.Linear(self.mlp_dim, self.embed_dim),
         )
 
-    def forward(self, x, t):
+    def forward(self, x: TensorType["B", "D"], t: TensorType["B"]) -> TensorType["B", "D", "S"]:
         temb = self.temb_net(
             transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
         )  # B, E
@@ -586,7 +586,7 @@ class EnumerativeTransformer(nn.Module):
         self.temb_scale = config.time_scale_factor
         self.transformer = MaskedTransformer(self.config)
 
-    def forward(self, x, t):
+    def forward(self, x: TensorType["B", "D"], t: TensorType["B"]) -> TensorType["B", "D", "S"]:
         temb = transformer_timestep_embedding(
             t * self.temb_scale, self.config.embed_dim
         )

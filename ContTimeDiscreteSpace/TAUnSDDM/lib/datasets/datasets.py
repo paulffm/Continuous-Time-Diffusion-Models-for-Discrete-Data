@@ -286,7 +286,7 @@ class BinMNIST(Dataset):
     def __init__(self, data, device="cpu", transform=None):
         h, w, c = 28, 28, 1
         self.device = device
-        self.data = torch.tensor(data, dtype=torch.float).view(-1, c, h, w)
+        self.data = torch.tensor(data, device=device, dtype=torch.float).view(-1, c, h, w)
         self.transform = transform
 
     def __len__(self):
@@ -296,7 +296,7 @@ class BinMNIST(Dataset):
         sample = self.data[idx]
         if self.transform:
             sample = self.transform(sample)
-        return sample.to(self.device), idx
+        return sample, idx
 
 
 def get_binmnist_datasets(root, device="cpu"):
@@ -312,12 +312,12 @@ def get_binmnist_datasets(root, device="cpu"):
 def denormalize_image(image):
     return image * 255   
     
-#ToDo: load dataset: load dataset with pytorch
 
-class BinMazeDataset(Dataset):
-    def __init__(self, dataset):
+@dataset_utils.register_dataset
+class BinMaze(Dataset):
+    def __init__(self, dataset, device):
         # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
-        self.images = dataset
+        self.images = dataset.to(device)
         self.labels = []
 
     def __len__(self):
@@ -328,7 +328,7 @@ class BinMazeDataset(Dataset):
 
 def get_maze_data(config, train_ds):
 
-    torch_ds = BinMazeDataset(train_ds)
+    torch_ds = BinMaze(train_ds, config.device)
     torch_dataloader = DataLoader(torch_ds, batch_size=config.data.batch_size, shuffle=True)
 
     return torch_dataloader
