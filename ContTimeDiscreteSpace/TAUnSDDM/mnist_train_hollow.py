@@ -3,7 +3,7 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow2 import get_config
+from config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -35,18 +35,20 @@ import numpy as np
 
 def main():
     train_resume = True
-    save_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/'
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    save_location = os.path.join(script_dir, 'SavedModels/MNIST/')
+    save_location_png = os.path.join(save_location, 'PNGs/')
+    dataset_location = os.path.join(script_dir, 'lib/datasets')
+
     if not train_resume:
         cfg = get_config()
-        bookkeeping.save_config(cfg, cfg.save_location)
+        bookkeeping.save_config(cfg, save_location)
 
     else:
-        path = save_location
-        date = "2023-10-29"
-        config_name = "config_001_rate001.yaml"
-        config_path = os.path.join(path, date, config_name)
+        date = "2023-11-02"
+        config_name = "config_001.yaml"
+        config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
-        cfg.save_location = save_location
 
     device = torch.device(cfg.device)
 
@@ -62,21 +64,24 @@ def main():
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
-    dataloader = create_train_discrete_mnist_dataloader(
-        batch_size=cfg.data.batch_size, image_size=cfg.data.image_size, use_augmentation=cfg.data.use_augm
-    )
+    dataset = create_train_discrete_mnist_dataloader(dataset_location, image_size=cfg.data.image_size, use_augmentation=cfg.data.use_augm)
+    #dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
+    dataloader = DataLoader(dataset,
+        batch_size=cfg.data.batch_size,
+        shuffle=cfg.data.shuffle)
+
     # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
-        checkpoint_path = "SavedModels/MNIST/"
-        model_name = "model_55999_rate001.pt"
-        checkpoint_path = os.path.join(path, date, model_name)
+        model_name = "model_1.pt"
+        checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 57000
-        cfg.sampler.sample_freq = 57000
-        cfg.saving.checkpoint_freq = 500
-        bookkeeping.save_config(cfg, cfg.save_location)
+        cfg.training.n_iters = 10
+        cfg.sampler.sample_freq = 10
+        cfg.saving.checkpoint_freq = 10
+        cfg.sampler.num_steps = 10
+        bookkeeping.save_config(cfg, save_location)
 
     print("Info:")
     print("--------------------------------")
@@ -101,6 +106,7 @@ def main():
     exit_flag = False
     while True:
         for minibatch, _ in tqdm(dataloader):
+            minibatch = minibatch.to(device)
             l = training_step.step(state, minibatch, loss)
 
             training_loss.append(l.item())
@@ -108,7 +114,7 @@ def main():
             if (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
-                bookkeeping.save_state(state, cfg.save_location)
+                bookkeeping.save_state(state, save_location)
                 print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
@@ -129,10 +135,10 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
 
                 saving_plot_path = os.path.join(
-                    cfg.saving.sample_plot_path, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
+                    save_location_png, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
                 )
+                print(saving_plot_path)
                 plt.savefig(saving_plot_path)
-                # plt.show()
                 plt.close()
 
             state["n_iter"] += 1
@@ -144,7 +150,7 @@ def main():
             break
 
     saving_train_path = os.path.join(
-        cfg.saving.sample_plot_path, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+        save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
     )
     plt.plot(training_loss)
     plt.title("Training loss")

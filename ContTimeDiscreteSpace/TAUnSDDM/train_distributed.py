@@ -150,7 +150,7 @@ def main(rank, world_size, cfg, unique_num, custom_name=None):
 
     while True:
         for minibatch in tqdm(dataloader):
-
+            minibatch = minibatch.to(device)
             training_step.step(state, minibatch, loss, writer)
 
             if rank == 0:

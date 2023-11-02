@@ -7,5 +7,5 @@ def register_dataset(cls):
     _DATASETS[name] = cls
     return cls
 
-def get_dataset(cfg, device):
-    return _DATASETS[cfg.data.name](cfg, device)
+def get_dataset(cfg, device, root=None):
+    return _DATASETS[cfg.data.name](cfg, device, root)

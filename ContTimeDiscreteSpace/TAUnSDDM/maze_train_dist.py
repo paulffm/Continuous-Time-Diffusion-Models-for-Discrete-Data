@@ -4,6 +4,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import ssl
 import os
+
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -27,42 +28,46 @@ import numpy as np
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
+
 def setup(rank, world_size, unique_num):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = str(12355 + unique_num)
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = str(12355 + unique_num)
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
+
 def cleanup():
     dist.destroy_process_group()
+
 
 def main(rank, world_size, cfg, unique_num):
     print("Training with config", cfg.experiment_name)
     print(f"Rank: {rank}/{world_size}")
 
-
     setup(rank, world_size, unique_num)
     ddp_store = dist.FileStore(f"/tmp/tldr_ddpstore_{unique_num}")
 
-
     if rank == 0:
         train_resume = False
-        save_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/'
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        save_location = os.path.join(script_dir, "SavedModels/MAZE/")
+        save_location_png = os.path.join(save_location, "PNGs/")
+
         if not train_resume:
             cfg = get_config()
-            bookkeeping.save_config(cfg, cfg.save_location)
+            bookkeeping.save_config(cfg, save_location)
 
         else:
-            path = save_location
             date = "2023-10-29"
             config_name = "config_001.yaml"
-            config_path = os.path.join(path, date, config_name)
+            model_name = "model_7499_rate001.pt"
+            config_path = os.path.join(save_location, date, config_name)
+            checkpoint_path = os.path.join(save_location, date, model_name)
             cfg = bookkeeping.load_config(config_path)
             cfg.save_location = save_location
 
-        
         ddp_store.set("save_location", save_location)
-        ddp_store.set("checkpoint_dir", save_location)
+        ddp_store.set("checkpoint_path", checkpoint_path)
         ddp_store.set("config_path", config_path)
     dist.barrier()
     save_location = ddp_store.get("save_location")
@@ -84,26 +89,25 @@ def main(rank, world_size, cfg, unique_num):
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
-    mapping = {'cuda:0': 'cuda:%d' % rank}
+    mapping = {"cuda:0": "cuda:%d" % rank}
     if train_resume:
-        checkpoint_path = "SavedModels/MNIST/"
-        model_name = "model_7499_rate001.pt"
-        checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path, mapping)
         cfg.training.n_iters = 9000
         cfg.sampler.sample_freq = 9000
         cfg.saving.checkpoint_freq = 500
         bookkeeping.save_config(cfg, cfg.save_location)
 
-    limit = (cfg.training.n_iters - state['n_iter'] + 2) * cfg.data.batch_size
-    train_ds = maze_gen(limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97,weightLow=97)
+    limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size
+    train_ds = maze_gen(
+        limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
+    )
     dataset = BinMaze(train_ds, cfg.device)
-    dist_sampler = torch.utils.data.distributed.DistributedSampler(dataset,
-        shuffle=True)
-    dataloader = torch.utils.data.DataLoader(dataset,
-        batch_size=cfg.data.batch_size//world_size,
-        sampler=dist_sampler)
-
+    dist_sampler = torch.utils.data.distributed.DistributedSampler(
+        dataset, shuffle=True
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=cfg.data.batch_size // world_size, sampler=dist_sampler
+    )
 
     print("Info:")
     print("--------------------------------")
@@ -153,13 +157,16 @@ def main(rank, world_size, cfg, unique_num):
                     for i in range(n_samples):
                         plt.subplot(4, 4, 1 + i)
                         plt.axis("off")
-                        plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
+                        plt.imshow(
+                            np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray"
+                        )
 
                     saving_plot_path = os.path.join(
-                        cfg.saving.sample_plot_path, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
+                        save_location_png,
+                        f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                     )
+                    print(saving_plot_path)
                     plt.savefig(saving_plot_path)
-                    # plt.show()
                     plt.close()
 
             state["n_iter"] += 1
@@ -171,7 +178,7 @@ def main(rank, world_size, cfg, unique_num):
             break
 
     saving_train_path = os.path.join(
-        cfg.saving.sample_plot_path, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+        save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
     )
     plt.plot(training_loss)
     plt.title("Training loss")
@@ -181,12 +188,8 @@ def main(rank, world_size, cfg, unique_num):
 
 
 if __name__ == "__main__":
-
     from config.config_hollow_maze import get_config
+
     cfg = get_config()
     world_size = cfg.num_gpus
-    mp.spawn(main,
-        args=(world_size, cfg, 0),
-        nprocs=world_size,
-        join=True
-    )
+    mp.spawn(main, args=(world_size, cfg, 0), nprocs=world_size, join=True)

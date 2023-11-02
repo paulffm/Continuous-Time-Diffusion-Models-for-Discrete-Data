@@ -1,27 +1,21 @@
 import ml_collections
 import torch
+
+
 def get_config():
-    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/' # '../../SavedModels/MNIST/'
-    dataset_path = '../lib/datasets'
-
-
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = 'mnist'
-    config.save_location = save_directory
+    config.experiment_name = "mnist"
 
-    config.init_model_path = None
-
-    config.device = 'cpu'
+    config.device = "cpu"
     config.distributed = False
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = 'HollowAux'
+    loss.name = "HollowAux"
     config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "rm" # rm, mle, elbo
-    config.ce_coeff = 0 # >0 whole train_step with backward < 10 sek
-    
+    loss.loss_type = "rm"  # rm, mle, elbo
+    config.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -29,39 +23,37 @@ def get_config():
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
-    training.train_step_name = 'Standard'
+    training.train_step_name = "Standard"
 
-    training.n_iters = 2 #2000 #2000000
+    training.n_iters = 2  # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 5 # 1
-    training.warmup = 0 #50 # 5000
-    training.resume = True 
+    training.grad_norm = 5  # 1
+    training.warmup = 0  # 50 # 5000
+    training.resume = True
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = 'DiscreteMNIST'
-    data.root = dataset_path
+    data.name = "DiscreteMNIST"
     data.train = True
     data.download = True
     data.S = 256
-    data.batch_size = 32 # use 128 if you have enough memory or use distributed
+    data.batch_size = 32  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.image_size = 28
-    data.shape = [1,data.image_size,data.image_size]
+    data.shape = [1, data.image_size, data.image_size]
     data.use_augm = False
-    
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = 'UniformBDTEMA'
+    model.name = "UniformBDTEMA"
     # Forward model
     model.rate_const = 0.01
-    model.t_func = "loq_sqr" # log_sqr
+    model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     config.net_arch = "bidir_transformer"
-    
+
     # BiDir
     config.embed_dim = 512
-    config.bidir_readout = "res_concat" # res_concat, attention, concat
+    config.bidir_readout = "res_concat"  # res_concat, attention, concat
     config.model.use_one_hot_input = False
     # UniDirectional
     config.dropout_rate = 0.1
@@ -72,9 +64,9 @@ def get_config():
     ## SA
     config.num_heads = 1
     config.attention_dropout_rate = 0.1
-    config.transformer_norm_type = "postnorm" # prenorm
+    config.transformer_norm_type = "postnorm"  # prenorm
     ## FF
-    config.mlp_dim = 512 # d_model in TAU => embed_dim?
+    config.mlp_dim = 512  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     config.out_dim = data.S
     # ConcatReadout
@@ -88,30 +80,28 @@ def get_config():
     # AttentionReadout
     ## CrossAttention
     config.qkv_dim = config.embed_dim
-    #config.num_heads = 4
-    model.ema_decay = 0.9999 #0.9999
+    # config.num_heads = 4
+    model.ema_decay = 0.9999  # 0.9999
     model.Q_sigma = 20.0
     model.time_scale_factor = 1000
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
-    optimizer.name = 'Adam'
-    optimizer.lr = 1.5e-4 #2e-4
+    optimizer.name = "Adam"
+    optimizer.lr = 1.5e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/PNGs'
     saving.checkpoint_freq = 5
 
-
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = 'TauLeaping' # TauLeaping or PCTauLeaping
+    sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 2
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
-    sampler.initial_dist = 'uniform'
+    sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 20
+    sampler.sample_freq = 2
     sampler.is_ordinal = True
 
     """

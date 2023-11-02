@@ -5,6 +5,7 @@ from config.config_hollow_maze import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
+
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -24,24 +25,25 @@ from lib.datasets.datasets import get_maze_data
 from lib.datasets.maze import maze_gen
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
-def get_script_dir():
-    return os.path.dirname(os.path.realpath(__file__))
+
 
 def main():
-    train_resume = False
-    save_location = 'SavedModels/MAZE/'
-    print(get_script_dir())
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    save_location = os.path.join(script_dir, "SavedModels/MAZE/")
+    save_location_png = os.path.join(save_location, "PNGs/")
+    # dataset_location = os.path.join(script_dir, 'lib/datasets')
+
+    train_resume = True
+    print(save_location)
     if not train_resume:
         cfg = get_config()
-        bookkeeping.save_config(cfg, cfg.save_location)
+        bookkeeping.save_config(cfg, save_location)
 
     else:
-        path = save_location
-        date = "2023-10-30"
-        config_name = "config_001_maze.yaml"
-        config_path = os.path.join(path, date, config_name)
+        date = "2023-11-02"
+        config_name = "config_001.yaml"
+        config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
-        cfg.save_location = save_location
 
     device = torch.device(cfg.device)
 
@@ -58,17 +60,19 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        checkpoint_path = "SavedModels/MAZE/"
-        model_name = "model_5999_rate001.pt"
-        checkpoint_path = os.path.join(path, date, model_name)
+        model_name = "model_2.pt"
+        checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 9000
-        cfg.sampler.sample_freq = 9000
-        cfg.saving.checkpoint_freq = 500
-        bookkeeping.save_config(cfg, cfg.save_location)
+        cfg.training.n_iters = 10
+        cfg.sampler.sample_freq = 10
+        cfg.saving.checkpoint_freq = 10
+        cfg.sampler.num_steps = 10
+        bookkeeping.save_config(cfg, save_location)
 
-    limit = (cfg.training.n_iters - state['n_iter'] + 2) * cfg.data.batch_size
-    img = maze_gen(limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97,weightLow=97)
+    limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size
+    img = maze_gen(
+        limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
+    )
     dataloader = get_maze_data(cfg, img)
 
     print("Info:")
@@ -101,7 +105,7 @@ def main():
             if (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
-                bookkeeping.save_state(state, cfg.save_location)
+                bookkeeping.save_state(state, save_location)
                 print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
@@ -122,10 +126,11 @@ def main():
                     plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
 
                 saving_plot_path = os.path.join(
-                    cfg.saving.sample_plot_path, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
+                    save_location_png,
+                    f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
+                print(saving_plot_path)
                 plt.savefig(saving_plot_path)
-                # plt.show()
                 plt.close()
 
             state["n_iter"] += 1
@@ -137,7 +142,7 @@ def main():
             break
 
     saving_train_path = os.path.join(
-        cfg.saving.sample_plot_path, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+        save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
     )
     plt.plot(training_loss)
     plt.title("Training loss")

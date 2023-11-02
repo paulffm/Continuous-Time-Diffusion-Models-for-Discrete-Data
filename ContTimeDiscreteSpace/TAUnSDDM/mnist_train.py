@@ -31,18 +31,19 @@ import numpy as np
 
 
 def main():
-
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    save_location = os.path.join(script_dir, 'SavedModels/MNIST/')
+    save_location_png = os.path.join(save_location, 'PNGs/')
     train_resume = False
 
     if not train_resume:
         cfg = get_config()
-        bookkeeping.save_config(cfg, cfg.save_location)
+        bookkeeping.save_config(cfg, save_location)
    
     else:
-        path = 'SavedModels/MNIST'
         date = '2023-09-08'
         config_name = 'config_001.yaml'
-        config_path = os.path.join(path, date, config_name)
+        config_path = os.path.join(save_location, date, config_name)
 
         cfg = bookkeeping.load_config(config_path)
     
@@ -65,20 +66,32 @@ def main():
     dataloader = create_train_discrete_mnist_dataloader(batch_size=32, use_augmentation=False)
 
     if train_resume:
-        checkpoint_path = 'SavedModels/MNIST/'
         model_name = 'model_33999.pt'
-        checkpoint_path = os.path.join(path, date, model_name)
+        checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 37000
         cfg.sampler.sample_freq = 37000
         cfg.saving.checkpoint_freq = 1000
     
         
-    print(state["n_iter"])
+    print("Info:")
+    print("--------------------------------")
+    print("State Iter:", state["n_iter"])
+    print("--------------------------------")
+    print("Name Dataset:", cfg.experiment_name)
+    print("Loss Name:", cfg.loss.name)
+    print("Loss Type:", cfg.loss.loss_type)
+    print("Logit Type:", cfg.logit_type)
+    print("Ce_coeff:", cfg.ce_coeff)
+    print("--------------------------------")
+    print("Model Name:", cfg.model.name)
+    print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
+    print("Net Arch:", cfg.net_arch)
+    print("Bidir Readout:", cfg.bidir_readout)
+    print("Sampler:", cfg.sampler.name)
 
     n_samples = 16
 
-    print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
     while True:
@@ -92,7 +105,7 @@ def main():
                 (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0
                 or state["n_iter"] == cfg.training.n_iters - 1
             ):
-                bookkeeping.save_state(state, cfg.save_location)
+                bookkeeping.save_state(state, save_location)
                 print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (
@@ -111,11 +124,12 @@ def main():
                     plt.subplot(4, 4, 1 + i)
                     plt.axis("off")
                     plt.imshow(np.transpose(samples[i, ...], (1,2,0)), cmap="gray")
-                n_iter = state["n_iter"]
                 
-                saving_plot_path = os.path.join(cfg.saving.sample_plot_path, f"Tau_{state['n_iter']}.png")
+                saving_plot_path = os.path.join(
+                    save_location_png, f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png"
+                )
+                print(saving_plot_path)
                 plt.savefig(saving_plot_path)
-                #plt.show()
                 plt.close()
 
             state["n_iter"] += 1
@@ -126,9 +140,12 @@ def main():
         if exit_flag:
             break
 
+    saving_train_path = os.path.join(
+        save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+    )
     plt.plot(training_loss)
     plt.title("Training loss")
-    plt.savefig("SavedModels/MNIST/PNGs/training_loss.png")
+    plt.savefig(saving_train_path)
     plt.close()
 
 
