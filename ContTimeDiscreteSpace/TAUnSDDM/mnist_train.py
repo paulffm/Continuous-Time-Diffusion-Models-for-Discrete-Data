@@ -39,7 +39,7 @@ def main():
         bookkeeping.save_config(cfg, cfg.save_location)
    
     else:
-        path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST'
+        path = 'SavedModels/MNIST'
         date = '2023-09-08'
         config_name = 'config_001.yaml'
         config_path = os.path.join(path, date, config_name)

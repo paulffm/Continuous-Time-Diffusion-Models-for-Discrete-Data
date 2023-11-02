@@ -755,6 +755,7 @@ def maze_gen(
     pixelSizeOfTile: int = 1,
     weightHigh: int = 99,
     weightLow: int = 99,
+    device = 'cpu'
 ):
     n = 1
     transform = transforms.Compose([transforms.PILToTensor()])
@@ -764,7 +765,7 @@ def maze_gen(
         newMaze.makeMazeGrowTree(weightHigh, weightLow)
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
         img_tensor = transform(mazeImageBW) * 1
-        image_list.append(img_tensor)
+        image_list.append(img_tensor.to(device))
         #newMaze.saveImage(mazeImageBW, n)
         if n == limit:
             break

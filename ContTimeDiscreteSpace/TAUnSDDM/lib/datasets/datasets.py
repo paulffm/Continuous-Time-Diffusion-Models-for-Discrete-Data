@@ -315,9 +315,9 @@ def denormalize_image(image):
 
 @dataset_utils.register_dataset
 class BinMaze(Dataset):
-    def __init__(self, dataset, device):
+    def __init__(self, dataset):
         # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
-        self.images = dataset.to(device)
+        self.images = dataset
         self.labels = []
 
     def __len__(self):
@@ -327,8 +327,10 @@ class BinMaze(Dataset):
         return self.images[idx]
 
 def get_maze_data(config, train_ds):
-
-    torch_ds = BinMaze(train_ds, config.device)
-    torch_dataloader = DataLoader(torch_ds, batch_size=config.data.batch_size, shuffle=True)
-
+    torch_ds = BinMaze(train_ds)
+    torch_dataloader = DataLoader(
+        torch_ds, 
+        batch_size=config.data.batch_size, 
+        shuffle=True
+    )
     return torch_dataloader

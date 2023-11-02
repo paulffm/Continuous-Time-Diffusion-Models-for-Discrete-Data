@@ -1,7 +1,7 @@
 import ml_collections
 import torch
 def get_config():
-    save_directory = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MAZE/' # '../../SavedModels/MNIST/'
+    save_directory = 'SavedModels/MAZE/' # '../../SavedModels/MNIST/'
 
     config = ml_collections.ConfigDict()
     config.save_location = save_directory
@@ -26,7 +26,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = 'Standard'
 
-    training.n_iters = 15 #2000 #2000000
+    training.n_iters = 2 #2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5 # 1
@@ -58,10 +58,10 @@ def get_config():
     config.dropout_rate = 0.1
     config.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    config.num_layers = 2
+    config.num_layers = 1
     # TransformerBlock
     ## SA
-    config.num_heads = 4
+    config.num_heads = 1
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm" # prenorm
     ## FF
@@ -89,20 +89,20 @@ def get_config():
     optimizer.lr = 1.5e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MAZE/PNGs'
-    saving.checkpoint_freq = 15
+    saving.sample_plot_path = '/SavedModels/MAZE/PNGs'
+    saving.checkpoint_freq = 2
 
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = 'TauLeaping' # TauLeaping or PCTauLeaping
-    sampler.num_steps = 10
+    sampler.num_steps = 2
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = 'uniform'
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 20
+    sampler.sample_freq = 2
     sampler.is_ordinal = True
 
     """

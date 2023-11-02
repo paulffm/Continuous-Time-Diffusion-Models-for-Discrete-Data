@@ -24,19 +24,21 @@ from lib.datasets.datasets import get_maze_data
 from lib.datasets.maze import maze_gen
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
-
+def get_script_dir():
+    return os.path.dirname(os.path.realpath(__file__))
 
 def main():
     train_resume = False
-    save_location = '/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/SavedModels/MNIST/'
+    save_location = 'SavedModels/MAZE/'
+    print(get_script_dir())
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, cfg.save_location)
 
     else:
         path = save_location
-        date = "2023-10-29"
-        config_name = "config_001.yaml"
+        date = "2023-10-30"
+        config_name = "config_001_maze.yaml"
         config_path = os.path.join(path, date, config_name)
         cfg = bookkeeping.load_config(config_path)
         cfg.save_location = save_location
@@ -56,8 +58,8 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        checkpoint_path = "SavedModels/MNIST/"
-        model_name = "model_7499_rate001.pt"
+        checkpoint_path = "SavedModels/MAZE/"
+        model_name = "model_5999_rate001.pt"
         checkpoint_path = os.path.join(path, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 9000
