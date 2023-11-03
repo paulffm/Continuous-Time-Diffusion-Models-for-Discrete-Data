@@ -129,10 +129,9 @@ class TauLeaping:
                 diffs = torch.arange(self.S, device=device).view(1, 1, self.S) - x.view(
                     N, self.D, 1
                 )  # choices -
-                poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)
-                jump_nums = poisson_dist.sample()  # wv flips
+                poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h) # posterior: p_{t-eps|t}
+                jump_nums = poisson_dist.sample()  # how many jumps in interval [t-eps, t]
                 
-                #print("jump_nums", jump_nums, jump_nums.shape)
                 if not self.is_ordinal:
                     tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
                     #print("tot_jumps", tot_jumps, tot_jumps.shape)
@@ -644,9 +643,10 @@ def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
 
     xt_onehot = F.one_hot(xt_target, cfg.data.S)
     posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
-    off_diag = torch.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
+    off_diag_post = posterior * (1 - xt_onehot)
+    off_diag = torch.sum(off_diag_post, axis=-1, keepdims=True)
     diag = torch.clip(1.0 - off_diag, a_min=0)
-    posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
+    posterior = off_diag_post + diag * xt_onehot
     posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
     log_posterior = torch.log(posterior + 1e-35)
     new_y = torch.distributions.categorical.Categorical(log_posterior).sample()

@@ -8,7 +8,7 @@ def get_config():
   config.discrete_dim = 32
   config.vocab_size = 2
   config.binmode = 'gray'
-  config.data_name = ''
+  config.data_name = '2spirals'
   config.int_scale = -1.0
   config.plot_size = -1.0
   return config

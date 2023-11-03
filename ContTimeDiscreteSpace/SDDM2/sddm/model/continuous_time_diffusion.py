@@ -159,6 +159,7 @@ def lbjf_sample_step(cls, params, rng, tau, xt, t, xt_target=None):
 
   xt_onehot = jax.nn.one_hot(xt_target, cls.config.vocab_size)
   posterior = tau * jnp.exp(log_weight) * fwd_rate
+  off_diag_post = posterior * (1 - xt_onehot)
   off_diag = jnp.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
   diag = jnp.clip(1.0 - off_diag, a_min=0)
   posterior = posterior * (1 - xt_onehot) + diag * xt_onehot

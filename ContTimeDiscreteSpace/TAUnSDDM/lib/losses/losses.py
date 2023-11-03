@@ -630,6 +630,7 @@ class HollowAux:
             B, C, H, W = minibatch.shape
             minibatch = minibatch.view(B, C * H * W)
         # hollow xt, t, l_all, l_xt geht rein
+        B = minibatch.shape[0]
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
