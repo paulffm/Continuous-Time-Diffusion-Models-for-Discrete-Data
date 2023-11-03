@@ -13,9 +13,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "HollowAux"
-    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
-    config.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -25,7 +25,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 25 # 2000 #2000000
+    training.n_iters = 500 # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -37,8 +37,9 @@ def get_config():
     data.type = '2spirals'
     data.S = 2
     data.binmode = 'gray'
-    data.int_scale = -1.0
-    data.plot_size = -1.0
+    data.int_scale = 5906.518499478505
+    data.plot_size = 4.547768961172835
+
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.shape = [32]
@@ -46,7 +47,7 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformHollowEMA"
     # Forward model
-    model.rate_const = 0.1
+    model.rate_const = 1
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     config.net_arch = "bidir_transformer"
@@ -59,14 +60,14 @@ def get_config():
     config.dropout_rate = 0.1
     config.concat_dim = 32
     # config.dtype = torch.float32
-    config.num_layers = 2
+    config.num_layers = 3
     # TransformerBlock
     ## SA
     config.num_heads = 4
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm"  # prenorm
     ## FF
-    config.mlp_dim = 512  # d_model in TAU => embed_dim?
+    config.mlp_dim = 256  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     config.out_dim = data.S
     # ConcatReadout
@@ -75,7 +76,7 @@ def get_config():
     # features, activation
 
     # ResidualReadout
-    config.num_output_ffresiduals = 1
+    config.num_output_ffresiduals = 2
 
     # AttentionReadout
     ## CrossAttention
@@ -87,21 +88,21 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.checkpoint_freq = 10
+    saving.checkpoint_freq = 2000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 10
+    sampler.num_steps = 200
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 50
+    sampler.sample_freq = 2000
     sampler.is_ordinal = True
 
     """

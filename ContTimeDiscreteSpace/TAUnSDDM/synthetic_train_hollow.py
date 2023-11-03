@@ -30,7 +30,7 @@ import numpy as np
 
 
 def main():
-    train_resume = False
+    train_resume = True
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     save_location_png = os.path.join(save_location, "PNGs/")
@@ -40,7 +40,7 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-02"
+        date = "2023-11-03"
         config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
@@ -73,13 +73,15 @@ def main():
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
-        model_name = "model_1.pt"
+        model_name = "model_499.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 25
-        cfg.sampler.sample_freq = 10
-        cfg.saving.checkpoint_freq = 10
-        cfg.sampler.num_steps = 10
+        cfg.training.n_iters = 500
+        cfg.sampler.name = "TauLeaping"
+        cfg.sampler.sample_freq = 500
+        cfg.saving.checkpoint_freq = 500
+        cfg.sampler.num_steps = 300
+        cfg.logit_type = "reverse_prob"  # ""direct"
         bookkeeping.save_config(cfg, save_location)
 
     print("Info:")
@@ -98,7 +100,7 @@ def main():
     print("Bidir Readout:", cfg.bidir_readout)
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 10000
+    n_samples = 1000
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
@@ -106,7 +108,7 @@ def main():
     while True:
         for minibatch in tqdm(dataloader):
             minibatch = minibatch.to(device)
-            print(minibatch, type(minibatch), minibatch.shape)
+            # print(minibatch, type(minibatch), minibatch.shape)
             l = training_step.step(state, minibatch, loss)
 
             training_loss.append(l.item())

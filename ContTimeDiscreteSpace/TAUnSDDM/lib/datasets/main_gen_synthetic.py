@@ -16,6 +16,7 @@ import numpy as np
 from sympy.combinatorics.graycode import GrayCode
 from ml_collections import config_dict
 import dataset_utils
+#from config_hollow_synthetic import get_config
 
 def get_config():
     config = config_dict.ConfigDict()
@@ -27,6 +28,7 @@ def get_config():
     data.int_scale = -1.0
     data.plot_size = -1.0
     return config
+
 
 _CONFIG = config_flags.DEFINE_config_file("data_config", lock_config=False)
 flags.DEFINE_integer("num_samples", 1000000, "num samples to be generated")
@@ -67,7 +69,7 @@ def main(argv: Sequence[str]) -> None:
 
     with open(os.path.join(FLAGS.data_root, "samples.pdf"), "wb") as f:
         float_data = dataset_utils.bin2float(
-            data[:10].astype(np.int32),
+            data[:10000].astype(np.int32),
             inv_bm,
             data_config.concat_dim,
             data_config.data.int_scale,
