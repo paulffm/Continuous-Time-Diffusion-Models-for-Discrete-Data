@@ -1,7 +1,9 @@
 import ml_collections
+import os
 import torch
 def get_config():
-    save_directory = 'SavedModels/MAZE/' # '../../SavedModels/MNIST/'
+    save_directory = 'SavedModels/MAZE/'
+
 
     config = ml_collections.ConfigDict()
     config.save_location = save_directory
@@ -35,6 +37,7 @@ def get_config():
 
     config.data = data = ml_collections.ConfigDict()
     data.S = 2
+    data.is_img = True
     data.batch_size = 32 # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.image_size = 30
@@ -89,7 +92,7 @@ def get_config():
     optimizer.lr = 1.5e-4 #2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.sample_plot_path = '/SavedModels/MAZE/PNGs'
+    saving.sample_plot_path = os.path.join(save_directory, "PNGs")
     saving.checkpoint_freq = 2
 
 

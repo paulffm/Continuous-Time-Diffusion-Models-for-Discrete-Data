@@ -1,11 +1,10 @@
 import ml_collections
-import torch
+import os
 
 
 def get_config():
-
+    save_directory = "SavedModels/Synthetic"
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
 
     config.device = "cpu"
     config.distributed = False
@@ -15,7 +14,7 @@ def get_config():
     loss.name = "HollowAux"
     config.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
-    config.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -25,7 +24,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 500 # 2000 #2000000
+    training.n_iters = 1000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -34,11 +33,12 @@ def get_config():
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "SyntheticData"
-    data.type = '2spirals'
+    data.type = "2spirals"
+    data.is_img = False
     data.S = 2
-    data.binmode = 'gray'
-    data.int_scale = 5906.518499478505
-    data.plot_size = 4.547768961172835
+    data.binmode = "gray"
+    data.int_scale = 5995.531550196217
+    data.plot_size = 4.465403646975654
 
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
@@ -47,7 +47,7 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformHollowEMA"
     # Forward model
-    model.rate_const = 1
+    model.rate_const = 0.7
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     config.net_arch = "bidir_transformer"
@@ -57,7 +57,7 @@ def get_config():
     config.bidir_readout = "res_concat"  # res_concat, attention, concat
     config.model.use_one_hot_input = False
     # UniDirectional
-    config.dropout_rate = 0.1
+    config.dropout_rate = 0.01
     config.concat_dim = 32
     # config.dtype = torch.float32
     config.num_layers = 3
@@ -67,7 +67,7 @@ def get_config():
     config.attention_dropout_rate = 0.1
     config.transformer_norm_type = "postnorm"  # prenorm
     ## FF
-    config.mlp_dim = 256  # d_model in TAU => embed_dim?
+    config.mlp_dim = 512  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     config.out_dim = data.S
     # ConcatReadout
@@ -88,14 +88,15 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 2e-4  # 2e-4
+    optimizer.lr = 1.5e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.checkpoint_freq = 2000
+    saving.sample_plot_path = os.path.join(save_directory, "PNGs")
+    saving.checkpoint_freq = 500
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 200
+    sampler.name = "LBJFSampling"  # TauLeaping or PCTauLeaping
+    sampler.num_steps = 500
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"

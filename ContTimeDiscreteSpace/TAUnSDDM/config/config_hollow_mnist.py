@@ -1,11 +1,10 @@
 import ml_collections
-import torch
+import os
 
 
 def get_config():
-
+    save_directory = "SavedModels/MNIST"
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
 
     config.device = "cpu"
     config.distributed = False
@@ -15,7 +14,7 @@ def get_config():
     loss.name = "HollowAux"
     config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
-    config.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
+    config.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -34,6 +33,7 @@ def get_config():
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "DiscreteMNIST"
+    data.is_img = True
     data.train = True
     data.download = True
     data.S = 256
@@ -90,6 +90,7 @@ def get_config():
     optimizer.lr = 1.5e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
+    saving.sample_plot_path = os.path.join(save_directory, "PNGs")
     saving.checkpoint_freq = 5
 
     config.sampler = sampler = ml_collections.ConfigDict()

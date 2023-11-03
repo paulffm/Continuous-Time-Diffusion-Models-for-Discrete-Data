@@ -161,6 +161,7 @@ def plot_samples(samples, out_name, im_size=0, axis=False, im_fmt=None):
     if isinstance(out_name, str):
         im_fmt = None
     plt.savefig(out_name, bbox_inches="tight", format=im_fmt)
+    plt.show()
     plt.close()
 
 

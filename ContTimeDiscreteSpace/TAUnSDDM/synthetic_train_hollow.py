@@ -30,7 +30,7 @@ import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     save_location_png = os.path.join(save_location, "PNGs/")
@@ -77,11 +77,11 @@ def main():
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 500
-        cfg.sampler.name = "TauLeaping"
+        cfg.sampler.name = "LBJFSampling"
         cfg.sampler.sample_freq = 500
         cfg.saving.checkpoint_freq = 500
         cfg.sampler.num_steps = 300
-        cfg.logit_type = "reverse_prob"  # ""direct"
+        cfg.logit_type = "direct"  # ""direct"
         bookkeeping.save_config(cfg, save_location)
 
     print("Info:")
@@ -126,14 +126,11 @@ def main():
                 samples = sampler.sample(state["model"], n_samples, 10)
 
                 state["model"].train()
-                # if samples.is_cuda:
-                #    samples = samples.cpu()
-                # samples = samples.numpy()
-                print(samples, samples.shape)
+
                 samples = dataset_utils.bin2float(
                     samples.astype(np.int32), inv_bm, cfg.concat_dim, cfg.data.int_scale
                 )
-                print(samples, samples.shape)
+                
                 saving_plot_path = os.path.join(
                     save_location_png,
                     f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.pdf",
