@@ -21,7 +21,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 25  # 2000 #2000000
+    training.n_iters = 25000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 5
     training.warmup = 0  # 50  # 5000
@@ -41,20 +41,17 @@ def get_config():
     config.concat_dim = data.shape[0]
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "UniformRateSequenceTransformerEMA"
+    model.name = "UniformRateResMLP"
 
-    model.ema_decay = 0.9999  # 0.9999
+    #model.ema_decay = 0.9999  # 0.9999
     model.rate_const = 0.7
 
     model.num_layers = 2  # 6
     model.d_model = 512  # 512
-    model.num_heads = 4
-    model.dim_feedforward = 1024  # 2048
-    model.dropout = 0.1
+    model.hidden_dim = 2048  # 2048
     model.temb_dim = 512
-    model.num_output_FFresiduals = 2
     model.time_scale_factor = 1000
-    model.use_one_hot_input = True
+
     model.Q_sigma = None
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
@@ -62,14 +59,14 @@ def get_config():
     optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.checkpoint_freq = 10
+    saving.checkpoint_freq = 1000
     saving.num_checkpoints_to_keep = 2
     saving.prepare_to_resume_after_timeout = False
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "LBJFSampling"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 10
+    sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
@@ -77,6 +74,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = 1.5
     sampler.corrector_entry_time = 0.1
     sampler.is_ordinal = False
-    sampler.sample_freq = 50
+    sampler.sample_freq = 25000
 
     return config

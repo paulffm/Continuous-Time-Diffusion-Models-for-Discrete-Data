@@ -3,7 +3,7 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_tauST_synthetic import get_config
+from config.config_tauMLP_synthetic import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -30,7 +30,7 @@ import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     save_location_png = os.path.join(save_location, "PNGs/")
@@ -41,7 +41,7 @@ def main():
 
     else:
         date = "2023-11-04"
-        config_name = "config_001_r07.yaml"
+        config_name = "config_001_tauST.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -73,14 +73,14 @@ def main():
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
-        model_name = "model_84999_r07.pt"
+        model_name = "model_24_tauST.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 85010
-        cfg.sampler.name = "ExactSampling"
-        cfg.sampler.sample_freq = 100000
-        cfg.saving.checkpoint_freq = 100000
-        cfg.sampler.num_steps = 500
+        cfg.training.n_iters = 30
+        cfg.sampler.name = "TauLeaping2"
+        cfg.sampler.sample_freq = 30
+        cfg.saving.checkpoint_freq = 30
+        cfg.sampler.num_steps = 20
         cfg.logit_type = "direct"  # ""direct"
         bookkeeping.save_config(cfg, save_location)
 
@@ -91,7 +91,7 @@ def main():
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
     print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
-    print("Logit Type: None" if cfg.loss.name == "GenericAux" else f"Logit Type: {cfg.loss.logit_type}")
+    print("Logit Type:", cfg.loss.logit_type)
     print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
@@ -133,10 +133,10 @@ def main():
                 
                 saving_plot_path = os.path.join(
                     save_location_png,
-                    f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.pdf",
+                    f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
                 dataset_utils.plot_samples(
-                    samples, saving_plot_path, im_size=4.1, im_fmt="pdf"
+                    samples, saving_plot_path, im_size=4.1, im_fmt="png"
                 )
 
             state["n_iter"] += 1

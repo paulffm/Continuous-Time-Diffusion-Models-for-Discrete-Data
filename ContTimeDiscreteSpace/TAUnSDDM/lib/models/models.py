@@ -840,3 +840,10 @@ class GaussianRateResidualMLP(ResidualMLP, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         ResidualMLP.__init__(self, cfg, device, rank)
         GaussianTargetRate.__init__(self, cfg, device)
+
+@model_utils.register_model
+class UniformRateResMLP(ResidualMLP, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        #EMA.__init__(self, cfg)
+        ResidualMLP.__init__(self, cfg, device, rank)
+        UniformRate.__init__(self, cfg, device)
