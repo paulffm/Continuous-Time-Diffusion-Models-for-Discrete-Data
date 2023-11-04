@@ -866,7 +866,7 @@ class TauLeaping2:
 
                 flips = torch.distributions.poisson.Poisson(posterior).sample()
                 choices = utils.expand_dims(
-                    torch.arange(self.S, dtype=torch.int32), axis=list(range(1, x.ndim))
+                    torch.arange(self.S, dtype=torch.int32), axis=list(range(x.ndim))
                 )
 
                 if not self.is_ordinal:

@@ -1,9 +1,7 @@
 import torch
-import ml_collections
-import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow_synthetic import get_config
+from config.config_hollow_maze import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -23,31 +21,32 @@ import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
-import time
-from torch.utils.data import DataLoader
+from lib.datasets.datasets import get_maze_data
+from lib.datasets.maze import maze_gen
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 
 
 def main():
-    train_resume = False
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
-    save_location_png = os.path.join(save_location, "PNGs/")
+    data_name = 'MAZE'
 
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    save_location = os.path.join(script_dir, f"SavedModels/{data_name}/")
+    save_location_png = os.path.join(save_location, "PNGs/")
+    # dataset_location = os.path.join(script_dir, 'lib/datasets')
+
+    train_resume = True
+    print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-03"
+        date = "2023-11-02"
         config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
-    dataset_location = os.path.join(
-        script_dir, f"lib/datasets/Synthetic/data_{cfg.data.type}.npy"
-    )
     device = torch.device(cfg.device)
 
     model = model_utils.create_model(cfg, device)
@@ -62,27 +61,21 @@ def main():
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
-    dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
-    dataloader = DataLoader(
-        dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle
-    )
-
-    bm, inv_bm = dataset_utils.get_binmap(cfg.concat_dim, cfg.data.binmode)
-
-    # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
-    # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
-
     if train_resume:
-        model_name = "model_499.pt"
+        model_name = "model_2.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 500
-        cfg.sampler.name = "LBJFSampling"
-        cfg.sampler.sample_freq = 500
-        cfg.saving.checkpoint_freq = 500
-        cfg.sampler.num_steps = 300
-        cfg.logit_type = "direct"  # ""direct"
+        cfg.training.n_iters = 10
+        cfg.sampler.sample_freq = 10
+        cfg.saving.checkpoint_freq = 10
+        cfg.sampler.num_steps = 10
         bookkeeping.save_config(cfg, save_location)
+
+    limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size
+    img = maze_gen(
+        limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
+    )
+    dataloader = get_maze_data(cfg, img)
 
     print("Info:")
     print("--------------------------------")
@@ -100,15 +93,13 @@ def main():
     print("Bidir Readout:", cfg.bidir_readout)
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 1000
+    n_samples = 16
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
     while True:
         for minibatch in tqdm(dataloader):
-            minibatch = minibatch.to(device)
-            # print(minibatch, type(minibatch), minibatch.shape)
             l = training_step.step(state, minibatch, loss)
 
             training_loss.append(l.item())
@@ -124,20 +115,25 @@ def main():
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
                 samples = sampler.sample(state["model"], n_samples, 10)
+                samples = samples.reshape(
+                    n_samples, 1, cfg.data.image_size, cfg.data.image_size
+                )
 
                 state["model"].train()
+                samples = samples * 255
+                fig = plt.figure(figsize=(9, 9))
+                for i in range(n_samples):
+                    plt.subplot(4, 4, 1 + i)
+                    plt.axis("off")
+                    plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
 
-                samples = dataset_utils.bin2float(
-                    samples.astype(np.int32), inv_bm, cfg.concat_dim, cfg.data.int_scale
-                )
-                
                 saving_plot_path = os.path.join(
                     save_location_png,
-                    f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.pdf",
+                    f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
-                dataset_utils.plot_samples(
-                    samples, saving_plot_path, im_size=4.1, im_fmt="pdf"
-                )
+                print(saving_plot_path)
+                plt.savefig(saving_plot_path)
+                plt.close()
 
             state["n_iter"] += 1
             if state["n_iter"] > cfg.training.n_iters - 1:

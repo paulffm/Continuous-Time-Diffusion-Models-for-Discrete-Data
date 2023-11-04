@@ -569,7 +569,6 @@ class HollowAux:
     def __init__(self, cfg):
         self.cfg = cfg
         self.ratio_eps = cfg.loss.eps_ratio
-        self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
 
@@ -651,17 +650,17 @@ class HollowAux:
         logits = model(xt, ts)  # B, D, S <10 sek
         # check
         loss = 0.0
-        if self.cfg.ce_coeff > 0:  # whole train step <10 sek
+        if self.cfg.loss.ce_coeff > 0:  # whole train step <10 sek
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
             ll = F.log_softmax(logits, dim=-1)
-            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.ce_coeff
+            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff
         else:
             ll_all, ll_xt = get_logprob_with_logits(
                 self.cfg, model, xt, ts, logits
             )  # copy expensive?
             # ll_all, ll_xt = model.get_logprob_with_logits(xt, ts, logits)
             loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
-                1 - self.cfg.ce_coeff
+                1 - self.cfg.loss.ce_coeff
             )
 
         return torch.sum(loss) / B

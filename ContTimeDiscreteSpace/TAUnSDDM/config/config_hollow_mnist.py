@@ -12,9 +12,9 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "HollowAux"
-    config.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
-    config.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
+    loss.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -49,37 +49,37 @@ def get_config():
     model.rate_const = 0.01
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
-    config.net_arch = "bidir_transformer"
+    model.net_arch = "bidir_transformer"
 
     # BiDir
-    config.embed_dim = 512
-    config.bidir_readout = "res_concat"  # res_concat, attention, concat
-    config.model.use_one_hot_input = False
+    model.embed_dim = 512
+    model.bidir_readout = "res_concat"  # res_concat, attention, concat
+    model.use_one_hot_input = False
     # UniDirectional
-    config.dropout_rate = 0.1
-    config.concat_dim = data.image_size * data.image_size * 1
+    model.dropout_rate = 0.1
+    model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    config.num_layers = 1
+    model.num_layers = 1
     # TransformerBlock
     ## SA
-    config.num_heads = 1
-    config.attention_dropout_rate = 0.1
-    config.transformer_norm_type = "postnorm"  # prenorm
+    model.num_heads = 1
+    model.attention_dropout_rate = 0.1
+    model.transformer_norm_type = "postnorm"  # prenorm
     ## FF
-    config.mlp_dim = 512  # d_model in TAU => embed_dim?
+    model.mlp_dim = 512  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
-    config.out_dim = data.S
+    model.out_dim = data.S
     # ConcatReadout
-    config.readout_dim = data.S
+    model.readout_dim = data.S
     # MLP
     # features, activation
 
     # ResidualReadout
-    config.num_output_ffresiduals = 1
+    model.num_output_ffresiduals = 1
 
     # AttentionReadout
     ## CrossAttention
-    config.qkv_dim = config.embed_dim
+    model.qkv_dim = config.embed_dim
     # config.num_heads = 4
     model.ema_decay = 0.9999  # 0.9999
     model.Q_sigma = 20.0

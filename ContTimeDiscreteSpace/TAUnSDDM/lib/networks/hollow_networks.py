@@ -50,7 +50,8 @@ class ConcatReadout(nn.Module):
         self.readout_dim = readout_dim
         out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
         self.predictor = MLP(
-            [2 * self.config.embed_dim, config.mlp_dim, out_dim], activation=nn.GELU()
+            [2 * self.config.model.embed_dim, config.model.mlp_dim, out_dim],
+            activation=nn.GELU(),
         )
 
     def forward(self, l2r_embed, r2l_embed, _):
@@ -64,20 +65,20 @@ class ResidualReadout(nn.Module):
         super(ResidualReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.model.embed_dim
 
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
         self.input_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)
         self.mlp = MLP(
-            [self.embed_dim, self.config.mlp_dim, 4 * self.embed_dim],
+            [self.embed_dim, self.config.model.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
         )
         self.resid_layers = []
         self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
+        for _ in range(config.model.num_output_ffresiduals):
             self.resid_layers.append(
                 MLP(
-                    [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
+                    [2 * self.embed_dim, self.config.model.mlp_dim, 2 * self.embed_dim],
                     activation=nn.GELU(),
                 )
             )
@@ -92,7 +93,7 @@ class ResidualReadout(nn.Module):
         # x: B, D, E
         temb = self.mlp(temb)  # B, E -> # B, 4 E
         x = self.input_layer(x)
-        for i in range(self.config.num_output_ffresiduals):
+        for i in range(self.config.model.num_output_ffresiduals):
             film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
             z = self.resid_layers[2 * i](x)  # B, D, 2E -> B, D, 2E
             x = self.resid_layers[2 * i + 1](x + z)
@@ -108,20 +109,20 @@ class ConcatResidualReadout(nn.Module):
         super(ConcatResidualReadout, self).__init__()
         self.config = config
         self.readout_dim = readout_dim
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.model.embed_dim
 
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
 
         self.mlp = MLP(
-            [self.embed_dim, self.config.mlp_dim, 4 * self.embed_dim],
+            [self.embed_dim, self.config.model.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
         )
         self.resid_layers = []
         self.film_layer = []
-        for _ in range(config.num_output_ffresiduals):
+        for _ in range(config.model.num_output_ffresiduals):
             self.resid_layers.append(
                 MLP(
-                    [2 * self.embed_dim, self.config.mlp_dim, 2 * self.embed_dim],
+                    [2 * self.embed_dim, self.config.model.mlp_dim, 2 * self.embed_dim],
                     activation=nn.GELU(),
                 )
             )
@@ -133,7 +134,10 @@ class ConcatResidualReadout(nn.Module):
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
 
     def forward(
-        self, l2r_embed: TensorType["B", "D", "E"], r2l_embed: TensorType["B", "D", "E"], temb: TensorType["B", "E"]
+        self,
+        l2r_embed: TensorType["B", "D", "E"],
+        r2l_embed: TensorType["B", "D", "E"],
+        temb: TensorType["B", "E"],
     ) -> TensorType["B", "D", "R"]:
         assert (
             l2r_embed.size()[:-1] == r2l_embed.size()[:-1]
@@ -142,7 +146,7 @@ class ConcatResidualReadout(nn.Module):
 
         temb = self.mlp(temb)  # B, 4 E
 
-        for i in range(self.config.num_output_ffresiduals):
+        for i in range(self.config.model.num_output_ffresiduals):
             film_params = self.film_layer[i](temb)  # B, 4E -> B, 4E
             z = self.resid_layers[i * 2](x)  # B, D, 2E -> B, D, 2E
             x = self.resid_layers[i * 2 + 1](x + z)
@@ -171,17 +175,22 @@ class CrossAttention(nn.Module):
     def __init__(self, config):
         super(CrossAttention, self).__init__()
         self.config = config
-        self.num_heads = config.num_heads
-        self.head_dim = config.qkv_dim // config.num_heads  #
+        self.num_heads = config.model.num_heads
+        self.head_dim = config.model.qkv_dim // config.model.num_heads  #
         self.dense_query = nn.Linear(
-            config.qkv_dim, config.num_heads * self.head_dim, bias=False
+            config.model.qkv_dim, config.model.num_heads * self.head_dim, bias=False
         )
-        self.dense_key = nn.Linear(config.qkv_dim, self.num_heads * self.head_dim)
-        self.dense_val = nn.Linear(config.qkv_dim, self.num_heads * self.head_dim)
+        self.dense_key = nn.Linear(config.model.qkv_dim, self.num_heads * self.head_dim)
+        self.dense_val = nn.Linear(config.model.qkv_dim, self.num_heads * self.head_dim)
 
-        self.out_linear = nn.Linear(config.qkv_dim, config.embed_dim)
+        self.out_linear = nn.Linear(config.model.qkv_dim, config.model.embed_dim)
 
-    def forward(self, l2r_embed: TensorType["B", "D", "E"], r2l_embed: TensorType["B", "D", "E"], temb: TensorType["B", "E"]):
+    def forward(
+        self,
+        l2r_embed: TensorType["B", "D", "E"],
+        r2l_embed: TensorType["B", "D", "E"],
+        temb: TensorType["B", "E"],
+    ):
         seq_len = l2r_embed.shape[1]
         temb = temb.unsqueeze(1)  # B, 1, D
 
@@ -231,48 +240,50 @@ class AttentionReadout(nn.Module):
         self.readout_dim = readout_dim
         self.cross_attention = CrossAttention(config)
         self.model = ResidualReadout(self.config, self.readout_dim)
-        self.ln1 = nn.LayerNorm(config.embed_dim)
-        self.ln2 = nn.LayerNorm(config.embed_dim)  # l2r_embed.shape[-1]
+        self.ln1 = nn.LayerNorm(config.model.embed_dim)
+        self.ln2 = nn.LayerNorm(config.model.embed_dim)  # l2r_embed.shape[-1]
 
     def forward(self, l2r_embed, r2l_embed, temb):
         inputs = l2r_embed + r2l_embed  # B, D, E
-        if self.config.transformer_norm_type == "prenorm":
+        if self.config.model.transformer_norm_type == "prenorm":
             l2r_embed = self.ln1(l2r_embed)
             r2l_embed = self.ln2(r2l_embed)
             x = self.cross_attention(l2r_embed, r2l_embed, temb)
             x = x + inputs
-        elif self.config.transformer_norm_type == "postnorm":
+        elif self.config.model.transformer_norm_type == "postnorm":
             x = self.cross_attention(l2r_embed, r2l_embed, temb)
             x = x + inputs
             x = self.ln1(x)  # adjust based on your requirements
         else:
-            raise ValueError("unknown norm type %s" % self.config.transformer_norm_type)
+            raise ValueError(
+                "unknown norm type %s" % self.config.model.transformer_norm_type
+            )
         return self.model(x, temb)  # B, D, S
-    
+
 
 class SelfAttentionBlock(nn.Module):
     def __init__(self, config):
         super(SelfAttentionBlock, self).__init__()
         self.config = config
         self.self_attention = nn.MultiheadAttention(
-            embed_dim=config.embed_dim,  
-            num_heads=config.num_heads,
-            dropout=config.attention_dropout_rate,
+            embed_dim=config.model.embed_dim,
+            num_heads=config.model.num_heads,
+            dropout=config.model.attention_dropout_rate,
             batch_first=True,
         )
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.norm = nn.LayerNorm(config.embed_dim)  
+        self.dropout = nn.Dropout(config.model.dropout_rate)
+        self.norm = nn.LayerNorm(config.model.embed_dim)
 
     # input shape == output shape
     def forward(self, inputs: TensorType["B", "D", "E"], masks):
-        if self.config.transformer_norm_type == "prenorm":
+        if self.config.model.transformer_norm_type == "prenorm":
             x = self.norm(inputs)
             x, _ = self.self_attention(
                 x, x, x, attn_mask=masks
             )  # adjust the input as needed
             x = self.dropout(x)
             x = x + inputs
-        elif self.config.transformer_norm_type == "postnorm":  # used in _sa_block
+        elif self.config.model.transformer_norm_type == "postnorm":  # used in _sa_block
             x, _ = self.self_attention(inputs, inputs, inputs, attn_mask=masks)
             x = self.dropout(x)
             x = x + inputs  # not in _sa_block
@@ -337,19 +348,19 @@ class FeedForwardBlock(nn.Module):
         super(FeedForwardBlock, self).__init__()
         self.config = config
         self.mlp = TransformerMlpBlock(
-            mlp_dim=config.mlp_dim,  # make sure to pass the necessary parameters
-            dropout_rate=config.dropout_rate,
-            embed_dim=config.embed_dim,
-            out_dim=None,  
+            mlp_dim=config.model.mlp_dim,  # make sure to pass the necessary parameters
+            dropout_rate=config.model.dropout_rate,
+            embed_dim=config.model.embed_dim,
+            out_dim=None,
         )
-        self.norm = nn.LayerNorm(config.embed_dim)  
+        self.norm = nn.LayerNorm(config.model.embed_dim)
 
     def forward(self, x: TensorType["B", "D", "E"]) -> TensorType["B", "D", "E"]:
-        if self.config.transformer_norm_type == "prenorm":
+        if self.config.model.transformer_norm_type == "prenorm":
             z = self.norm(x)
             z = self.mlp(z)
             z = x + z
-        elif self.config.transformer_norm_type == "postnorm":  # used in ff_
+        elif self.config.model.transformer_norm_type == "postnorm":  # used in ff_
             z = self.mlp(x)
             z = x + z
             z = self.norm(z)
@@ -376,13 +387,16 @@ class TransformerEncoder(nn.Module):
     def __init__(self, config):
         super(TransformerEncoder, self).__init__()
         self.config = config
-        self.dropout = nn.Dropout(config.dropout_rate)
+        self.dropout = nn.Dropout(config.model.dropout_rate)
         self.trans_block_layers = []
-        for _ in range(config.num_layers):
+        for _ in range(config.model.num_layers):
             self.trans_block_layers.append(TransformerBlock(config))
         self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
         self.pos_embed = PositionalEncoding(
-            config.device, config.embed_dim, config.dropout_rate, config.concat_dim
+            config.device,
+            config.model.embed_dim,
+            config.model.dropout_rate,
+            config.concat_dim,
         )
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
@@ -410,26 +424,27 @@ class MaskedTransformer(nn.Module):
     def __init__(self, config):
         super(MaskedTransformer, self).__init__()
         self.config = config
-        self.embedding = nn.Embedding(config.vocab_size + 1, config.embed_dim)
+        self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
         self.trans_encoder = TransformerEncoder(config)
 
-        if config.readout == "mlp":
+        # config.model.readout noch nicht in config
+        if config.model.readout == "mlp":
             self.model = MLP(
-                [2 * config.embed_dim, config.mlp_dim, self.config.data.S],
+                [2 * config.model.embed_dim, config.model.mlp_dim, self.config.data.S],
                 activation=nn.functional.gelu,
             )
-        elif config.readout == "resnet":
+        elif config.model.readout == "resnet":
             self.model = ResidualReadout(config)
         else:
-            raise ValueError("Unknown readout type %s" % config.readout)
+            raise ValueError("Unknown readout type %s" % config.model.readout)
 
     def forward(self, x, temb, pos):
         x = self.embedding(x)
         embed = self.trans_encoder(x, temb)
         embed = embed[:, pos].unsqueeze(1)
-        if self.config.readout == "mlp":
+        if self.config.model.readout == "mlp":
             logits = self.model(embed)
-        elif self.config.readout == "resnet":
+        elif self.config.model.readout == "resnet":
             logits = self.model(embed, temb)
 
         return logits
@@ -443,20 +458,25 @@ class UniDirectionalTransformer(nn.Module):
         super(UniDirectionalTransformer, self).__init__()
         self.config = config
         self.direction = direction
-        self.dropout = nn.Dropout(config.dropout_rate)
+        self.dropout = nn.Dropout(config.model.dropout_rate)
 
         self.trans_block_layers = []
-        for i in range(config.num_layers):
+        for i in range(config.model.num_layers):
             self.trans_block_layers.append(TransformerBlock(config))
         self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
 
         # concat_dim in
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
         self.pos_embed = PositionalEncoding(
-            config.device, config.embed_dim, config.dropout_rate, config.concat_dim
+            config.device,
+            config.model.embed_dim,
+            config.model.dropout_rate,
+            config.concat_dim,
         )
 
-    def forward(self, x: TensorType["B", "D", "E"], temb: TensorType["B", "E"], conditioner=None) -> TensorType["B", "D", "E"]:
+    def forward(
+        self, x: TensorType["B", "D", "E"], temb: TensorType["B", "E"], conditioner=None
+    ) -> TensorType["B", "D", "E"]:
         assert x.ndim == 3 and temb.ndim == 2  # B, D, E and B, E
         temb = temb.unsqueeze(1)
         if conditioner is None:
@@ -502,42 +522,44 @@ class BidirectionalTransformer(nn.Module):
         super(BidirectionalTransformer, self).__init__()
         self.config = config
         self.S = config.data.S
-        self.embed_dim = config.embed_dim
-        self.mlp_dim = config.mlp_dim
+        self.embed_dim = config.model.embed_dim
+        self.mlp_dim = config.model.mlp_dim
         self.embedding = nn.Embedding(
-            self.S, config.embed_dim
+            self.S, config.model.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
         self.use_one_hot_input = config.model.use_one_hot_input
 
-        if self.config.net_arch == "bidir_transformer":
+        if self.config.model.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
         else:
-            raise ValueError("Unknown net_arch: %s" % self.config.net_arch)
+            raise ValueError("Unknown net_arch: %s" % self.config.model.net_arch)
 
         if readout_dim is None:
             readout_dim = self.S
 
         self.readout_dim = readout_dim
 
-        if self.config.bidir_readout == "concat":
+        if self.config.model.bidir_readout == "concat":
             self.readout_module = ConcatReadout(self.config, readout_dim=readout_dim)
-        elif self.config.bidir_readout == "res_concat":
+        elif self.config.model.bidir_readout == "res_concat":
             self.readout_module = ConcatResidualReadout(
                 self.config, readout_dim=readout_dim
             )
-        elif self.config.bidir_readout == "attention":
+        elif self.config.model.bidir_readout == "attention":
             self.readout_module = AttentionReadout(self.config, readout_dim=readout_dim)
         else:
-            raise ValueError("Unknown bidir_readout: %s" % self.config.bidir_readout)
+            raise ValueError(
+                "Unknown bidir_readout: %s" % self.config.model.bidir_readout
+            )
 
         if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, config.embed_dim)
+            self.input_embedding = nn.Linear(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
-            self.input_embedding = nn.Linear(1, config.embed_dim)
+            self.input_embedding = nn.Linear(1, self.embed_dim)
 
         # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
         # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
@@ -547,7 +569,9 @@ class BidirectionalTransformer(nn.Module):
             nn.Linear(self.mlp_dim, self.embed_dim),
         )
 
-    def forward(self, x: TensorType["B", "D"], t: TensorType["B"]) -> TensorType["B", "D", "S"]:
+    def forward(
+        self, x: TensorType["B", "D"], t: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
         temb = self.temb_net(
             transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
         )  # B, E
@@ -582,17 +606,18 @@ class EnumerativeTransformer(nn.Module):
         super(EnumerativeTransformer, self).__init__()
         self.config = config
         self.S = config.data.S
-        self.embedding = nn.Embedding(self.S, config.embed_dim)
-        self.temb_scale = config.time_scale_factor
+        self.embed_dim = config.model.embed_dim
+        self.embedding = nn.Embedding(self.S, self.embed_dim)
+        self.temb_scale = config.model.time_scale_factor
         self.transformer = MaskedTransformer(self.config)
 
-    def forward(self, x: TensorType["B", "D"], t: TensorType["B"]) -> TensorType["B", "D", "S"]:
-        temb = transformer_timestep_embedding(
-            t * self.temb_scale, self.config.embed_dim
-        )
+    def forward(
+        self, x: TensorType["B", "D"], t: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
         x = x.view(x.shape[0], -1)
 
-        prefix_cond = self.config.get("conditional_dim", 0)
+        prefix_cond = self.config.model.get("conditional_dim", 0)
         positions = torch.arange(prefix_cond, x.shape[1])
         logits_list = []
 
@@ -622,16 +647,18 @@ class PrefixConditionalBidirTransformer(nn.Module):
         super(PrefixConditionalBidirTransformer, self).__init__()
         self.config = config
         self.S = config.data.S
-        self.embed_dim = config.embed_dim
-        self.mlp_dim = config.mlp_dim
+        self.embed_dim = config.model.embed_dim
+        self.mlp_dim = config.model.mlp_dim
         self.embedding = nn.Embedding(
-            self.S, config.embed_dim
+            self.S, self.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
         self.use_one_hot_input = config.model.use_one_hot_input
-        self.conditional_dim = config.conditional_dim
+        self.conditional_dim = self.config.model.get(
+            "conditional_dim", 0
+        )  # config.conditional_dim
 
-        if self.config.net_arch == "bidir_transformer":
+        if self.config.model.net_arch == "bidir_transformer":
             self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
             self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
         else:
@@ -642,23 +669,25 @@ class PrefixConditionalBidirTransformer(nn.Module):
 
         self.readout_dim = readout_dim
 
-        if self.config.bidir_readout == "concat":
+        if self.config.model.bidir_readout == "concat":
             self.readout_module = ConcatReadout(self.config, readout_dim=readout_dim)
-        elif self.config.bidir_readout == "res_concat":
+        elif self.config.model.bidir_readout == "res_concat":
             self.readout_module = ConcatResidualReadout(
                 self.config, readout_dim=readout_dim
             )
-        elif self.config.bidir_readout == "attention":
+        elif self.config.model.bidir_readout == "attention":
             self.readout_module = AttentionReadout(self.config, readout_dim=readout_dim)
         else:
-            raise ValueError("Unknown bidir_readout: %s" % self.config.bidir_readout)
+            raise ValueError(
+                "Unknown bidir_readout: %s" % self.config.model.bidir_readout
+            )
 
         if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, config.embed_dim)
+            self.input_embedding = nn.Linear(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
-            self.input_embedding = nn.Linear(1, config.embed_dim)
+            self.input_embedding = nn.Linear(1, self.embed_dim)
 
         # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
         # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
@@ -696,11 +725,11 @@ class PrefixConditionalBidirTransformer(nn.Module):
         # logits = logits.view(input_shape + [self.readout_dim])  # B, D,
 
         dummy_logits = torch.zeros(
-            [x.shape[0], self.config.conditional_dim] + list(logits.shape[2:]),
+            [x.shape[0], self.conditional_dim] + list(logits.shape[2:]),
             dtype=torch.float32,
         )
         logits = torch.cat([dummy_logits, logits], dim=1)
-        assert logits.shape[1] == self.config.conditional_dim + x.shape[1]
+        assert logits.shape[1] == self.conditional_dim + x.shape[1]
         return logits
 
 

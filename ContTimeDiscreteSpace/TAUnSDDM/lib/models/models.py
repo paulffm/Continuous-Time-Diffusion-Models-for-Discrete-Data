@@ -19,7 +19,7 @@ from lib.networks import hollow_networks
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
-
+        self.cfg = cfg
         self.fix_logistic = cfg.model.fix_logistic
         ch = cfg.model.ch
         input_channels = cfg.model.input_channels
@@ -38,7 +38,7 @@ class ImageX0PredBasePaul(nn.Module):
             attn_resolutions=[16],
             num_heads=1,
             dropout=cfg.model.dropout,
-            model_output=cfg.model.model_output,  # 'logits' or 'logistic_pars'
+            model_output=cfg.model.model_output,  # c or 'logistic_pars'
             num_classes=self.S,
             x_min_max=data_min_max,
             img_size=self.data_shape[2],
@@ -63,38 +63,43 @@ class ImageX0PredBasePaul(nn.Module):
         # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution
         # Truncated logistic output from https://arxiv.org/pdf/2107.03006.pdf
         # wenden tanh auf beides an, d3pm nur auf mu
+
         net_out = self.net(x, times)  # (B, 2*C, H, W)
-        mu = net_out[0].unsqueeze(-1)
-        log_scale = net_out[1].unsqueeze(-1)
+        if self.cfg.model.model_output == 'logits':
+            logits = net_out.view(B, D, S)
 
-        # The probability for a state is then the integral of this continuous distribution between
-        # this state and the next when mapped onto the real line. To impart a residual inductive bias
-        # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
-        # is the normalized input into the model and μ′ is mean outputted from the network.
-        # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
-        inv_scale = torch.exp(-(log_scale - 2))
-
-        bin_width = 2.0 / self.S
-        bin_centers = torch.linspace(
-            start=-1.0 + bin_width / 2,
-            end=1.0 - bin_width / 2,
-            steps=self.S,
-            device=self.device,
-        ).view(1, 1, 1, 1, self.S)
-
-        sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
-        bin_left_logcdf = F.logsigmoid(sig_in_left)
-        sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
-        bin_right_logcdf = F.logsigmoid(sig_in_right)
-
-        logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
-        logits_2 = self._log_minus_exp(
-            -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
-        )
-        if self.fix_logistic:
-            logits = torch.min(logits_1, logits_2)
         else:
-            logits = logits_1
+            mu = net_out[0].unsqueeze(-1)
+            log_scale = net_out[1].unsqueeze(-1)
+
+            # The probability for a state is then the integral of this continuous distribution between
+            # this state and the next when mapped onto the real line. To impart a residual inductive bias
+            # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
+            # is the normalized input into the model and μ′ is mean outputted from the network.
+            # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
+            inv_scale = torch.exp(-(log_scale - 2))
+
+            bin_width = 2.0 / self.S
+            bin_centers = torch.linspace(
+                start=-1.0 + bin_width / 2,
+                end=1.0 - bin_width / 2,
+                steps=self.S,
+                device=self.device,
+            ).view(1, 1, 1, 1, self.S)
+
+            sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
+            bin_left_logcdf = F.logsigmoid(sig_in_left)
+            sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
+            bin_right_logcdf = F.logsigmoid(sig_in_right)
+
+            logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
+            logits_2 = self._log_minus_exp(
+                -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
+            )
+            if self.fix_logistic:
+                logits = torch.min(logits_1, logits_2)
+            else:
+                logits = logits_1
 
         logits = logits.view(B, D, S)
 
@@ -289,9 +294,9 @@ class UniformRate:
         rate = rate - np.diag(np.sum(rate, axis=1))  # diag = - sum of rows
         eigvals, eigvecs = np.linalg.eigh(rate)
 
-        self.rate_matrix = torch.from_numpy(rate).float().to(self.device)
-        self.eigvals = torch.from_numpy(eigvals).float().to(self.device)
-        self.eigvecs = torch.from_numpy(eigvecs).float().to(self.device)
+        self.rate_matrix = torch.from_numpy(rate).float().to(device)
+        self.eigvals = torch.from_numpy(eigvals).float().to(device)
+        self.eigvecs = torch.from_numpy(eigvecs).float().to(device)
         # above same as get_rate_matrix from ForwardModel
 
     # rate_mat
@@ -371,7 +376,7 @@ class UniformVariantRate(UniformRate):
 
     def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         rate_scalars = self._rate_scalar(t).view(t.size(0), 1, 1)
-        base = self.rate_matrix.t().view(1, self.S, self.S)  # why t()?
+        base = self.rate_matrix.view(1, self.S, self.S)  # why t()? self.rate_matrix.t().view(1, self.S, self.S)
         r = base * rate_scalars
         return r
 
@@ -800,7 +805,7 @@ class GaussianTargetRateImageX0PredEMAPaul(
 ):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        ImageX0PredBasePaul.__init__(self, cfg, device, use_net=False, rank=rank)
+        ImageX0PredBasePaul.__init__(self, cfg, device, rank=rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()

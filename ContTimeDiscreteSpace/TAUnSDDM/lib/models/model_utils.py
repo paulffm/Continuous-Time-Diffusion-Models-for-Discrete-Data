@@ -26,23 +26,23 @@ def create_model(cfg, device, rank=None):
 
 def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     """Get logprob with logits."""
-    #model = state["model"] # copy expensive?
+    # model = state["model"] # copy expensive?
     # mabye less expensive to insert qt0 = model.transition(t) ?
     # checked
     if xt_target is None:
         xt_target = xt
     xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
-    if cfg.logit_type == "direct":
+    if cfg.loss.logit_type == "direct":
         log_prob = F.log_softmax(logits, dim=-1)
     else:
         qt0 = model.transition(t)
-        if cfg.logit_type == "reverse_prob":
+        if cfg.loss.logit_type == "reverse_prob":
             p0t = F.softmax(logits, dim=-1)
             qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
             prob_all = p0t @ qt0
             log_prob = torch.log(prob_all + 1e-35)
             # check
-        elif cfg.logit_type == "reverse_logscale":
+        elif cfg.loss.logit_type == "reverse_logscale":
             log_p0t = F.log_softmax(logits, dim=-1)
             log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
             log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
@@ -50,7 +50,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
             # check
         else:
-            raise ValueError("Unknown logit_type: %s" % cfg.logit_type)
+            raise ValueError("Unknown logit_type: %s" % cfg.loss.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
     # print("xt_onehot", xt_onehot, xt_onehot.shape)
     # print("log_prob/ll_all", log_prob, log_prob.shape)
