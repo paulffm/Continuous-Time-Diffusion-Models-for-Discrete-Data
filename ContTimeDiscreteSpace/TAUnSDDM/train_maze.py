@@ -17,7 +17,6 @@ import lib.training.training as training
 import lib.training.training_utils as training_utils
 import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
-import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
@@ -35,15 +34,15 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-02"
-        config_name = "config_001.yaml"
+        date = "2023-11-06"
+        config_name = "config_001_unet.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -62,13 +61,13 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_2.pt"
+        model_name = "model_399_unet.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 10
-        cfg.sampler.sample_freq = 10
-        cfg.saving.checkpoint_freq = 10
-        cfg.sampler.num_steps = 10
+        cfg.training.n_iters = 1000
+        cfg.sampler.sample_freq = 1000
+        cfg.saving.checkpoint_freq = 200
+        cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
 
     limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size

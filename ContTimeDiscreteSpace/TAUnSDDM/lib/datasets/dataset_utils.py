@@ -1,10 +1,5 @@
-from collections.abc import Sequence
-import os
-from absl import app
-from absl import flags
-from ml_collections import config_flags
 import numpy as np
-import tqdm
+
 
 """Synthetic data util."""
 import sklearn
@@ -26,7 +21,7 @@ def register_dataset(cls):
 def get_dataset(cfg, device, root=None):
     return _DATASETS[cfg.data.name](cfg, device, root)
 
-
+##### Synthetic DataSets
 def inf_train_gen(data, rng=None, batch_size=200):
     """Sample batch of synthetic data."""
     if rng is None:

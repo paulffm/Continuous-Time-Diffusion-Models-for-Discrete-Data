@@ -298,8 +298,8 @@ class UNet(nn.Module):
             num_heads=1,
             dropout=0,
             model_output=str,  # 'logits' or 'logistic_pars'
-            num_classes=256,
-            img_size=32
+            num_classes=2,
+            img_size=28
             
     ):
         super().__init__()

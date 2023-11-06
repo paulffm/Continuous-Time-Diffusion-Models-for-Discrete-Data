@@ -1,5 +1,4 @@
 from tkinter import Image
-from typing import Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,7 +12,7 @@ import math
 from torch.nn.parallel import DistributedDataParallel as DDP
 from lib.networks.hollow_networks import BidirectionalTransformer
 from lib.utils import utils
-from lib.networks import hollow_networks
+from lib.networks import hollow_networks, sudoku_networks
 
 
 class ImageX0PredBasePaul(nn.Module):
@@ -607,7 +606,29 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
+    
+class SudokuScoreNet(nn.Module):
+    def __init__(self, cfg, device, encoding, rank=None):
+        super().__init__()
 
+        tmp_net = sudoku_networks.ScoreNet(cfg, encoding).to(
+            device
+        )
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+
+        logits = self.net(x, times)  # (B, D, S)
+
+        return logits
 
 # Based on https://github.com/yang-song/score_sde_pytorch/blob/ef5cb679a4897a40d20e94d8d0e2124c3a48fb8c/models/ema.py
 class EMA:
@@ -724,7 +745,7 @@ class UniformVariantBDTEMA(EMA, HollowTransformer, UniformVariantRate):
 
         self.init_ema()
 
-
+# hollow
 @model_utils.register_model
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
@@ -744,48 +765,14 @@ class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
 
         self.init_ema()
 
-
 @model_utils.register_model
-class UniformBDTEMAGetLogProb(EMA, BidirectionalTransformer, UniformRate):
-    def __init__(self, cfg, device, rank=None):
+class UniformScoreNetEMA(EMA, SudokuScoreNet, UniformRate):
+    def __init__(self, cfg, device, encoding, rank=None):
         EMA.__init__(self, cfg)
-        BidirectionalTransformer.__init__(self, cfg)
+        SudokuScoreNet.__init__(self, cfg, device, encoding, rank)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
-
-    def get_logprob_with_logits(self, xt, t, logits, xt_target=None):
-        """Get logprob with logits."""
-
-        # checked
-        if xt_target is None:
-            xt_target = xt
-        xt_onehot = F.one_hot(xt_target.long(), self.cfg.data.S)
-        if self.cfg.logit_type == "direct":
-            log_prob = F.log_softmax(logits, dim=-1)
-        else:
-            qt0 = self.transition(t)
-            if self.cfg.logit_type == "reverse_prob":
-                p0t = F.softmax(logits, dim=-1)
-                qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
-                prob_all = p0t @ qt0
-                log_prob = torch.log(prob_all + 1e-35)
-                # check
-            elif self.cfg.logit_type == "reverse_logscale":
-                log_p0t = F.log_softmax(logits, dim=-1)
-                log_qt0 = torch.where(qt0 <= 1e-35, -1e9, torch.log(qt0))
-                log_qt0 = utils.expand_dims(log_qt0, axis=list(range(1, xt.dim())))
-                log_p0t = log_p0t.unsqueeze(-1)
-                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
-                # check
-            else:
-                raise ValueError("Unknown logit_type: %s" % self.cfg.logit_type)
-        log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-        # print("xt_onehot", xt_onehot, xt_onehot.shape)
-        # print("log_prob/ll_all", log_prob, log_prob.shape)
-        # print("log_prob * xt_onehot", log_prob * xt_onehot, (log_prob * xt_onehot).shape)
-        # print("log_xt/ll_xt", log_xt, log_xt.shape)
-        return log_prob, log_xt
 
 
 @model_utils.register_model
@@ -797,17 +784,6 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
 
         self.init_ema()
 
-
-@model_utils.register_model
-class GaussianTargetRateImageX0PredEMAPaul(
-    EMA, ImageX0PredBasePaul, GaussianTargetRate
-):
-    def __init__(self, cfg, device, rank=None):
-        EMA.__init__(self, cfg)
-        ImageX0PredBasePaul.__init__(self, cfg, device, rank=rank)
-        GaussianTargetRate.__init__(self, cfg, device)
-
-        self.init_ema()
 
 
 @model_utils.register_model

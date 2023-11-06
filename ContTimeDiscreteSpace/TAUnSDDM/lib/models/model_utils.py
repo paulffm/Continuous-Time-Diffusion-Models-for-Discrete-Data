@@ -17,8 +17,11 @@ def get_model(name):
     return _MODELS[name]
 
 
-def create_model(cfg, device, rank=None):
-    model = get_model(cfg.model.name)(cfg, device, rank)
+def create_model(cfg, device, encoding=None, rank=None):
+    if encoding == None:
+        model = get_model(cfg.model.name)(cfg, device, rank)
+    else:
+        model = get_model(cfg.model.name)(cfg, device, encoding, rank)
     model = model.to(device)
 
     return model

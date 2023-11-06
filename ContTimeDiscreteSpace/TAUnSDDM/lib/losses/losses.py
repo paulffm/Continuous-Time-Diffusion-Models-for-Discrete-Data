@@ -1,11 +1,8 @@
 import torch
 import torch.nn as nn
 import lib.losses.losses_utils as losses_utils
-import math
-import numpy as np
 import torch.autograd.profiler as profiler
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
 import lib.utils.utils as utils
 import time
 from lib.models.model_utils import get_logprob_with_logits

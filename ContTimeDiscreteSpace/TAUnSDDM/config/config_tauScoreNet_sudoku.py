@@ -31,14 +31,10 @@ def get_config():
     training.warmup = 0  # 5000
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = "DiscreteMNIST"
-    data.train = True
-    data.download = True
+    data.name = "SudokuDataset"
     data.S = 2
-    data.batch_size = 64  # use 128 if you have enough memory or use distributed
+    data.batch_size = 32  # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.image_size = 28
-    data.shape = [1, data.image_size, data.image_size]
     data.crop_wall = True
     config.concat_dim = data.image_size * data.image_size * 1
 
