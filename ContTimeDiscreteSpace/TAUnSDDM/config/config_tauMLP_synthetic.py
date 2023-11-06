@@ -21,7 +21,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 25000  # 2000 #2000000
+    training.n_iters = 200000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 5
     training.warmup = 0  # 50  # 5000
@@ -32,8 +32,8 @@ def get_config():
     data.is_img = True
     data.S = 2
     data.binmode = "gray"
-    data.int_scale = 5995.531550196217
-    data.plot_size = 4.465403646975654
+    data.int_scale = 5970.914754907331
+    data.plot_size = 4.48793632886299
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.shape = [32]
@@ -59,7 +59,7 @@ def get_config():
     optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-    saving.checkpoint_freq = 1000
+    saving.checkpoint_freq = 10000
     saving.num_checkpoints_to_keep = 2
     saving.prepare_to_resume_after_timeout = False
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
@@ -72,8 +72,8 @@ def get_config():
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = 1.5
-    sampler.corrector_entry_time = 0.1
+    sampler.corrector_entry_time = 0.0
     sampler.is_ordinal = False
-    sampler.sample_freq = 25000
+    sampler.sample_freq = 200000
 
     return config

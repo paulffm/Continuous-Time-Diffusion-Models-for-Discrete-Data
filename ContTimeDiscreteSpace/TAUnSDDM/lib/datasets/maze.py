@@ -658,8 +658,8 @@ class Maze:
             )  # Finished looking for input errors.
 
         size = (
-            pixelSizeOfTile * (self.sizeX * 2 + 1),
-            pixelSizeOfTile * (self.sizeY * 2 + 1),
+            pixelSizeOfTile * (self.sizeX * 2 +1),
+            pixelSizeOfTile * (self.sizeY * 2 +1),
         )
         # Determines the size of the picture. It does this by taking the number of tiles,
         # multiplying it with 2 to account for walls or connections and adds one for offset
@@ -671,8 +671,8 @@ class Maze:
             for tile in row:
                 # There are floor tiles at postion 1,3,5..., at postion 0,2,4,6... are either wall tiles or connecting tiles.
 
-                x = ((tile.coordinateX + 1) * 2 - 1) * pixelSizeOfTile
-                y = ((tile.coordinateY + 1) * 2 - 1) * pixelSizeOfTile
+                x = ((tile.coordinateX + 1) * 2 -1) * pixelSizeOfTile
+                y = ((tile.coordinateY + 1) * 2 -1) * pixelSizeOfTile
                 drawImage.rectangle(
                     [x, y, x + pixelSizeOfTile - 1, y + pixelSizeOfTile - 1],
                     fill=colorFloor,
@@ -748,8 +748,12 @@ class Maze:
         return True
 
 
+import torchvision.transforms as transforms
+
 def maze_gen(
     limit: int,
+    size: int=None,
+    crop: bool=False,
     dim_x: int = 10,
     dim_y: int = 10,
     pixelSizeOfTile: int = 1,
@@ -758,20 +762,33 @@ def maze_gen(
     device = 'cpu'
 ):
     n = 1
-    transform = transforms.Compose([transforms.PILToTensor()])
+    # Fügen Sie hier die Resize-Transformation hinzu
+    transform = transforms.Compose([
+        transforms.PILToTensor() # Ändern Sie dies auf (32, 32) für 32x32 Größe
+    ])
     image_list = []
     while True:
         newMaze = Maze(dim_x, dim_y, mazeName=f"maze_{n}")
         newMaze.makeMazeGrowTree(weightHigh, weightLow)
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
-        img_tensor = transform(mazeImageBW) * 1
-        image_list.append(img_tensor.to(device))
+        if crop:
+            cropped_size = pixelSizeOfTile * (dim_x * 2 + 1) - 1
+            mazeImageBW = mazeImageBW.crop((1, 1, cropped_size, cropped_size))
+        
+        # Wenden Sie die Transformation an und resizen Sie das Bild
+        img_tensor = transform(mazeImageBW)
+        
+        # Verschieben Sie das Tensor auf das gewünschte Gerät
+        img_tensor = img_tensor.to(device)
+        
+        image_list.append(img_tensor)
         #newMaze.saveImage(mazeImageBW, n)
         if n == limit:
             break
         n += 1
 
     return image_list
+
 
 
 # Examples:

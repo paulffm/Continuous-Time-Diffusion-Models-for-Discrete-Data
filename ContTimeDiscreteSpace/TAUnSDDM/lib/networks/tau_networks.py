@@ -653,7 +653,7 @@ class ResidualMLP(nn.Module):
             )
         )
         # wenn dna sequenzen hier: eigene one hot kodierung 
-        one_hot_x = nn.functional.one_hot(x, num_classes=self.S) # (B, D, S)
+        one_hot_x = nn.functional.one_hot(x.long(), num_classes=self.S) # (B, D, S)
 
         h = self.normalize_input(x)
 

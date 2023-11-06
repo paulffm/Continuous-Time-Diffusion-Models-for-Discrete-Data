@@ -41,7 +41,7 @@ def main():
 
     else:
         date = "2023-11-04"
-        config_name = "config_001_tauST.yaml"
+        config_name = "config_001_tauMLP.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -73,14 +73,14 @@ def main():
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
-        model_name = "model_24_tauST.pt"
+        model_name = "model_24999_tauMLP.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 30
+        cfg.training.n_iters = 200000
         cfg.sampler.name = "TauLeaping2"
-        cfg.sampler.sample_freq = 30
-        cfg.saving.checkpoint_freq = 30
-        cfg.sampler.num_steps = 20
+        cfg.sampler.sample_freq = 20000
+        cfg.saving.checkpoint_freq = 5000
+        cfg.sampler.num_steps = 1000
         cfg.logit_type = "direct"  # ""direct"
         bookkeeping.save_config(cfg, save_location)
 

@@ -1,7 +1,7 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow_maze import get_config
+from config.config_tauUnet_maze import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -35,7 +35,7 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
@@ -73,7 +73,7 @@ def main():
 
     limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size
     img = maze_gen(
-        limit=limit, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
+        limit=limit, crop=cfg.data.crop_wall, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
     )
     dataloader = get_maze_data(cfg, img)
 
@@ -81,16 +81,16 @@ def main():
     print("--------------------------------")
     print("State Iter:", state["n_iter"])
     print("--------------------------------")
-    print("Name Dataset:", cfg.experiment_name)
+    print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
-    print("Loss Type:", cfg.loss.loss_type)
-    print("Logit Type:", cfg.logit_type)
-    print("Ce_coeff:", cfg.ce_coeff)
+    print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
+    print("Logit Type:", cfg.loss.logit_type)
+    print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
     print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
-    print("Net Arch:", cfg.net_arch)
-    print("Bidir Readout:", cfg.bidir_readout)
+    #print("Net Arch:", cfg.model.net_arch)
+    print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
     n_samples = 16

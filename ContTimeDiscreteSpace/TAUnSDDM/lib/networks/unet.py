@@ -103,13 +103,13 @@ class ResBlock(nn.Module):
     def __init__(self, in_channel, out_channel, time_dim, dropout):
         super().__init__()
 
-        self.norm1 = nn.GroupNorm(32, in_channel, eps=1e-06)
+        self.norm1 = nn.GroupNorm(in_channel*1, in_channel, eps=1e-06) #32
         self.activation1 = Swish()
         self.conv1 = conv2d(in_channel, out_channel, 3, padding=1)
 
         self.time = nn.Sequential(Swish(), linear(time_dim, out_channel))
 
-        self.norm2 = nn.GroupNorm(32, out_channel, eps=1e-06)
+        self.norm2 = nn.GroupNorm(out_channel*1, out_channel, eps=1e-06) #32
         self.activation2 = Swish()
         self.dropout = nn.Dropout(dropout)
         self.conv2 = conv2d(out_channel, out_channel, 3, padding=1, scale=1e-10)
@@ -159,7 +159,7 @@ class SelfAttention(nn.Module):
         self.channels = channels
         self.num_heads = n_head
 
-        self.norm = nn.GroupNorm(32, channels)
+        self.norm = nn.GroupNorm(channels*1, channels)
         self.qkv = nn.Conv1d(channels, channels * 3, 1)
         self.attention = QKVAttention()
         self.proj_out = zero_module(nn.Conv1d(channels, channels, 1))
@@ -394,7 +394,7 @@ class UNet(nn.Module):
             # The output represents logits or the log scale and loc of a
             # logistic distribution.
             self.out = nn.Sequential(
-                nn.GroupNorm(32, in_channel, eps=1e-06),
+                nn.GroupNorm(in_channel*1, in_channel, eps=1e-06),
                 Swish(),
                 conv2d(in_channel, out_channel * 2, 3, padding=1, scale=1e-10),
             )
@@ -425,10 +425,8 @@ class UNet(nn.Module):
                 hid = layer(hid)
 
             feats.append(hid)
-
         for layer in self.mid:
             hid = layer(hid, time_embed)
-
         for layer in self.up:
             if isinstance(layer, ResBlockWithAttention):
                 hid = layer(torch.cat((hid, feats.pop()), 1), time_embed)

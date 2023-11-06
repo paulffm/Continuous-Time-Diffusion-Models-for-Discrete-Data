@@ -47,7 +47,7 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformBDTEMA"
     # Forward model
-    model.rate_const = 0.01
+    model.rate_const = 0.72
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"

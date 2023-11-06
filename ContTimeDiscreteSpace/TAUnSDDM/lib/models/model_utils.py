@@ -41,6 +41,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
             prob_all = p0t @ qt0
             log_prob = torch.log(prob_all + 1e-35)
+
             # check
         elif cfg.loss.logit_type == "reverse_logscale":
             log_p0t = F.log_softmax(logits, dim=-1)
@@ -52,8 +53,5 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
         else:
             raise ValueError("Unknown logit_type: %s" % cfg.loss.logit_type)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-    # print("xt_onehot", xt_onehot, xt_onehot.shape)
-    # print("log_prob/ll_all", log_prob, log_prob.shape)
-    # print("log_prob * xt_onehot", log_prob * xt_onehot, (log_prob * xt_onehot).shape)
-    # print("log_xt/ll_xt", log_xt, log_xt.shape)
+
     return log_prob, log_xt

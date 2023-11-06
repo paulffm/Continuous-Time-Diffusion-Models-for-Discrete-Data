@@ -82,21 +82,21 @@ def main():
         cfg.saving.checkpoint_freq = 10
         cfg.sampler.num_steps = 10
         bookkeeping.save_config(cfg, save_location)
-
+        
     print("Info:")
     print("--------------------------------")
     print("State Iter:", state["n_iter"])
     print("--------------------------------")
-    print("Name Dataset:", cfg.experiment_name)
+    print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
-    print("Loss Type:", cfg.loss.loss_type)
-    print("Logit Type:", cfg.logit_type)
-    print("Ce_coeff:", cfg.ce_coeff)
+    print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
+    print("Logit Type:", cfg.loss.logit_type)
+    print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
     print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
-    print("Net Arch:", cfg.net_arch)
-    print("Bidir Readout:", cfg.bidir_readout)
+    #print("Net Arch:", cfg.model.net_arch)
+    print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
     n_samples = 16

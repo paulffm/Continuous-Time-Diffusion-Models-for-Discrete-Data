@@ -21,26 +21,21 @@ class ImageX0PredBasePaul(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.fix_logistic = cfg.model.fix_logistic
-        ch = cfg.model.ch
-        input_channels = cfg.model.input_channels
-        output_channels = cfg.model.input_channels  # * cfg.data.S
-        data_min_max = cfg.model.data_min_max
-
-        self.S = cfg.data.S
         self.data_shape = cfg.data.shape
+        self.S = cfg.data.S
 
         net = unet.UNet(
-            in_channel=input_channels,
-            out_channel=output_channels,
-            channel=ch,
+            in_channel=cfg.model.input_channels,
+            out_channel=cfg.model.input_channels,
+            channel=cfg.model.ch,
             channel_multiplier=cfg.model.ch_mult,
             n_res_blocks=cfg.model.num_res_blocks,
-            attn_resolutions=[16],
-            num_heads=1,
+            attn_resolutions=cfg.model.attn_resolutions,
+            num_heads=cfg.model.num_heads,
             dropout=cfg.model.dropout,
             model_output=cfg.model.model_output,  # c or 'logistic_pars'
-            num_classes=self.S,
-            x_min_max=data_min_max,
+            num_classes=cfg.data.S,
+            x_min_max=cfg.model.data_min_max,
             img_size=self.data_shape[2],
         ).to(device)
 
@@ -65,7 +60,7 @@ class ImageX0PredBasePaul(nn.Module):
         # wenden tanh auf beides an, d3pm nur auf mu
 
         net_out = self.net(x, times)  # (B, 2*C, H, W)
-        if self.cfg.model.model_output == 'logits':
+        if self.cfg.model.model_output == "logits":
             logits = net_out.view(B, D, S)
 
         else:
@@ -376,7 +371,9 @@ class UniformVariantRate(UniformRate):
 
     def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         rate_scalars = self._rate_scalar(t).view(t.size(0), 1, 1)
-        base = self.rate_matrix.view(1, self.S, self.S)  # why t()? self.rate_matrix.t().view(1, self.S, self.S)
+        base = self.rate_matrix.view(
+            1, self.S, self.S
+        )  # why t()? self.rate_matrix.t().view(1, self.S, self.S)
         r = base * rate_scalars
         return r
 
@@ -737,6 +734,7 @@ class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
@@ -745,6 +743,7 @@ class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class UniformBDTEMAGetLogProb(EMA, BidirectionalTransformer, UniformRate):
@@ -811,6 +810,16 @@ class GaussianTargetRateImageX0PredEMAPaul(
         self.init_ema()
 
 
+@model_utils.register_model
+class UniformRateUnetEMA(EMA, ImageX0PredBasePaul, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        ImageX0PredBasePaul.__init__(self, cfg, device, rank=rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+
 # make sure EMA inherited first so it can override the state dict functions
 @model_utils.register_model
 class UniformRateSequenceTransformerEMA(EMA, SequenceTransformer, UniformRate):
@@ -841,9 +850,10 @@ class GaussianRateResidualMLP(ResidualMLP, GaussianTargetRate):
         ResidualMLP.__init__(self, cfg, device, rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
+
 @model_utils.register_model
 class UniformRateResMLP(ResidualMLP, UniformRate):
     def __init__(self, cfg, device, rank=None):
-        #EMA.__init__(self, cfg)
+        # EMA.__init__(self, cfg)
         ResidualMLP.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
