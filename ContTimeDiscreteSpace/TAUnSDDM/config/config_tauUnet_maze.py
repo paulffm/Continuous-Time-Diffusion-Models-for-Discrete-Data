@@ -6,7 +6,7 @@ def get_config():
     save_directory = "SavedModels/MNIST/"
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
+    config.experiment_name = "maze"
     config.save_location = save_directory
 
     config.init_model_path = None
@@ -25,13 +25,13 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 12000  # 2000 #2000000
+    training.n_iters = 2200  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 5
     training.warmup = 0  # 5000
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = "DiscreteMNIST"
+    data.name = "3ClassesMaze"
     data.train = True
     data.download = True
     data.S = 3
@@ -85,6 +85,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
-    sampler.sample_freq = 12000
+    sampler.sample_freq = 2200
 
     return config

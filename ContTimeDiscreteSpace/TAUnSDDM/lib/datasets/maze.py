@@ -817,7 +817,10 @@ def maze_gen(
         # newMaze.saveImage(mazeImageBW, n)
         if n == limit:
             break
+        if n % 1000 == 0:
+            print(f"{n} samples generated.")
         n += 1
+    
 
     return image_list
 

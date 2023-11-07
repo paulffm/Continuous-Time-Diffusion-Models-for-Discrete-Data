@@ -34,15 +34,15 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-06"
-        config_name = "config_001_unet.yaml"
+        date = "2023-11-07"
+        config_name = "config_001_unet3.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -61,11 +61,11 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_999_unet.pt"
+        model_name = "model_2199_unet3.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 6000
-        cfg.sampler.sample_freq = 6000
+        cfg.training.n_iters = 12600
+        cfg.sampler.sample_freq = 12600
         cfg.saving.checkpoint_freq = 1000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
