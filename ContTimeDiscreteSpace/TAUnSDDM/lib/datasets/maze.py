@@ -6,6 +6,10 @@ from PIL import Image, ImageDraw, ImageColor
 import random as rnd
 import re
 import torchvision.transforms as transforms
+import numpy as np
+import torchvision.transforms as transforms
+from queue import Queue
+import torch
 
 
 class Maze:
@@ -658,8 +662,8 @@ class Maze:
             )  # Finished looking for input errors.
 
         size = (
-            pixelSizeOfTile * (self.sizeX * 2 +1),
-            pixelSizeOfTile * (self.sizeY * 2 +1),
+            pixelSizeOfTile * (self.sizeX * 2 + 1),
+            pixelSizeOfTile * (self.sizeY * 2 + 1),
         )
         # Determines the size of the picture. It does this by taking the number of tiles,
         # multiplying it with 2 to account for walls or connections and adds one for offset
@@ -671,8 +675,8 @@ class Maze:
             for tile in row:
                 # There are floor tiles at postion 1,3,5..., at postion 0,2,4,6... are either wall tiles or connecting tiles.
 
-                x = ((tile.coordinateX + 1) * 2 -1) * pixelSizeOfTile
-                y = ((tile.coordinateY + 1) * 2 -1) * pixelSizeOfTile
+                x = ((tile.coordinateX + 1) * 2 - 1) * pixelSizeOfTile
+                y = ((tile.coordinateY + 1) * 2 - 1) * pixelSizeOfTile
                 drawImage.rectangle(
                     [x, y, x + pixelSizeOfTile - 1, y + pixelSizeOfTile - 1],
                     fill=colorFloor,
@@ -748,24 +752,53 @@ class Maze:
         return True
 
 
-import torchvision.transforms as transforms
+def find_path(maze):
+    # BFS-Algorithmus, um den kürzesten Pfad zu finden
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    start = (0, 1)
+    end = (14, 13)
+    visited = np.zeros_like(maze, dtype=bool)
+    visited[start] = True
+    queue = Queue()
+    queue.put((start, [start]))
+    while not queue.empty():
+        (node, path) = queue.get()
+        if node == end:
+            for position in path:
+                maze[position] = 1
+            return maze
+        for dx, dy in directions:
+            next_node = (node[0] + dx, node[1] + dy)
+            # Prüfenob der nächste Knoten innerhalb des Labyrinths liegt und ein Weg ist
+            if (
+                0 <= next_node[0]
+                and next_node[0] < maze.shape[0]
+                and 0 <= next_node[1]
+                and next_node[1] < maze.shape[1]
+                and maze[next_node] == 2
+                and not visited[next_node]
+            ):
+                visited[next_node] = True
+                queue.put((next_node, path + [next_node]))
+    return None  #
+
 
 def maze_gen(
     limit: int,
-    size: int=None,
-    crop: bool=False,
+    size: int = None,
+    crop: bool = False,
     dim_x: int = 10,
     dim_y: int = 10,
     pixelSizeOfTile: int = 1,
     weightHigh: int = 99,
     weightLow: int = 99,
-    device = 'cpu'
+    device="cpu",
 ):
     n = 1
     # Fügen Sie hier die Resize-Transformation hinzu
-    transform = transforms.Compose([
-        transforms.PILToTensor() # Ändern Sie dies auf (32, 32) für 32x32 Größe
-    ])
+    transform = transforms.Compose(
+        [transforms.PILToTensor()]  # Ändern Sie dies auf (32, 32) für 32x32 Größe
+    )
     image_list = []
     while True:
         newMaze = Maze(dim_x, dim_y, mazeName=f"maze_{n}")
@@ -774,21 +807,19 @@ def maze_gen(
         if crop:
             cropped_size = pixelSizeOfTile * (dim_x * 2 + 1) - 1
             mazeImageBW = mazeImageBW.crop((1, 1, cropped_size, cropped_size))
-        
-        # Wenden Sie die Transformation an und resizen Sie das Bild
-        img_tensor = transform(mazeImageBW)
-        
-        # Verschieben Sie das Tensor auf das gewünschte Gerät
-        img_tensor = img_tensor.to(device)
-        
+
+        image_array = np.array(mazeImageBW) * 2
+        solved_maze = find_path(image_array)
+
+        img_tensor = torch.tensor(solved_maze, device=device).unsqueeze(0)
+
         image_list.append(img_tensor)
-        #newMaze.saveImage(mazeImageBW, n)
+        # newMaze.saveImage(mazeImageBW, n)
         if n == limit:
             break
         n += 1
 
     return image_list
-
 
 
 # Examples:

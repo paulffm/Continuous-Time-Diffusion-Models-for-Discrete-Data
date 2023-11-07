@@ -302,8 +302,7 @@ class UNet(nn.Module):
             img_size=28
             
     ):
-        super().__init__()
-
+        super().__init__() 
         self.model_output = model_output
         self.num_classes = num_classes
         self.out_channel = out_channel
@@ -316,7 +315,6 @@ class UNet(nn.Module):
             attn_strides.append(img_size // int(res))
 
         n_block = len(channel_multiplier)
-
         self.time = nn.Sequential(
             TimeEmbedding(channel),
             linear(channel, time_dim),
@@ -443,5 +441,4 @@ class UNet(nn.Module):
             out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, height, width))
             out = out.permute(0, 1, 3, 4, 2).contiguous()
             out = out + input_onehot
-
         return out

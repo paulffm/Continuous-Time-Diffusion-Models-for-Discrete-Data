@@ -36,18 +36,18 @@ def get_config():
     training.resume = True
 
     config.data = data = ml_collections.ConfigDict()
-    data.S = 2
+    data.S = 3
     data.is_img = True
     data.batch_size = 32  # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.image_size = 30
+    data.image_size = 15
     data.shape = [1, data.image_size, data.image_size]
     data.use_augm = False
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformBDTEMA"
     # Forward model
-    model.rate_const = 0.72
+    model.rate_const = 0.3
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
@@ -55,19 +55,19 @@ def get_config():
     # BiDir
     model.embed_dim = 64
     model.bidir_readout = "res_concat"  # res_concat, attention, concat
-    model.model.use_one_hot_input = False
+    model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1
     config.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    model.num_layers = 1
+    model.num_layers = 2
     # TransformerBlock
     ## SA
-    model.num_heads = 1
+    model.num_heads = 4
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "postnorm"  # prenorm
     ## FF
-    model.mlp_dim = 256  # d_model in TAU => embed_dim?
+    model.mlp_dim = 512  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = data.S
     # ConcatReadout
@@ -76,11 +76,11 @@ def get_config():
     # features, activation
 
     # ResidualReadout
-    model.num_output_ffresiduals = 1
+    model.num_output_ffresiduals = 2
 
     # AttentionReadout
     ## CrossAttention
-    model.qkv_dim = config.embed_dim
+    model.qkv_dim = config.model.embed_dim
     # config.num_heads = 4
     model.ema_decay = 0.9999  # 0.9999
     model.Q_sigma = 20.0
@@ -88,22 +88,22 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 2
+    saving.checkpoint_freq = 500
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 2
+    sampler.name = "TauLeaping2"  # TauLeaping or PCTauLeaping
+    sampler.num_steps = 10
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 2
+    sampler.sample_freq = 2000
     sampler.is_ordinal = True
 
     """

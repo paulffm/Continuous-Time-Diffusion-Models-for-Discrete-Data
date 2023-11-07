@@ -22,6 +22,11 @@ class ImageX0PredBasePaul(nn.Module):
         self.fix_logistic = cfg.model.fix_logistic
         self.data_shape = cfg.data.shape
         self.S = cfg.data.S
+        self.padding = cfg.model.padding
+        if self.padding:
+            img_size = cfg.data.image_size + 1
+        else:
+            img_size = cfg.data.image_size
 
         net = unet.UNet(
             in_channel=cfg.model.input_channels,
@@ -35,7 +40,7 @@ class ImageX0PredBasePaul(nn.Module):
             model_output=cfg.model.model_output,  # c or 'logistic_pars'
             num_classes=cfg.data.S,
             x_min_max=cfg.model.data_min_max,
-            img_size=self.data_shape[2],
+            img_size=img_size,
         ).to(device)
 
         if cfg.distributed:
@@ -49,10 +54,13 @@ class ImageX0PredBasePaul(nn.Module):
         """
         Returns logits over state space for each pixel
         """
+
         B, D = x.shape
         C, H, W = self.data_shape
-        S = self.S
         x = x.view(B, C, H, W)
+
+        if self.padding:
+            x = nn.ReplicationPad2d((0, 1, 0, 1))(x.float())
 
         # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution
         # Truncated logistic output from https://arxiv.org/pdf/2107.03006.pdf
@@ -60,7 +68,7 @@ class ImageX0PredBasePaul(nn.Module):
 
         net_out = self.net(x, times)  # (B, 2*C, H, W)
         if self.cfg.model.model_output == "logits":
-            logits = net_out.view(B, D, S)
+            logits = net_out
 
         else:
             mu = net_out[0].unsqueeze(-1)
@@ -95,7 +103,11 @@ class ImageX0PredBasePaul(nn.Module):
             else:
                 logits = logits_1
 
-        logits = logits.view(B, D, S)
+        if self.padding:
+            logits = logits[:, :, :-1, :-1, :]
+            logits = logits.reshape(B, D, self.S)
+        else:
+            logits = logits.view(B, D, self.S)
 
         return logits
 
@@ -338,17 +350,17 @@ class UniformVariantRate(UniformRate):
         super(UniformVariantRate, self).__init__(config, device)
         self.config = config
         self.t_func = config.model.t_func
+        if self.t_func == "log":
+            self.time_base = config.model.time_base
+            self.time_exp = config.model.time_exp
 
     def _integral_rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
         if self.t_func == "log_sqr":
             return torch.log(t**2 + 1)
         elif self.t_func == "sqrt_cos":
-            return -torch.sqrt(torch.cos(torch.pi / 2 * t))
+            return -torch.sqrt(torch.cos(torch.pi / 2 * t))  # + 1
         elif self.t_func == "log":
-            (
-                self.config.time_base * (self.config.time_exponential**t)
-                - self.config.time_base
-            )
+            (self.time_base * (self.time_exp**t) - self.time_base)
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
@@ -360,11 +372,7 @@ class UniformVariantRate(UniformRate):
             tmp = torch.sin(t) / torch.sqrt(torch.cos(t))
             return torch.pi / 4.0 * tmp
         elif self.t_func == "log":
-            return (
-                self.config.time_base
-                * math.log(self.config.time_exponential)
-                * self.config.time_exponential**t
-            )
+            return self.time_base * math.log(self.time_exp) * self.time_exp**t
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
@@ -606,14 +614,13 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
-    
+
+
 class SudokuScoreNet(nn.Module):
     def __init__(self, cfg, device, encoding, rank=None):
         super().__init__()
 
-        tmp_net = sudoku_networks.ScoreNet(cfg, encoding).to(
-            device
-        )
+        tmp_net = sudoku_networks.ScoreNet(cfg, encoding).to(device)
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
         else:
@@ -629,6 +636,7 @@ class SudokuScoreNet(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
+
 
 # Based on https://github.com/yang-song/score_sde_pytorch/blob/ef5cb679a4897a40d20e94d8d0e2124c3a48fb8c/models/ema.py
 class EMA:
@@ -745,6 +753,7 @@ class UniformVariantBDTEMA(EMA, HollowTransformer, UniformVariantRate):
 
         self.init_ema()
 
+
 # hollow
 @model_utils.register_model
 class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
@@ -765,6 +774,7 @@ class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformScoreNetEMA(EMA, SudokuScoreNet, UniformRate):
     def __init__(self, cfg, device, encoding, rank=None):
@@ -783,7 +793,6 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
-
 
 
 @model_utils.register_model

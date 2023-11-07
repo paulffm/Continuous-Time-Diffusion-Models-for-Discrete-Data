@@ -25,7 +25,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 400  # 2000 #2000000
+    training.n_iters = 12000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 5
     training.warmup = 0  # 5000
@@ -34,26 +34,26 @@ def get_config():
     data.name = "DiscreteMNIST"
     data.train = True
     data.download = True
-    data.S = 2
+    data.S = 3
     data.batch_size = 64  # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.image_size = 28
+    data.image_size = 15
     data.shape = [1, data.image_size, data.image_size]
-    data.crop_wall = True
+    data.crop_wall = False
     config.concat_dim = data.image_size * data.image_size * 1
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformRateUnetEMA"
 
     model.ema_decay = 0.9999  # 0.9999
-
-    model.ch = data.image_size  # 128
+    model.padding = True
+    model.ch = 64 # data.image_size + 1 if model.padding else data.image_size  # 128
     model.num_res_blocks = 2
     model.num_scales = 4
     model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  # 3
     model.scale_count_to_put_attn = 1
-    model.data_min_max = [0, 1]
+    model.data_min_max = [0, 2]
     model.dropout = 0.1
     model.skip_rescale = True
     model.time_embed_dim = model.ch
@@ -63,7 +63,7 @@ def get_config():
     model.num_heads = 2
     model.attn_resolutions = [int(model.ch / 2)]
 
-    model.rate_const = 0.75
+    model.rate_const = 0.35
     model.Q_sigma = 512.0
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
@@ -72,12 +72,12 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
 
-    saving.checkpoint_freq = 100
+    saving.checkpoint_freq = 500
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 500
+    sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
@@ -85,6 +85,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
-    sampler.sample_freq = 5000
+    sampler.sample_freq = 12000
 
     return config

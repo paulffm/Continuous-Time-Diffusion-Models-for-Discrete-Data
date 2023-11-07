@@ -34,7 +34,7 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
@@ -61,18 +61,18 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_399_unet.pt"
+        model_name = "model_999_unet.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 1000
-        cfg.sampler.sample_freq = 1000
-        cfg.saving.checkpoint_freq = 200
+        cfg.training.n_iters = 6000
+        cfg.sampler.sample_freq = 6000
+        cfg.saving.checkpoint_freq = 1000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
 
-    limit = (cfg.training.n_iters - state["n_iter"] + 2) * cfg.data.batch_size
+    limit = (cfg.training.n_iters - state["n_iter"] + 1) * cfg.data.batch_size
     img = maze_gen(
-        limit=limit, crop=cfg.data.crop_wall, dim_x=7, dim_y=7, pixelSizeOfTile=2, weightHigh=97, weightLow=97
+        limit=limit, crop=cfg.data.crop_wall, dim_x=7, dim_y=7, pixelSizeOfTile=1, weightHigh=97, weightLow=97
     )
     dataloader = get_maze_data(cfg, img)
 
