@@ -69,7 +69,7 @@ def get_config():
     ## FF
     model.mlp_dim = 512  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
-    model.out_dim = data.S
+    model.out_dim = None
     # ConcatReadout
     model.readout_dim = data.S
     # MLP

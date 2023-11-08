@@ -339,13 +339,13 @@ class UniDirectionalTransformer(nn.Module):
     if conditioner is None:
       conditioner = temb
     else:
-      conditioner = jnp.concatenate([conditioner, temb], axis=1)
+      conditioner = jnp.concatenate([conditioner, temb], axis=1) # B, 2, E
     config = self.config
     cond_dim = conditioner.shape[1]
     concat_dim = x.shape[1] + cond_dim - 1
-    pos_idx = jnp.expand_dims(jnp.arange(concat_dim, dtype=jnp.int32), 0)
+    pos_idx = jnp.expand_dims(jnp.arange(concat_dim, dtype=jnp.int32), 0) # 1, D(+1)
     if self.direction == 'l2r':
-      x = jnp.concatenate([conditioner, x[:, :-1]], axis=1)
+      x = jnp.concatenate([conditioner, x[:, :-1]], axis=1) # 
       mask = nn.attention.make_attention_mask(pos_idx, pos_idx,
                                               jnp.greater_equal)
       mask = mask.at[:, :, :cond_dim, :cond_dim].set(1.0)
@@ -353,12 +353,12 @@ class UniDirectionalTransformer(nn.Module):
       x = jnp.concatenate([x[:, 1:], conditioner], axis=1)
       mask = nn.attention.make_attention_mask(pos_idx, pos_idx,
                                               jnp.less_equal)
-      mask = mask.at[:, :, -cond_dim:, -cond_dim:].set(1.0)
+      mask = mask.at[:, :, -cond_dim:, -cond_dim:].set(1.0) # cond_dim 1 oder 2
     pos_embed = self.param(
         'pos_embed', nn.initializers.xavier_uniform(),
-        (1, concat_dim, x.shape[2]), config.dtype,
+        (1, concat_dim, x.shape[2]), config.dtype, 
     )
-    x = x + pos_embed
+    x = x + pos_embed # 
     x = nn.Dropout(config.dropout_rate)(
         x, deterministic=config.dropout_deterministic)
     for layer_idx in range(config.num_layers):
@@ -366,4 +366,4 @@ class UniDirectionalTransformer(nn.Module):
           name='block_{}'.format(layer_idx),
           config=config)(x, masks=mask)
     # cond_dim = emb_dim 
-    return x # shape: (B, D + cond_dim - 1, S)
+    return x # shape: (B, D + cond_dim - 1, S); D + cond_dim - 1, E) true 
