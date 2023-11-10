@@ -10,6 +10,8 @@ import numpy as np
 import torchvision.transforms as transforms
 from queue import Queue
 import torch
+from torch.utils.data import Dataset
+from . import dataset_utils
 
 
 class Maze:
@@ -842,8 +844,6 @@ def maze_gen(
 # newMaze.makeMazeBraided(-1)
 # mazeImageBW.show()
 # newMaze.saveImage(mazeImageBW)
-from torch.utils.data import Dataset
-from . import dataset_utils
 
 @dataset_utils.register_dataset
 class Maze3SComplete(Dataset):

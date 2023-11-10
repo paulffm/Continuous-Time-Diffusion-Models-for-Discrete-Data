@@ -57,33 +57,6 @@ class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
 
 
 @dataset_utils.register_dataset
-class SyntheticData(Dataset):
-    def __init__(self, cfg, device, root):
-        with open(root, "rb") as f:
-            data = np.load(f)
-
-        self.data = torch.from_numpy(data)
-
-        # Put both data and targets on GPU in advance
-        self.data = self.data.to(device)
-
-    def __len__(self):
-        return self.data.shape[0]
-
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
-        data_synth = self.data[index]
-
-        return data_synth
-
-
-@dataset_utils.register_dataset
 class DiscreteMNIST(torchvision.datasets.MNIST):
     def __init__(self, cfg, device, root=None):
         super().__init__(root=root, train=cfg.data.train, download=cfg.data.download)

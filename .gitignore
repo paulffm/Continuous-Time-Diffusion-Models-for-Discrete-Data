@@ -13,4 +13,5 @@ MNISTDiffusionModel/MNIST
 **/bin-mnist
 **/rectangular_mazes
 **/downloads
-**/synthetic
+**/Synthetic
+# **/Protein_sequences
