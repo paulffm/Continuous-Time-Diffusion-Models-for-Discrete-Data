@@ -51,13 +51,18 @@ class ConcatReadout(nn.Module):
         out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
 
         # if out_dim in TransMLPBlock not None: 2*out_dim instead of self.config.model.embed_dim in MLP
-        # but always none 
+        # but always none
         self.predictor = MLP(
             [2 * self.config.model.embed_dim, config.model.mlp_dim, out_dim],
             activation=nn.GELU(),
         )
-        
-    def forward(self, l2r_embed: TensorType["B", "K", "E"], r2l_embed: TensorType["B", "K", "E"], _) -> TensorType["B", "K", "S"]:
+
+    def forward(
+        self,
+        l2r_embed: TensorType["B", "K", "E"],
+        r2l_embed: TensorType["B", "K", "E"],
+        _,
+    ) -> TensorType["B", "K", "S"]:
         # if read_out_dim None: O = E else O = R2
         state = torch.cat([l2r_embed, r2l_embed], dim=-1)
         logits = self.predictor(state)
@@ -74,7 +79,7 @@ class ResidualReadout(nn.Module):
         self.input_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)
 
         # if out_dim in TransMLPBlock not None: 2*out_dim instead of self.config.model.embed_dim in MLP
-        # but always none 
+        # but always none
         self.mlp = MLP(
             [self.embed_dim, self.config.model.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
@@ -95,7 +100,9 @@ class ResidualReadout(nn.Module):
 
         self.logits_layer = nn.Linear(2 * self.embed_dim, self.out_dim)
 
-    def forward(self, x, temb: TensorType["B", "E"]) -> TensorType["B", "K", "S"]:  # x=state => shape von l2r_embed, r2l_embed
+    def forward(
+        self, x, temb: TensorType["B", "E"]
+    ) -> TensorType["B", "K", "S"]:  # x=state => shape von l2r_embed, r2l_embed
         # x: B, D, E
         temb = self.mlp(temb)  # B, E -> # B, 4 E
         x = self.input_layer(x)
@@ -145,7 +152,7 @@ class ConcatResidualReadout(nn.Module):
         r2l_embed: TensorType["B", "K", "E"],
         temb: TensorType["B", "E"],
     ) -> TensorType["B", "K", "O"]:
-        # out_dim None O = E 
+        # out_dim None O = E
         assert (
             l2r_embed.size()[:-1] == r2l_embed.size()[:-1]
         ), "Embeddings must have matching sizes except in the last dimension"
@@ -164,7 +171,9 @@ class ConcatResidualReadout(nn.Module):
         return logits
 
 
-def transformer_timestep_embedding(timesteps, embedding_dim, device='cpu', max_positions=10000):
+def transformer_timestep_embedding(
+    timesteps, embedding_dim, device="cpu", max_positions=10000
+):
     assert embedding_dim % 2 == 0
     assert len(timesteps.shape) == 1
     half_dim = embedding_dim // 2
@@ -219,10 +228,12 @@ class CrossAttention(nn.Module):
         # logits = torch.einsum("bqe,bke->bkq", query, key) # without view
 
         att_l2r_mask = torch.triu(
-            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool), diagonal=1
+            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
+            diagonal=1,
         ).unsqueeze(0)
         att_r2l_mask = torch.tril(
-            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool), diagonal=-1
+            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
+            diagonal=-1,
         ).unsqueeze(0)
         att_t = torch.ones((1, seq_len, 1), device=self.device)
 
@@ -283,7 +294,9 @@ class SelfAttentionBlock(nn.Module):
         self.norm = nn.LayerNorm(config.model.embed_dim)
 
     # input shape == output shape
-    def forward(self, inputs: TensorType["B", "K", "E"], masks: TensorType["K", "K"]) -> TensorType["B", "K", "E"]:
+    def forward(
+        self, inputs: TensorType["B", "K", "E"], masks: TensorType["K", "K"]
+    ) -> TensorType["B", "K", "E"]:
         # if conditioner None: K=D else K=D+n
         if self.config.model.transformer_norm_type == "prenorm":
             x = self.norm(inputs)
@@ -362,11 +375,11 @@ class FeedForwardBlock(nn.Module):
             mlp_dim=config.model.mlp_dim,  # make sure to pass the necessary parameters
             dropout_rate=config.model.dropout_rate,
             embed_dim=config.model.embed_dim,
-            out_dim=None, #cfg.model.out_dim
+            out_dim=None,  # cfg.model.out_dim
         )
         # if cfg.model.out_dim != None and config.model.transformer_norm_type == "postnorm":
-            # self.norm = nn.LayerNorm(config.model.out_dim)
-        #else:
+        # self.norm = nn.LayerNorm(config.model.out_dim)
+        # else:
         self.norm = nn.LayerNorm(config.model.embed_dim)
 
     def forward(self, x: TensorType["B", "K", "E"]) -> TensorType["B", "K", "O"]:
@@ -386,10 +399,16 @@ class TransformerBlock(nn.Module):  #
     def __init__(self, config):
         super(TransformerBlock, self).__init__()
         self.config = config
-        self.self_attention_block = SelfAttentionBlock(config) # do not need K; do not change dim: Output B,K, E
-        self.feed_forward_block = FeedForwardBlock(config) #  do not need K; Attention; if O !=E
+        self.self_attention_block = SelfAttentionBlock(
+            config
+        )  # do not need K; do not change dim: Output B,K, E
+        self.feed_forward_block = FeedForwardBlock(
+            config
+        )  #  do not need K; Attention; if O !=E
 
-    def forward(self, inputs: TensorType["B", "K", "E"], masks: TensorType["K", "K"]) -> TensorType["B", "K", "O"]:
+    def forward(
+        self, inputs: TensorType["B", "K", "E"], masks: TensorType["K", "K"]
+    ) -> TensorType["B", "K", "O"]:
         # if conditioner None: k=D else K=D+n; if out_dim None: O = E => True
         x = self.self_attention_block(inputs, masks)
         z = self.feed_forward_block(x)
@@ -411,12 +430,12 @@ class TransformerEncoder(nn.Module):
             config.device,
             config.model.embed_dim,
             config.model.dropout_rate,
-            config.concat_dim,
+            config.model.concat_dim+1,
         )
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
 
-    def forward(self, x, temb, conditioner=None):
+    def forward(self, x: TensorType["B", "D", "E"], temb: TensorType["B", "E"], conditioner=None):
         assert x.ndim == 3 and temb.ndim == 2
         temb = temb.unsqueeze(1)
         if conditioner is None:
@@ -428,41 +447,9 @@ class TransformerEncoder(nn.Module):
         x = self.pos_embed(x)
         x = self.dropout(x)
         for trans_block_layers in self.trans_block_layers:
-            x = trans_block_layers(x, masks=None)
+            x = trans_block_layers(x, masks=None) # B, D+1, E
         x = x[:, 1:]
         return x
-
-
-class MaskedTransformer(nn.Module):
-    """Masked transformer."""
-
-    def __init__(self, config):
-        super(MaskedTransformer, self).__init__()
-        self.config = config
-        self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
-        self.trans_encoder = TransformerEncoder(config)
-
-        # config.model.readout noch nicht in config
-        if config.model.readout == "mlp":
-            self.model = MLP(
-                [2 * config.model.embed_dim, config.model.mlp_dim, self.config.data.S],
-                activation=nn.functional.gelu,
-            )
-        elif config.model.readout == "resnet":
-            self.model = ResidualReadout(config)
-        else:
-            raise ValueError("Unknown readout type %s" % config.model.readout)
-
-    def forward(self, x, temb, pos):
-        x = self.embedding(x)
-        embed = self.trans_encoder(x, temb)
-        embed = embed[:, pos].unsqueeze(1)
-        if self.config.model.readout == "mlp":
-            logits = self.model(embed)
-        elif self.config.model.readout == "resnet":
-            logits = self.model(embed, temb)
-
-        return logits
 
 
 # concat_dim in config, embed_dim in config = D + 1, dytpe
@@ -503,21 +490,29 @@ class UniDirectionalTransformer(nn.Module):
             conditioner = torch.cat([conditioner, temb], dim=1)  # B, 2, E
         # eventuell
         cond_dim = conditioner.size(1)  # 1 if None, else 2
-        concat_dim = x.size(1) + cond_dim - 1  # D if None, else D+1 # mabye if: D+1 => I need in 
+        concat_dim = (
+            x.size(1) + cond_dim - 1
+        )  # D if None, else D+1 # mabye if: D+1 => I need in
 
         if self.direction == "l2r":
             x = torch.cat(
                 [conditioner, x[:, :-1]], dim=1
             )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E; => if temb not B, E => would not work
             mask = torch.triu(
-                torch.ones((concat_dim, concat_dim), device=self.device , dtype=torch.bool), diagonal=1 # concat_dim = D; if conditioner: 
+                torch.ones(
+                    (concat_dim, concat_dim), device=self.device, dtype=torch.bool
+                ),
+                diagonal=1,  # concat_dim = D; if conditioner:
             )  # right mask
 
             # mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
         else:
-            x = torch.cat([x[:, 1:], conditioner], dim=1) # B, D-1, E + B, 1or2, E
+            x = torch.cat([x[:, 1:], conditioner], dim=1)  # B, D-1, E + B, 1or2, E
             mask = torch.tril(
-                torch.ones((concat_dim, concat_dim), device=self.device, dtype=torch.bool), diagonal=-1
+                torch.ones(
+                    (concat_dim, concat_dim), device=self.device, dtype=torch.bool
+                ),
+                diagonal=-1,
             )  # right mask
 
             # mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
@@ -525,12 +520,12 @@ class UniDirectionalTransformer(nn.Module):
         x = self.pos_embed(x)
 
         x = self.dropout(x)
-        # x: (B, D, E) or with conditioner: D + cond_dim - 1, E) true 
+        # x: (B, D, E) or with conditioner: D + cond_dim - 1, E) true
         # x now: (B, K, E)
         for trans_block_layers in self.trans_block_layers:
             x = trans_block_layers(x, masks=mask)
-        
-        return x # x now: B, K,E 
+
+        return x  # x now: B, K,E
 
 
 def normalize_input(x, S):
@@ -578,14 +573,15 @@ class BidirectionalTransformer(nn.Module):
             )
 
         if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            # ordnet jeder Klasse einen einzigartigen Vektor zu, der gelernt wird.
+            self.input_embedding = nn.Embedding(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
+            # transformiert die Eingabewerte durch eine gewichtete Summe (plus einem Bias),
             self.input_embedding = nn.Linear(1, self.embed_dim)
 
-        # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
-        # self.temb_net = nn.Sequential(nn.Linear(config.embed_dim, dim_feedforward), nn.ReLU(), nn.Linear(dim_feedforward, 4*temb_dim))
+        # need explicitly B, E
         self.temb_net = nn.Sequential(
             nn.Linear(int(self.embed_dim / 2), self.mlp_dim),
             nn.ReLU(),
@@ -596,31 +592,34 @@ class BidirectionalTransformer(nn.Module):
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
         temb = self.temb_net(
-            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2), self.device)
+            transformer_timestep_embedding(
+                t * self.temb_scale, int(self.embed_dim / 2), self.device
+            )
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
         # isrupt ordinality
         x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
         if self.use_one_hot_input:
-            x_embed = self.input_embedding(x_one_hot.float())
+            x_embed = self.input_embedding(x_one_hot)
 
         else:
             x = normalize_input(x, self.S)
             x = x.unsqueeze(-1)
             x_embed = self.input_embedding(x)
 
-        input_shape = list(x_embed.shape)[:-1] # (B, D)
+        input_shape = list(x_embed.shape)[:-1]  # (B, D)
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
 
         l2r_embed = self.module_l2r(x_embed, temb)
         r2l_embed = self.module_r2l(x_embed, temb)
 
-        logits = self.readout_module(l2r_embed, r2l_embed, temb) # B, K, S
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)  # B, K, S
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
         # logits = logits + x_one_hot
         return logits
+
 
 class BidirectionalTransformer2(nn.Module):
     def __init__(self, config, readout_dim=None):
@@ -661,7 +660,7 @@ class BidirectionalTransformer2(nn.Module):
             )
 
         if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            self.input_embedding = nn.Embedding(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
@@ -680,13 +679,15 @@ class BidirectionalTransformer2(nn.Module):
     def forward(
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
-        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim, device=self.device) # B, E
+        temb = transformer_timestep_embedding(
+            t * self.temb_scale, self.embed_dim, device=self.device
+        )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
-        # isrupt ordinality
+        # disrupt ordinality
         x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
         if self.use_one_hot_input:
-            x_embed = self.input_embedding(x_one_hot.float())
+            x_embed = self.input_embedding(x_one_hot)
 
         else:
             x = normalize_input(x, self.S)
@@ -702,40 +703,77 @@ class BidirectionalTransformer2(nn.Module):
         logits = self.readout_module(l2r_embed, r2l_embed, temb)
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
-        logits = logits + x_one_hot
+        # logits = logits + x_one_hot
         return logits
+
+
+class MaskedTransformer(nn.Module):
+    """Masked transformer."""
+
+    def __init__(self, config):
+        super(MaskedTransformer, self).__init__()
+        self.config = config
+        self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
+        self.trans_encoder = TransformerEncoder(config)
+
+        # I can basically use any neural net
+        if config.model.readout == "mlp":
+            self.model = MLP(
+                [2 * config.model.embed_dim, config.model.mlp_dim, self.config.data.S],
+                activation=nn.functional.gelu,
+            )
+        elif config.model.readout == "resnet":
+            self.model = ResidualReadout(config)
+        else:
+            raise ValueError("Unknown readout type %s" % config.model.readout)
+
+    def forward(self, x, temb, pos):
+        x = self.embedding(x)
+        embed = self.trans_encoder(x, temb)
+        embed = embed[:, pos].unsqueeze(1) # B, 1, E
+        if self.config.model.readout == "mlp":
+            logits = self.model(embed)
+        elif self.config.model.readout == "resnet":
+            logits = self.model(embed, temb)
+
+        return logits # B, 1, S
+
 
 # still inefficient
 class EnumerativeTransformer(nn.Module):
+    """
+    First embedds inpup data by: adding positional encoding and time embedding + generall Embedding layer
+    """
     def __init__(self, config):
         super(EnumerativeTransformer, self).__init__()
         self.config = config
-        self.config = config.device
+        self.device = config.device
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
-        self.embedding = nn.Embedding(self.S, self.embed_dim)
         self.temb_scale = config.model.time_scale_factor
+        
         self.transformer = MaskedTransformer(self.config)
 
     def forward(
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
-        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim, self.device)
+        temb = transformer_timestep_embedding(
+            t * self.temb_scale, self.embed_dim, self.device
+        )
         x = x.view(x.shape[0], -1)
 
         prefix_cond = self.config.model.get("conditional_dim", 0)
-        positions = torch.arange(prefix_cond, x.shape[1])
+        positions = torch.arange(prefix_cond, x.shape[1], device=self.device)
         logits_list = []
 
         for pos in positions:
             x_masked = x.clone()
-            x_masked[:, pos] = self.S
-            logit = self.transformer(x_masked, temb, pos)
-            logit = logit.squeeze(1)
-            logits_list.append(logit)
+            x_masked[:, pos] = self.S # B, D
+            logit = self.transformer(x_masked, temb, pos) # B, 1, S
+            logit = logit.squeeze(1) # B, S
+            logits_list.append(logit) # list with len D of tensors with shape B, S
 
-        logits = torch.stack(logits_list, dim=1)
-        # End of the loop
+        logits = torch.stack(logits_list, dim=1) # B, D, S
 
         if prefix_cond:
             dummy_logits = torch.zeros(
@@ -743,8 +781,7 @@ class EnumerativeTransformer(nn.Module):
             )
             logits = torch.cat([dummy_logits, logits], dim=1)
         logits = logits.view(x.shape + (self.S,))
-
-        return logits
+        return logits # B, D, S
 
 
 # loss noch anpassen in HollowAux => ConditionalLoss => erben
@@ -806,7 +843,9 @@ class PrefixConditionalBidirTransformer(nn.Module):
 
     def forward(self, x, t, conditioner=None):
         temb = self.temb_net(
-            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2), self.device)
+            transformer_timestep_embedding(
+                t * self.temb_scale, int(self.embed_dim / 2), self.device
+            )
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 

@@ -1,4 +1,3 @@
-from tkinter import Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -614,6 +613,31 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
+    
+class MaskedModel(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
+
+        tmp_net = hollow_networks.EnumerativeTransformer(cfg).to(
+            device
+        )
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+
+        logits = self.net(x, times)  # (B, D, S)
+
+        return logits
+    
+
 
 
 class SudokuScoreNet(nn.Module):
@@ -759,10 +783,10 @@ class UniformVariantBDTEMA(EMA, HollowTransformer, UniformVariantRate):
 
 # hollow
 @model_utils.register_model
-class UniformBDTEMA(EMA, BidirectionalTransformer, UniformRate):
+class UniformMaskedEMA(EMA, MaskedModel, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        BidirectionalTransformer.__init__(self, cfg, readout_dim=None)
+        MaskedModel.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
