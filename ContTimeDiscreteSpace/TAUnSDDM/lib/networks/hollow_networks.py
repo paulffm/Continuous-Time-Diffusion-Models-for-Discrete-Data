@@ -164,12 +164,12 @@ class ConcatResidualReadout(nn.Module):
         return logits
 
 
-def transformer_timestep_embedding(timesteps, embedding_dim, max_positions=10000):
+def transformer_timestep_embedding(timesteps, embedding_dim, device='cpu', max_positions=10000):
     assert embedding_dim % 2 == 0
     assert len(timesteps.shape) == 1
     half_dim = embedding_dim // 2
     emb = math.log(max_positions) / (half_dim - 1)
-    emb = torch.exp(torch.arange(half_dim, dtype=torch.float32) * -emb)
+    emb = torch.exp(torch.arange(half_dim, device=device, dtype=torch.float32) * -emb)
     emb = timesteps[:, None] * emb[None, :]
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
     assert emb.shape == (timesteps.shape[0], embedding_dim)
@@ -182,6 +182,7 @@ class CrossAttention(nn.Module):
     def __init__(self, config):
         super(CrossAttention, self).__init__()
         self.config = config
+        self.device = config.device
         self.num_heads = config.model.num_heads
         self.head_dim = config.model.qkv_dim // config.model.num_heads  #
         self.dense_query = nn.Linear(
@@ -218,12 +219,12 @@ class CrossAttention(nn.Module):
         # logits = torch.einsum("bqe,bke->bkq", query, key) # without view
 
         att_l2r_mask = torch.triu(
-            torch.ones((seq_len, seq_len), dtype=torch.bool), diagonal=1
+            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool), diagonal=1
         ).unsqueeze(0)
         att_r2l_mask = torch.tril(
-            torch.ones((seq_len, seq_len), dtype=torch.bool), diagonal=-1
+            torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool), diagonal=-1
         ).unsqueeze(0)
-        att_t = torch.ones((1, seq_len, 1))
+        att_t = torch.ones((1, seq_len, 1), device=self.device)
 
         joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(
             0
@@ -471,6 +472,7 @@ class UniDirectionalTransformer(nn.Module):
     def __init__(self, config, direction):
         super(UniDirectionalTransformer, self).__init__()
         self.config = config
+        self.device = config.device
         self.direction = direction
         self.dropout = nn.Dropout(config.model.dropout_rate)
 
@@ -508,14 +510,14 @@ class UniDirectionalTransformer(nn.Module):
                 [conditioner, x[:, :-1]], dim=1
             )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E; => if temb not B, E => would not work
             mask = torch.triu(
-                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1 # concat_dim = D; if conditioner: 
+                torch.ones((concat_dim, concat_dim), device=self.device , dtype=torch.bool), diagonal=1 # concat_dim = D; if conditioner: 
             )  # right mask
 
             # mask = torch.tril(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1)
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1) # B, D-1, E + B, 1or2, E
             mask = torch.tril(
-                torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=-1
+                torch.ones((concat_dim, concat_dim), device=self.device, dtype=torch.bool), diagonal=-1
             )  # right mask
 
             # mask = torch.triu(torch.ones((concat_dim, concat_dim), dtype=torch.bool), diagonal=1)
@@ -541,6 +543,7 @@ class BidirectionalTransformer(nn.Module):
     def __init__(self, config, readout_dim=None):
         super(BidirectionalTransformer, self).__init__()
         self.config = config
+        self.device = config.device
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
         self.mlp_dim = config.model.mlp_dim
@@ -593,7 +596,7 @@ class BidirectionalTransformer(nn.Module):
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
         temb = self.temb_net(
-            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
+            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2), self.device)
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
@@ -623,6 +626,7 @@ class BidirectionalTransformer2(nn.Module):
     def __init__(self, config, readout_dim=None):
         super(BidirectionalTransformer2, self).__init__()
         self.config = config
+        self.device = config.device
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
         self.mlp_dim = config.model.mlp_dim
@@ -676,7 +680,7 @@ class BidirectionalTransformer2(nn.Module):
     def forward(
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
-        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim) # B, E
+        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim, device=self.device) # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
         # isrupt ordinality
@@ -706,6 +710,7 @@ class EnumerativeTransformer(nn.Module):
     def __init__(self, config):
         super(EnumerativeTransformer, self).__init__()
         self.config = config
+        self.config = config.device
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
         self.embedding = nn.Embedding(self.S, self.embed_dim)
@@ -715,7 +720,7 @@ class EnumerativeTransformer(nn.Module):
     def forward(
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
-        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
+        temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim, self.device)
         x = x.view(x.shape[0], -1)
 
         prefix_cond = self.config.model.get("conditional_dim", 0)
@@ -747,6 +752,7 @@ class PrefixConditionalBidirTransformer(nn.Module):
     def __init__(self, config):
         super(PrefixConditionalBidirTransformer, self).__init__()
         self.config = config
+        self.device = config.device
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
         self.mlp_dim = config.model.mlp_dim
@@ -800,7 +806,7 @@ class PrefixConditionalBidirTransformer(nn.Module):
 
     def forward(self, x, t, conditioner=None):
         temb = self.temb_net(
-            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2))
+            transformer_timestep_embedding(t * self.temb_scale, int(self.embed_dim / 2), self.device)
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 

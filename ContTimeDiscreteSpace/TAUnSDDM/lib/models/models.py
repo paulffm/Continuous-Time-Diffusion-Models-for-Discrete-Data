@@ -642,6 +642,7 @@ class SudokuScoreNet(nn.Module):
 class EMA:
     def __init__(self, cfg):
         self.decay = cfg.model.ema_decay
+        self.device = cfg.device
         if self.decay < 0.0 or self.decay > 1.0:
             raise ValueError("Decay must be between 0 and 1")
         self.shadow_params = []
@@ -664,6 +665,8 @@ class EMA:
         with torch.no_grad():
             parameters = [p for p in self.parameters() if p.requires_grad]
             for s_param, param in zip(self.shadow_params, parameters):
+                param = param.to(self.device)
+                s_param = s_param.to(self.device)
                 s_param.sub_(one_minus_decay * (s_param - param))
 
     def state_dict(self):

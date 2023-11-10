@@ -1,7 +1,7 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_tauUnet_maze import get_config
+from config.config_hollow_maze import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -20,7 +20,6 @@ import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
-from lib.datasets.datasets import get_maze_data
 from lib.datasets.maze import maze_gen
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
@@ -34,7 +33,7 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
@@ -70,11 +69,14 @@ def main():
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
 
-    limit = (cfg.training.n_iters - state["n_iter"] + 1) * cfg.data.batch_size
-    img = maze_gen(
-        limit=limit, crop=cfg.data.crop_wall, dim_x=7, dim_y=7, pixelSizeOfTile=1, weightHigh=97, weightLow=97
-    )
-    dataloader = get_maze_data(cfg, img)
+    if cfg.data.name == 'Maze3SComplete':
+        limit = (cfg.training.n_iters - state["n_iter"] + 1) * cfg.data.batch_size
+        cfg.data.limit = limit 
+
+    dataset = dataset_utils.get_dataset(cfg, device)
+    dataloader = torch.utils.data.DataLoader(dataset,
+        batch_size=cfg.data.batch_size,
+        shuffle=cfg.data.shuffle)
 
     print("Info:")
     print("--------------------------------")
@@ -99,6 +101,7 @@ def main():
     exit_flag = False
     while True:
         for minibatch in tqdm(dataloader):
+            print(minibatch.device)
             l = training_step.step(state, minibatch, loss)
 
             training_loss.append(l.item())

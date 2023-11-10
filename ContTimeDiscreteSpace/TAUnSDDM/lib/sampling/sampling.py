@@ -1151,7 +1151,7 @@ class TauLeaping2:
                     cfg=self.cfg,
                     model=model,
                     xt=x,
-                    t=t * torch.ones((N,)),
+                    t=t * torch.ones((N,), device=device),
                     logits=logits,
                 )
 
@@ -1166,7 +1166,7 @@ class TauLeaping2:
 
                 flips = torch.distributions.poisson.Poisson(posterior).sample()
                 choices = utils.expand_dims(
-                    torch.arange(self.S, dtype=torch.int32), axis=list(range(x.ndim))
+                    torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
                 )
 
                 if not self.is_ordinal:

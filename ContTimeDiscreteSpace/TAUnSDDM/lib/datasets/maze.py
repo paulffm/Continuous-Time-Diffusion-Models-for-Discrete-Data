@@ -800,7 +800,7 @@ def maze_gen(
         [transforms.PILToTensor()]  # Ändern Sie dies auf (32, 32) für 32x32 Größe
     )
     image_list = []
-    while True:
+    while n <= limit:
         newMaze = Maze(dim_x, dim_y, mazeName=f"maze_{n}")
         newMaze.makeMazeGrowTree(weightHigh, weightLow)
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
@@ -815,12 +815,11 @@ def maze_gen(
 
         image_list.append(img_tensor)
         # newMaze.saveImage(mazeImageBW, n)
-        if n == limit:
-            break
         if n % 1000 == 0:
             print(f"{n} samples generated.")
         n += 1
-    
+    image_list = torch.stack(image_list, 0).to(device) 
+    print(image_list.shape, type(image_list), image_list.device)
 
     return image_list
 

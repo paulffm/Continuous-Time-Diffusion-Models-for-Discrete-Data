@@ -11,6 +11,7 @@ import os
 import joblib
 from urllib.request import urlretrieve
 import random
+from lib.datasets.maze import maze_gen
 
 
 @dataset_utils.register_dataset
@@ -352,25 +353,50 @@ def denormalize_image(image):
 
 
 @dataset_utils.register_dataset
-class BinMaze(Dataset):
-    def __init__(self, dataset):
+class Maze3SComplete(Dataset):
+    def __init__(self, cfg, device, _):
         # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
-        self.images = dataset
-        self.labels = []
+        self.device = device
+        self.data = maze_gen(
+            limit=cfg.data.limit,
+            crop=cfg.data.crop_wall,
+            dim_x=7,
+            dim_y=7,
+            pixelSizeOfTile=1,
+            weightHigh=97,
+            weightLow=97,
+        )
 
     def __len__(self):
-        return len(self.images)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        return self.images[idx]
+        return self.data[idx]
 
 
-def get_maze_data(config, train_ds):
-    torch_ds = BinMaze(train_ds)
-    torch_dataloader = DataLoader(
-        torch_ds, batch_size=config.data.batch_size, shuffle=True
-    )
-    return torch_dataloader
+@dataset_utils.register_dataset
+class Maze3S(Dataset):
+    def __init__(self, cfg, device, _):
+        # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
+        self.cfg = cfg
+        self.device = device
+        print(device)
+
+    def __len__(self):
+        return int(self.cfg.data.batch_size)
+
+    def __getitem__(self, idx):
+        self.maze = maze_gen(
+            limit=self.cfg.data.limit,
+            device=self.device,
+            crop=self.cfg.data.crop_wall,
+            dim_x=7,
+            dim_y=7,
+            pixelSizeOfTile=1,
+            weightHigh=97,
+            weightLow=97,
+        )
+        return self.maze[0]  # .to(self.device)
 
 
 #############################################

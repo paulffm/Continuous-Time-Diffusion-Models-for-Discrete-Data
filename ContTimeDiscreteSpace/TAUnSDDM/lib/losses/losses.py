@@ -663,7 +663,7 @@ class HollowAux:
         return torch.sum(loss) / B
 
 
-# ToDo: Check if torch.Tile does the same and check if works, check ddim? what is that => D?
+# ToDo: Check if torch.Tile does the same and check if works, check ddim? 
 @losses_utils.register_loss
 class EBMAux:
     def __init__(self, cfg):
