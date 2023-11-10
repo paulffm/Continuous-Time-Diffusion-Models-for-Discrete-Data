@@ -9,7 +9,7 @@ import os
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
-import lib.datasets.datasets as datasets
+import ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist as mnist
 import lib.datasets.dataset_utils as dataset_utils
 import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
@@ -20,7 +20,6 @@ import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
-from lib.datasets.maze import maze_gen
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 
@@ -40,6 +39,7 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
+        model_name = "model_2199_unet3.pt"
         date = "2023-11-07"
         config_name = "config_001_unet3.yaml"
         config_path = os.path.join(save_location, date, config_name)
@@ -49,18 +49,12 @@ def main():
 
     model = model_utils.create_model(cfg, device)
 
-    loss = losses_utils.get_loss(cfg)
-
-    training_step = training_utils.get_train_step(cfg)
-
     optimizer = optimizers_utils.get_optimizer(model.parameters(), cfg)
 
-    sampler = sampling_utils.get_sampler(cfg)
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_2199_unet3.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 12600
@@ -68,6 +62,12 @@ def main():
         cfg.saving.checkpoint_freq = 1000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
+    
+    sampler = sampling_utils.get_sampler(cfg)
+
+    loss = losses_utils.get_loss(cfg)
+
+    training_step = training_utils.get_train_step(cfg)
 
     if cfg.data.name == 'Maze3SComplete':
         limit = (cfg.training.n_iters - state["n_iter"] + 1) * cfg.data.batch_size

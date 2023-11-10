@@ -837,7 +837,56 @@ def maze_gen(
 # newMaze.saveImage(mazeImageColor)
 
 # newMaze = Maze(30,30,mazeName = "BraidedMaze")
-# newMaze.makeMazeGrowTree(weightHigh = 100, weightLow = 95)
+# newMaze.makeMazeGrowTree(weightHig
+# h = 100, weightLow = 95)
 # newMaze.makeMazeBraided(-1)
 # mazeImageBW.show()
 # newMaze.saveImage(mazeImageBW)
+from torch.utils.data import Dataset
+from . import dataset_utils
+
+@dataset_utils.register_dataset
+class Maze3SComplete(Dataset):
+    def __init__(self, cfg, device, _):
+        # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
+        self.device = device
+        self.data = maze_gen(
+            limit=cfg.data.limit,
+            crop=cfg.data.crop_wall,
+            dim_x=7,
+            dim_y=7,
+            pixelSizeOfTile=1,
+            weightHigh=97,
+            weightLow=97,
+        )
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+
+@dataset_utils.register_dataset
+class Maze3S(Dataset):
+    def __init__(self, cfg, device, _):
+        # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
+        self.cfg = cfg
+        self.device = device
+        print(device)
+
+    def __len__(self):
+        return int(self.cfg.data.batch_size)
+
+    def __getitem__(self, idx):
+        self.maze = maze_gen(
+            limit=self.cfg.data.limit,
+            device=self.device,
+            crop=self.cfg.data.crop_wall,
+            dim_x=7,
+            dim_y=7,
+            pixelSizeOfTile=1,
+            weightHigh=97,
+            weightLow=97,
+        )
+        return self.maze[0]  # .to(self.device)

@@ -613,14 +613,13 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
-    
+
+
 class MaskedModel(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
 
-        tmp_net = hollow_networks.EnumerativeTransformer(cfg).to(
-            device
-        )
+        tmp_net = hollow_networks.EnumerativeTransformer(cfg).to(device)
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
         else:
@@ -636,8 +635,6 @@ class MaskedModel(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
-    
-
 
 
 class SudokuScoreNet(nn.Module):

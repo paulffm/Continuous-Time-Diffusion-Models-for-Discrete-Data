@@ -430,7 +430,7 @@ class TransformerEncoder(nn.Module):
             config.device,
             config.model.embed_dim,
             config.model.dropout_rate,
-            config.model.concat_dim+1,
+            config.model.concat_dim+1, # +1 time_emb
         )
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
@@ -739,10 +739,10 @@ class MaskedTransformer(nn.Module):
         return logits # B, 1, S
 
 
-# still inefficient
 class EnumerativeTransformer(nn.Module):
     """
-    First embedds inpup data by: adding positional encoding and time embedding + generall Embedding layer
+    First embedds input data with Transformer Network by: adding positional encoding and time embedding + general Embedding layer
+    Then predicts logits by an arbitrary neural network
     """
     def __init__(self, config):
         super(EnumerativeTransformer, self).__init__()

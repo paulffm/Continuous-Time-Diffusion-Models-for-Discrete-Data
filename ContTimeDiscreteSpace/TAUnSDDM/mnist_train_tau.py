@@ -10,7 +10,7 @@ import os
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
-import lib.datasets.datasets as datasets
+import ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist as mnist
 import lib.datasets.dataset_utils as dataset_utils
 import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
@@ -22,7 +22,7 @@ import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
-from lib.datasets.datasets import (
+from ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist import (
     create_train_discrete_mnist_dataloader,
     create_train_discrete_cifar10_dataloader,
 )
