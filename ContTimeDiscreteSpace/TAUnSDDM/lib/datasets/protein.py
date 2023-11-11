@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import pandas as pd 
 import numpy as np
+from . import dataset_utils
 
 CHAR2IDX = {
     'A': 0, 'R': 1, 'N': 2, 'D': 3, 'C': 4, 'Q': 5, 'E': 6, 'G': 7, 'H': 8, 'I': 9,
@@ -24,10 +25,9 @@ def sequence_to_numbers(seq):
 def numbers_to_sequence(numbers):
     return [IDX2CHAR[numb] for numb in numbers]
 
+@dataset_utils.register_dataset
 class ProteinDataset(Dataset):
     def __init__(self, cfg, device, root):
-        # Umwandlung der Sequenzen in numerische Form
-        # Hier müssen Sie Ihre eigene Logik implementieren, um die Sequenzen umzuwandeln
         seq = np.load('lib/datasets/Protein_sequences/grampa_numarr.npy')
         self.seq = torch.from_numpy(seq).to(device)
 
