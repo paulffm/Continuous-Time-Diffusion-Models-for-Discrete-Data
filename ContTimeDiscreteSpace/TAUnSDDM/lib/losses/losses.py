@@ -623,29 +623,25 @@ class CatRM:
 
         model = state["model"]
 
-        # if 4 Dim => like images: True
         if len(minibatch.shape) == 4:
             B, C, H, W = minibatch.shape
             minibatch = minibatch.view(B, C * H * W)
-        # hollow xt, t, l_all, l_xt geht rein
+
         B = minibatch.shape[0]
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
         qt0 = model.transition(ts)  # (B, S, S)
 
-        # rate = model.rate(ts)  # (B, S, S)
-
         b = utils.expand_dims(
             torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
         )
         qt0 = qt0[b, minibatch.long()]
 
-        # log loss
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(
             logits=log_qt0
-        ).sample()  # bis hierhin <1 sek
+        ).sample()  
 
         # get logits from CondFactorizedBackwardModel
         logits = model(xt, ts)  # B, D, S <10 sek

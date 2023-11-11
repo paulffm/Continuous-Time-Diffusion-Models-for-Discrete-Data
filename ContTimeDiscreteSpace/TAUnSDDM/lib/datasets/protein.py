@@ -28,11 +28,11 @@ def numbers_to_sequence(numbers):
 @dataset_utils.register_dataset
 class ProteinDataset(Dataset):
     def __init__(self, cfg, device, root):
-        seq = np.load('lib/datasets/Protein_sequences/grampa_numarr.npy')
+        seq = np.load(root)
         self.seq = torch.from_numpy(seq).to(device)
 
     def __len__(self):
-        return len(self.seq.shape[0])
+        return self.seq.shape[0]
 
     def __getitem__(self, idx):
         return self.seq[idx]

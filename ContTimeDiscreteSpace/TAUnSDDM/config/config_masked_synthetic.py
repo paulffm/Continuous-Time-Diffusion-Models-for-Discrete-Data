@@ -11,10 +11,9 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "HollowAux"
+    loss.name = "CatRM"
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.logit_type = "reverse_prob"
-    config.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.01
@@ -44,7 +43,6 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    config.concat_dim = data.shape[0]
     model.name = "UniformMaskedEMA"
     # Forward model
     model.rate_const = 0.7

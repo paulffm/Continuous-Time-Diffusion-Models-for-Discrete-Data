@@ -78,7 +78,7 @@ class TauLeaping:
         self.cfg = cfg
         self.t = 1.0
         # C, H, W = self.cfg.data.shape
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -199,7 +199,7 @@ class TauLeaping3:
         self.cfg = cfg
         self.t = 1.0
         # C, H, W = self.cfg.data.shape
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -315,7 +315,7 @@ class EulerLeaping:
         self.cfg = cfg
         self.t = 1.0
         # C, H, W = self.cfg.data.shape
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -395,7 +395,7 @@ class PCTauLeaping:
 
     def sample(self, model, N, num_intermediates):
         t = 1.0
-        D = self.cfg.concat_dim
+        D = self.cfg.model.concat_dim
         S = self.cfg.data.S
         scfg = self.cfg.sampler
         num_steps = scfg.num_steps
@@ -800,7 +800,7 @@ class ConditionalPCTauLeaping:
 class ExactSampling:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -890,7 +890,7 @@ def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
 class LBJFSampling:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -985,7 +985,7 @@ class LBJFSampling:
 class TauLeapingBoth:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t
@@ -1117,7 +1117,7 @@ class TauLeapingBoth:
 class TauLeaping2:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.D = cfg.concat_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.num_steps = cfg.sampler.num_steps
         self.min_t = cfg.sampler.min_t

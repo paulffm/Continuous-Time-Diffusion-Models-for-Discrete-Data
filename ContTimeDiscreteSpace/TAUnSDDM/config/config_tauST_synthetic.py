@@ -38,11 +38,10 @@ def get_config():
     data.shuffle = True
     data.shape = [32]
 
-    config.concat_dim = data.shape[0]
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformRateSequenceTransformerEMA"
-
+    config.model.concat_dim = data.shape[0]
     model.ema_decay = 0.9999  # 0.9999
     model.rate_const = 0.7
 

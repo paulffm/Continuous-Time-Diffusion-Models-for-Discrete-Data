@@ -594,10 +594,15 @@ class ResidualMLP(nn.Module):
 class HollowTransformer(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
+        if cfg.model.nets == "bidir_transformer2":
+            tmp_net = hollow_networks.BidirectionalTransformer2(cfg, readout_dim=None).to(
+                device
+            )
+        else:
+            tmp_net = hollow_networks.BidirectionalTransformer(cfg, readout_dim=None).to(
+                device
+            )
 
-        tmp_net = hollow_networks.BidirectionalTransformer(cfg, readout_dim=None).to(
-            device
-        )
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
         else:
