@@ -25,8 +25,21 @@ def sequence_to_numbers(seq):
 def numbers_to_sequence(numbers):
     return [IDX2CHAR[numb] for numb in numbers]
 
+
 @dataset_utils.register_dataset
-class ProteinDataset(Dataset):
+class ProteinGrampa(Dataset):
+    def __init__(self, cfg, device, root):
+        seq = np.load(root)
+        self.seq = torch.from_numpy(seq).to(device)
+
+    def __len__(self):
+        return self.seq.shape[0]
+
+    def __getitem__(self, idx):
+        return self.seq[idx]
+
+@dataset_utils.register_dataset
+class ProteinStream(Dataset):
     def __init__(self, cfg, device, root):
         seq = np.load(root)
         self.seq = torch.from_numpy(seq).to(device)

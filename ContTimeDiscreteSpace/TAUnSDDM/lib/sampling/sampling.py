@@ -161,7 +161,7 @@ class TauLeaping:
                 )  # choices -
                 poisson_dist = torch.distributions.poisson.Poisson(
                     reverse_rates * h
-                )  # posterior: p_{t-eps|t}
+                )  # posterior: p_{t-eps|t}, B, D; S
                 jump_nums = (
                     poisson_dist.sample()
                 )  # how many jumps in interval [t-eps, t]
@@ -372,6 +372,9 @@ class EulerLeaping:
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
                 # inner sum ca. torch.exp(log_weight) => aber da abweichung
+                # log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+                # ll_all - log_xt 
+                # 
                 inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
                 xt_onehot = F.one_hot(x.long(), self.S)
 
@@ -383,8 +386,8 @@ class EulerLeaping:
                 posterior = (posterior * post_0 + diag * xt_onehot) #* h  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
-                # log_posterior = torch.log(posterior + 1e-35)
-                x = torch.distributions.categorical.Categorical(posterior).sample()
+                log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
             return x.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
@@ -943,8 +946,8 @@ class LBJFSampling:
                 posterior = posterior * (1 - xt_onehot) + diag * xt_onehot  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
-                # log_posterior = torch.log(posterior + 1e-35)
-                x = torch.distributions.categorical.Categorical(posterior).sample()
+                log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
 
                 if t <= self.corrector_entry_time:
                     print("corrector")
@@ -974,9 +977,8 @@ class LBJFSampling:
                             posterior, axis=-1, keepdims=True
                         )
                         # log_posterior = torch.log(posterior + 1e-35)
-                        x = torch.distributions.categorical.Categorical(
-                            posterior
-                        ).sample()
+                        log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                        x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
 
             return x.detach().cpu().numpy().astype(int)
 
@@ -1164,17 +1166,20 @@ class TauLeaping2:
                 posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
                 posterior = posterior * (1 - xt_onehot)
 
-                flips = torch.distributions.poisson.Poisson(posterior).sample()
+                flips = torch.distributions.poisson.Poisson(posterior).sample() # B, D most 0
+                print("flips", flips, flips.shape) 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
-                )
-
+                ) # 1,1, S
+                print("choices", choices, choices.shape)
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
                 diff = choices - x.unsqueeze(-1)
-                avg_offset = torch.sum(flips * diff, axis=-1)
+                print("diff", diff, diff.shape)
+                avg_offset = torch.sum(flips * diff, axis=-1) # B, D, S with entries -(S - 1) to S-1
+                print("avg_offset", avg_offset, avg_offset.shape)
                 x = x + avg_offset
                 x = torch.clip(x, min=0, max=self.S - 1)
 

@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sympy.combinatorics.graycode import GrayCode
 from ml_collections import config_dict
-import dataset_utils
+from . import dataset_utils
 
 # from config_hollow_synthetic import get_config
 

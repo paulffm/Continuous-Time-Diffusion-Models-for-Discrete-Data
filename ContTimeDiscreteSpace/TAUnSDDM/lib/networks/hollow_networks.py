@@ -430,7 +430,8 @@ class TransformerEncoder(nn.Module):
             config.device,
             config.model.embed_dim,
             config.model.dropout_rate,
-            config.model.concat_dim + 1,  # +1 time_emb
+            config.model.concat_dim
+            + 1,  # +1 time_emb; need config.model.concat_dim + config.model.cond_dim + 1
         )
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
@@ -441,16 +442,16 @@ class TransformerEncoder(nn.Module):
         assert x.ndim == 3 and temb.ndim == 2
         temb = temb.unsqueeze(1)
         if conditioner is None:
-            conditioner = temb
+            conditioner = temb  # B, 1, E
         else:
-            conditioner = torch.cat([conditioner, temb], dim=1)  # B, 1, E
+            conditioner = torch.cat([conditioner, temb], dim=1)  # B, cond_dim + 1, E
         x = torch.cat([conditioner, x], dim=1)
 
         x = self.pos_embed(x)
         x = self.dropout(x)
         for trans_block_layers in self.trans_block_layers:
-            x = trans_block_layers(x, masks=None)  # B, D+1, E
-        x = x[:, 1:]
+            x = trans_block_layers(x, masks=None)  # B, D + cond_dim +1, E
+        x = x[:, 1:]  # B, D + cond_dim, E
         return x
 
 
@@ -690,7 +691,7 @@ class BidirectionalTransformer2(nn.Module):
 
         input_shape = list(x_embed.shape)[:-1]
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
-  
+
         l2r_embed = self.module_l2r(x_embed, temb)
         r2l_embed = self.module_r2l(x_embed, temb)
 
@@ -763,7 +764,7 @@ class EnumerativeTransformer(nn.Module):
 
         for pos in positions:
             x_masked = x.clone()
-            x_masked[:, pos] = self.S  # B, D
+            x_masked[:, pos] = self.S  # B, D - cond_dim
             logit = self.transformer(x_masked, temb, pos)  # B, 1, S
             logit = logit.squeeze(1)  # B, S
             logits_list.append(logit)  # list with len D of tensors with shape B, S
@@ -842,9 +843,7 @@ class PrefixConditionalBidirTransformer(nn.Module):
                 t * self.temb_scale, int(self.embed_dim / 2), self.device
             )
         )  # B, E
-        # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
 
-        # way to use disrupt ordinality?
         x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
         if self.use_one_hot_input:
             x_embed = self.input_embedding(x_one_hot.float())
@@ -858,11 +857,15 @@ class PrefixConditionalBidirTransformer(nn.Module):
         x_embed = x_embed.view(x_embed.shape[0], -1, x_embed.shape[-1])  # B, D, E
 
         # oder direkt conditioner mit geben => y?
-        conditioner, x = torch.split(x, [self.conditional_dim], axis=1)
+        conditioner, x = torch.split(x, [self.conditional_dim], axis=1)  # ohne []
 
-        l2r_embed = self.module_l2r(x_embed, temb, conditioner)[:, -x.shape[1] :]
-        r2l_embed = self.module_r2l(x_embed, temb, conditioner)[:, : x.shape[1]]
-        logits = self.readout_module(l2r_embed, r2l_embed, temb)  # resnet output shape?
+        l2r_embed = self.module_l2r(x_embed, temb, conditioner)[
+            :, -x.shape[1] :
+        ]  # extract last x.shape[1] dim of prediction
+        r2l_embed = self.module_r2l(x_embed, temb, conditioner)[
+            :, : x.shape[1]
+        ]  # extract first x.shape[1] dim of prediction
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)
         # logits = logits.view(input_shape + [self.readout_dim])  # B, D,
 
         dummy_logits = torch.zeros(

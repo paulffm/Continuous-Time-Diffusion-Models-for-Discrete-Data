@@ -307,10 +307,6 @@ class CTElbo:
 
         reg_mean = torch.mean(reg_term)
 
-        if writer is not None:
-            writer.add_scalar("sig", sig_mean.detach(), state["n_iter"])
-            writer.add_scalar("reg", reg_mean.detach(), state["n_iter"])
-
         neg_elbo = sig_mean + reg_mean
         perm_x_logits = torch.permute(x_logits, (0, 2, 1))
         nll = self.cross_ent(perm_x_logits, minibatch.long())
@@ -568,6 +564,7 @@ class CatRM:
         self.ratio_eps = cfg.loss.eps_ratio
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
+        self.D = self.cfg.model.concat_dim
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         device = model.device
@@ -636,12 +633,12 @@ class CatRM:
         b = utils.expand_dims(
             torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
         )
-        qt0 = qt0[b, minibatch.long()]
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)
 
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(
             logits=log_qt0
-        ).sample()  
+        ).sample().view(B, self.D)
 
         # get logits from CondFactorizedBackwardModel
         logits = model(xt, ts)  # B, D, S <10 sek

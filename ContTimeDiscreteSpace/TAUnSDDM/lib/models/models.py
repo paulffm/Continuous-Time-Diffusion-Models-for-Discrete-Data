@@ -5,11 +5,10 @@ import numpy as np
 import lib.models.model_utils as model_utils
 import lib.networks.tau_networks as tau_networks
 import lib.networks.unet as unet
-from torchtyping import patch_typeguard, TensorType
+from torchtyping import TensorType
 import torch.autograd.profiler as profiler
 import math
 from torch.nn.parallel import DistributedDataParallel as DDP
-from lib.networks.hollow_networks import BidirectionalTransformer
 from lib.utils import utils
 from lib.networks import hollow_networks, sudoku_networks
 
