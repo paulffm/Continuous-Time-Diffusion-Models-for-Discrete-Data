@@ -11,6 +11,21 @@ import torch.nn.init as init
 import functorch
 from torchtyping import TensorType
 
+"""
+class PositionwiseFeedForward(nn.Module):
+"Implements FFN equation."
+
+def __init__(self, d_model, d_ff, dropout=0.1):
+    super(PositionwiseFeedForward, self).__init__()
+    self.w_1 = nn.Linear(d_model, d_ff)
+    self.w_2 = nn.Linear(d_ff, d_model)
+    self.dropout = nn.Dropout(dropout)
+    self.activation = GELU()
+
+def forward(self, x):
+    return self.w_2(self.dropout(self.activation(self.w_1(x))))
+"""
+
 
 class MLP(nn.Module):
     def __init__(self, features, activation=nn.ReLU):
@@ -302,14 +317,14 @@ class SelfAttentionBlock(nn.Module):
             x = self.norm(inputs)
             x, _ = self.self_attention(
                 x, x, x, attn_mask=masks
-            )  # adjust the input as needed
+            )  
             x = self.dropout(x)
             x = x + inputs
-        elif self.config.model.transformer_norm_type == "postnorm":  # used in _sa_block
+        elif self.config.model.transformer_norm_type == "postnorm":  
             x, _ = self.self_attention(inputs, inputs, inputs, attn_mask=masks)
             x = self.dropout(x)
-            x = x + inputs  # not in _sa_block
-            x = self.norm(x)  # not in _sa_block
+            x = x + inputs  
+            x = self.norm(x)  
         assert inputs.shape == x.shape
         return x
 
@@ -340,11 +355,13 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
             kernel_init if kernel_init is not None else nn.init.xavier_uniform_
         )
         bias_init = bias_init if bias_init is not None else nn.init.normal_
-
+        # Bert: x + Norm -> Sublayer -> Dropout
+        # Sublayer: Lin, Lin Dropout, GeLu
+        # TMLP: Lin, Relu, Dropout, Linear, Droput
         self.fc1 = nn.Linear(
             embed_dim, mlp_dim, bias=bias_init
         )  # mlp_dim => d_model in TAU
-        self.activation = nn.ReLU()
+        self.activation = nn.ReLU() # hier GeLu?
         self.dropout1 = nn.Dropout(p=dropout_rate)
         self.fc2 = nn.Linear(
             mlp_dim, self.out_dim if self.out_dim is not None else embed_dim, bias=False
@@ -384,6 +401,8 @@ class FeedForwardBlock(nn.Module):
 
     def forward(self, x: TensorType["B", "K", "E"]) -> TensorType["B", "K", "O"]:
         # if conditioner None: K=D else K=D+1; O=E since out_dim =None
+        # Bert: x + Norm -> Sublayer -> Dropout
+        # Sublayer: Lin, Lin Dropout, GeLu
         if self.config.model.transformer_norm_type == "prenorm":
             z = self.norm(x)
             z = self.mlp(z)
@@ -410,6 +429,13 @@ class TransformerBlock(nn.Module):  #
         self, inputs: TensorType["B", "K", "E"], masks: TensorType["K", "K"]
     ) -> TensorType["B", "K", "O"]:
         # if conditioner None: k=D else K=D+n; if out_dim None: O = E => True
+
+        # Bert: Norm -> Sublayer -> Dropout + x
+        # Sublayer-MHAtt: 3Lin Layer, Att, Output Lin Layer
+        # Sublayer-FF: Lin, Lin Dropout, GeLu
+        # Att (Pre): Norm -> Att -> Droput + x
+        # TMLP (Pre): Norm, Lin, Relu, Dropout, Linear, Dropout + x
+
         x = self.self_attention_block(inputs, masks)
         z = self.feed_forward_block(x)
         return z
@@ -426,6 +452,7 @@ class TransformerEncoder(nn.Module):
         for _ in range(config.model.num_layers):
             self.trans_block_layers.append(TransformerBlock(config))
         self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
+
         self.pos_embed = PositionalEncoding(
             config.device,
             config.model.embed_dim,
@@ -701,6 +728,7 @@ class BidirectionalTransformer2(nn.Module):
         # logits = logits + x_one_hot
         return logits
 
+# very similiar to Bert: https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model + MLP or ResNet at the end
 
 class MaskedTransformer(nn.Module):
     """Masked transformer."""
@@ -709,7 +737,7 @@ class MaskedTransformer(nn.Module):
         super(MaskedTransformer, self).__init__()
         self.config = config
         self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
-        self.trans_encoder = TransformerEncoder(config)
+        self.trans_encoder = TransformerEncoder(config)  # config.model.num_layers = 12
 
         # I can basically use any neural net
         if config.model.readout == "mlp":
@@ -718,7 +746,9 @@ class MaskedTransformer(nn.Module):
                 activation=nn.functional.gelu,
             )
         elif config.model.readout == "resnet":
-            self.model = ResidualReadout(config)
+            self.model = ResidualReadout(
+                config
+            )  # config.model.num_output_ffresiduals = 2
         else:
             raise ValueError("Unknown readout type %s" % config.model.readout)
 
@@ -770,6 +800,61 @@ class EnumerativeTransformer(nn.Module):
             logits_list.append(logit)  # list with len D of tensors with shape B, S
 
         logits = torch.stack(logits_list, dim=1)  # B, D, S
+
+        if prefix_cond:
+            dummy_logits = torch.zeros(
+                [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=torch.float32
+            )
+            logits = torch.cat([dummy_logits, logits], dim=1)
+        logits = logits.view(x.shape + (self.S,))
+        return logits  # B, D, S
+
+
+class BertEnumTransformer(nn.Module):
+    """
+    First embedds input data with Transformer Network by: adding positional encoding and time embedding + general Embedding layer
+    Then predicts logits by an arbitrary neural network
+    """
+
+    def __init__(self, config):
+        super(BertEnumTransformer, self).__init__()
+        self.config = config
+        self.device = config.device
+        self.S = config.data.S
+        self.embed_dim = config.model.embed_dim
+        self.temb_scale = config.model.time_scale_factor
+        self.embedding = nn.Embedding(config.data.S, config.model.embed_dim)
+        self.trans_encoder = TransformerEncoder(config)  # config.model.num_layers = 12
+
+        # I can basically use any neural net
+        if config.model.readout == "mlp":
+            self.model = MLP(
+                [2 * config.model.embed_dim, config.model.mlp_dim, self.config.data.S],
+                activation=nn.functional.gelu,
+            )
+        elif config.model.readout == "resnet":
+            self.model = ResidualReadout(
+                config
+            )  # config.model.num_output_ffresiduals = 2
+        else:
+            raise ValueError("Unknown readout type %s" % config.model.readout)
+
+    def forward(
+        self, x: TensorType["B", "D"], t: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        temb = transformer_timestep_embedding(
+            t * self.temb_scale, self.embed_dim, self.device
+        )
+        x = x.view(x.shape[0], -1)
+
+        prefix_cond = self.config.model.get("conditional_dim", 0)
+        x = self.embedding(x)
+        embed = self.trans_encoder(x, temb)
+
+        if self.config.model.readout == "mlp":
+            logits = self.model(embed)
+        elif self.config.model.readout == "resnet":
+            logits = self.model(embed, temb)
 
         if prefix_cond:
             dummy_logits = torch.zeros(

@@ -641,17 +641,17 @@ class CatRM:
         ).sample().view(B, self.D)
 
         # get logits from CondFactorizedBackwardModel
-        logits = model(xt, ts)  # B, D, S <10 sek
-        # check
+        logits = model(xt, ts)  # B, D, S: logits for every class in every dimension in x_t 
         loss = 0.0
         if self.cfg.loss.ce_coeff > 0:  # whole train step <10 sek
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
-            ll = F.log_softmax(logits, dim=-1)
-            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff
+            ll = F.log_softmax(logits, dim=-1) # B, D, S: Prob of every class in every dimension of x_t => softmax(logits, -1) =>D=2 S=3    [0.4, 0.5, 0.1]
+            #                                                                                                                               [0.8, 0.1, 0.1]
+            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0], [0.8, 0 0]
         else:
             ll_all, ll_xt = get_logprob_with_logits(
                 self.cfg, model, xt, ts, logits
-            )  # copy expensive?
+            )  # ll_all= log prov of all states, ll_xt = log prob of true states
             # ll_all, ll_xt = model.get_logprob_with_logits(xt, ts, logits)
             loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
                 1 - self.cfg.loss.ce_coeff

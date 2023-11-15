@@ -55,6 +55,6 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             # check
         else:
             raise ValueError("Unknown logit_type: %s" % cfg.loss.logit_type)
-    log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+    log_xt = torch.sum(log_prob * xt_onehot, dim=-1) # log probability of true class 
 
     return log_prob, log_xt
