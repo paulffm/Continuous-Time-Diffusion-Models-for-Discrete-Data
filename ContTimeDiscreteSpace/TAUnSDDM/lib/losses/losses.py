@@ -633,12 +633,12 @@ class CatRM:
         b = utils.expand_dims(
             torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
         )
-        qt0 = qt0[b, minibatch.long()].view(-1, self.S)
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S) # B*D, S
 
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(
             logits=log_qt0
-        ).sample().view(B, self.D)
+        ).sample().view(B, self.D) # B, D
 
         # get logits from CondFactorizedBackwardModel
         logits = model(xt, ts)  # B, D, S: logits for every class in every dimension in x_t 

@@ -645,7 +645,7 @@ class SudokuScoreNet(nn.Module):
     def __init__(self, cfg, device, encoding, rank=None):
         super().__init__()
 
-        tmp_net = sudoku_networks.ScoreNet(cfg, encoding).to(device)
+        tmp_net = sudoku_networks.SudokuScoreNet(cfg, encoding).to(device)
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
         else:

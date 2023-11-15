@@ -120,7 +120,7 @@ class Dense(nn.Module):
         return self.dense(x)[...]
 
 
-class ScoreNet(nn.Module):
+class SudokuScoreNet(nn.Module):
     """A time-dependent score-based model built upon U-Net architecture."""
 
     def __init__(self, cfg, allenc_relative):
@@ -163,3 +163,82 @@ class ScoreNet(nn.Module):
         h = h - h.mean(axis=-1, keepdims=True)
         return h
 
+
+class ScoreNet(nn.Module):
+    """A time-dependent score-based model built upon U-Net architecture."""
+
+    def __init__(self, cfg, time_step=0.01):
+        """Initialize a time-dependent score-based network.
+
+        Args:
+          marginal_prob_std: A function that takes time t and gives the standard
+            deviation of the perturbation kernel p_{0t}(x(t) | x(0)).
+          channels: The number of channels for feature maps of each resolution.
+          embed_dim: The dimensionality of Gaussian random feature embeddings.
+        """
+        super().__init__()
+        embed_dim = cfg.model.embed_dim
+        # Gaussian random feature embedding layer for time
+        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim),
+                                   nn.Linear(embed_dim, embed_dim))
+        n = embed_dim
+        # n => bei uns anstatt 5; 48?
+        self.linear = nn.Conv1d(48, n, kernel_size=9, padding=4)
+        self.blocks = nn.ModuleList([nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=4, padding=16),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=16, padding=64),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=64, padding=256),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=4, padding=16),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=16, padding=64),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=64, padding=256),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=4, padding=16),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=16, padding=64),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=64, padding=256),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, padding=4),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=4, padding=16),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=16, padding=64),
+                                     nn.Conv1d(n, n, kernel_size=9, dilation=64, padding=256)])
+
+        self.denses = nn.ModuleList([Dense(embed_dim, n) for _ in range(20)])
+        self.norms = nn.ModuleList([nn.GroupNorm(1, n) for _ in range(20)])
+
+        # The swish activation function
+        self.act = lambda x: x * torch.sigmoid(x)
+        self.relu = nn.ReLU()
+        self.softplus = nn.Softplus()
+        self.scale = nn.Parameter(torch.ones(1))
+        self.final = nn.Sequential(nn.Conv1d(n, n, kernel_size=1),
+                                   nn.GELU(),
+                                   nn.Conv1d(n, cfg.data.S, kernel_size=1))
+        self.time_step = time_step
+
+    def forward(self, x, t):
+        # Obtain the Gaussian random feature embedding for t
+        # embed: [N, embed_dim]
+        embed = self.act(self.embed(t / 2))
+
+        # Encoding path
+        # x: NLC -> NCL
+        out = x.permute(0, 2, 1)
+        out = self.act(self.linear(out))
+
+        # pos encoding
+        for block, dense, norm in zip(self.blocks, self.denses, self.norms):
+            h = self.act(block(norm(out + dense(embed)[:, :, None])))
+            if h.shape == out.shape:
+                out = h + out
+            else:
+                out = h
+
+        out = self.final(out)
+
+        out = out.permute(0, 2, 1)
+
+        out = out - out.mean(axis=-1, keepdims=True)
+        return out
