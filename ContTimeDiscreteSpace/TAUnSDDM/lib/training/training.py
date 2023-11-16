@@ -13,9 +13,9 @@ class Standard:
         self.warmup = cfg.training.warmup
         self.lr = cfg.optimizer.lr
 
-    def step(self, state, minibatch, loss, writer=None):
+    def step(self, state, minibatch, loss):
         state["optimizer"].zero_grad()
-        l = loss.calc_loss(minibatch, state, writer)
+        l = loss.calc_loss(minibatch, state)
 
         # print("Loss in train", l)
         if l.isnan().any() or l.isinf().any():
@@ -33,8 +33,5 @@ class Standard:
 
         if self.do_ema:
             state["model"].update_ema()
-
-        if writer is not None:
-            writer.add_scalar("loss", l.detach(), state["n_iter"])
 
         return l.detach()

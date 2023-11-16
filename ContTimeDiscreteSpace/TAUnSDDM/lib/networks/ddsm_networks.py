@@ -178,6 +178,7 @@ class ProteinScoreNet(nn.Module):
         """
         super().__init__()
         embed_dim = cfg.model.embed_dim
+        self.S = cfg.data.S
         # Gaussian random feature embedding layer for time
         self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim),
                                    nn.Linear(embed_dim, embed_dim))
@@ -215,7 +216,7 @@ class ProteinScoreNet(nn.Module):
         self.scale = nn.Parameter(torch.ones(1))
         self.final = nn.Sequential(nn.Conv1d(n, n, kernel_size=1),
                                    nn.GELU(),
-                                   nn.Conv1d(n, cfg.data.S, kernel_size=1))
+                                   nn.Conv1d(n, self.S, kernel_size=1))
         self.time_step = time_step
 
     def forward(self, x, t):
@@ -225,6 +226,7 @@ class ProteinScoreNet(nn.Module):
 
         # Encoding path
         # x: NLC -> NCL
+        x = F.one_hot(x.long(), self.S)
         out = x.permute(0, 2, 1)
         out = self.act(self.linear(out))
 
