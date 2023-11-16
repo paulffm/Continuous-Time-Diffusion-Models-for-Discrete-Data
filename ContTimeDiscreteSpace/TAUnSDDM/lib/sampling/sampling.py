@@ -269,7 +269,7 @@ class TauLeaping3:
                 # ll_all = torch.where(ll_all < 1e-35, -1e9, torch.log(ll_all)) => berechnen log
                 # reverse_rates = log_weight * forward_rate hier schon
                 # h = tau
-
+                """
                 diffs = torch.arange(self.S, device=device).view(1, 1, self.S) - x.view(
                     N, self.D, 1
                 )  # choices -
@@ -279,15 +279,7 @@ class TauLeaping3:
                 jump_nums = (
                     poisson_dist.sample()
                 )  # how many jumps in interval [t-eps, t]
-                """
-                if not self.is_ordinal:
-                    tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
-                    #print("tot_jumps", tot_jumps, tot_jumps.shape)
-                    jump_mask = (tot_jumps <= 1) * 1
-                    #print("jump_mask", jump_mask, jump_mask.shape)
-                    jump_nums = jump_nums * jump_mask
-                    #print("jump_nums", jump_nums, jump_nums.shape)
-                """
+
                 if not self.is_ordinal:
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
@@ -299,6 +291,20 @@ class TauLeaping3:
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
                 x = x_new
+                """
+
+                flips = torch.distributions.poisson.Poisson(reverse_rates).sample() # B, D most 0
+                choices = utils.expand_dims(
+                    torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
+                ) # 1,1, S
+                if not self.is_ordinal:
+                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                    flip_mask = (tot_flips <= 1) * 1
+                    flips = flips * flip_mask
+                diff = choices - x.unsqueeze(-1) # B, D, S
+                avg_offset = torch.sum(flips * diff, axis=-1) # B, D, S with entries -(S - 1) to S-1
+                x = x + avg_offset
+                x = torch.clip(x, min=0, max=self.S - 1)
 
             p_0gt = F.softmax(
                 model(x, self.min_t * torch.ones((N,), device=device)), dim=2
@@ -902,7 +908,7 @@ class LBJFSampling:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N, num_intermediates=None):
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -1162,23 +1168,20 @@ class TauLeaping2:
                 )  # B, D, S?
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
+                # posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
+                posterior = h * torch.exp(log_weight) * fwd_rate
                 posterior = posterior * (1 - xt_onehot)
 
                 flips = torch.distributions.poisson.Poisson(posterior).sample() # B, D most 0
-                print("flips", flips, flips.shape) 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
                 ) # 1,1, S
-                print("choices", choices, choices.shape)
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
                 diff = choices - x.unsqueeze(-1)
-                print("diff", diff, diff.shape)
                 avg_offset = torch.sum(flips * diff, axis=-1) # B, D, S with entries -(S - 1) to S-1
-                print("avg_offset", avg_offset, avg_offset.shape)
                 x = x + avg_offset
                 x = torch.clip(x, min=0, max=self.S - 1)
 

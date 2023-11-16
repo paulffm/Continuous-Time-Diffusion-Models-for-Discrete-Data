@@ -687,11 +687,13 @@ class BidirectionalTransformer2(nn.Module):
             )
 
         if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            # B, D 
+            self.input_embedding = nn.Linear(self.S, self.embed_dim) 
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
             self.input_embedding = nn.Linear(1, self.embed_dim)
+            self.input_embedding = nn.Embedding(self.S, self.embed_dim) 
 
         self.temb_net = nn.Sequential(
             nn.Linear(int(self.embed_dim / 2), self.mlp_dim),

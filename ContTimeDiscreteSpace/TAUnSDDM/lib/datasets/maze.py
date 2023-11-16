@@ -821,7 +821,6 @@ def maze_gen(
             print(f"{n} samples generated.")
         n += 1
     image_list = torch.stack(image_list, 0).to(device) 
-    print(image_list.shape, type(image_list), image_list.device)
 
     return image_list
 
@@ -873,7 +872,6 @@ class Maze3S(Dataset):
         # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
         self.cfg = cfg
         self.device = device
-        print(device)
 
     def __len__(self):
         return int(self.cfg.data.batch_size)
