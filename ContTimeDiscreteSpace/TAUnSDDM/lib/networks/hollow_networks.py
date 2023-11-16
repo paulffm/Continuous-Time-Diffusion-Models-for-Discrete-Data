@@ -315,16 +315,14 @@ class SelfAttentionBlock(nn.Module):
         # if conditioner None: K=D else K=D+n
         if self.config.model.transformer_norm_type == "prenorm":
             x = self.norm(inputs)
-            x, _ = self.self_attention(
-                x, x, x, attn_mask=masks
-            )  
+            x, _ = self.self_attention(x, x, x, attn_mask=masks)
             x = self.dropout(x)
             x = x + inputs
-        elif self.config.model.transformer_norm_type == "postnorm":  
+        elif self.config.model.transformer_norm_type == "postnorm":
             x, _ = self.self_attention(inputs, inputs, inputs, attn_mask=masks)
             x = self.dropout(x)
-            x = x + inputs  
-            x = self.norm(x)  
+            x = x + inputs
+            x = self.norm(x)
         assert inputs.shape == x.shape
         return x
 
@@ -361,7 +359,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         self.fc1 = nn.Linear(
             embed_dim, mlp_dim, bias=bias_init
         )  # mlp_dim => d_model in TAU
-        self.activation = nn.ReLU() # hier GeLu?
+        self.activation = nn.ReLU()  # hier GeLu?
         self.dropout1 = nn.Dropout(p=dropout_rate)
         self.fc2 = nn.Linear(
             mlp_dim, self.out_dim if self.out_dim is not None else embed_dim, bias=False
@@ -574,6 +572,7 @@ class BidirectionalTransformer(nn.Module):
             self.S, config.model.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
+        self.use_cat = config.model.use_cat
         self.use_one_hot_input = config.model.use_one_hot_input
 
         if self.config.model.net_arch == "bidir_transformer":
@@ -600,9 +599,11 @@ class BidirectionalTransformer(nn.Module):
                 "Unknown bidir_readout: %s" % self.config.model.bidir_readout
             )
 
-        if self.use_one_hot_input:
-            # ordnet jeder Klasse einen einzigartigen Vektor zu, der gelernt wird.
-            self.input_embedding = nn.Embedding(self.S, self.embed_dim)
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
@@ -625,15 +626,17 @@ class BidirectionalTransformer(nn.Module):
             )
         )  # B, E
         # temb = transformer_timestep_embedding(t * self.temb_scale, self.embed_dim)
-
+        B, D = x.shape
         # isrupt ordinality
-        x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
-        if self.use_one_hot_input:
-            x_embed = self.input_embedding(x_one_hot)
-
+        if self.use_cat:
+            if self.use_one_hot_input:
+                x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
+                x_embed = self.input_embedding(x_one_hot.float())
+            else:
+                x_embed = self.input_embedding(x)
         else:
             x = normalize_input(x, self.S)
-            x = x.unsqueeze(-1)
+            x = x.view(B, D, 1)
             x_embed = self.input_embedding(x)
 
         input_shape = list(x_embed.shape)[:-1]  # (B, D)
@@ -660,6 +663,7 @@ class BidirectionalTransformer2(nn.Module):
             self.S, config.model.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
+        self.use_cat = config.model.use_cat
         self.use_one_hot_input = config.model.use_one_hot_input
 
         if self.config.model.net_arch == "bidir_transformer":
@@ -686,14 +690,16 @@ class BidirectionalTransformer2(nn.Module):
                 "Unknown bidir_readout: %s" % self.config.model.bidir_readout
             )
 
-        if self.use_one_hot_input:
-            # B, D 
-            self.input_embedding = nn.Linear(self.S, self.embed_dim) 
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S, self.embed_dim)
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding
+            # transformiert die Eingabewerte durch eine gewichtete Summe (plus einem Bias),
             self.input_embedding = nn.Linear(1, self.embed_dim)
-            self.input_embedding = nn.Embedding(self.S, self.embed_dim) 
 
         self.temb_net = nn.Sequential(
             nn.Linear(int(self.embed_dim / 2), self.mlp_dim),
@@ -708,14 +714,16 @@ class BidirectionalTransformer2(nn.Module):
         temb = transformer_timestep_embedding(
             t * self.temb_scale, self.embed_dim, device=self.device
         )  # B, E
-
-        if self.use_one_hot_input:
-            x = nn.functional.one_hot(x.long(), num_classes=self.S)
-            x_embed = self.input_embedding(x.float())
-
+        B, D = x.shape
+        if self.use_cat:
+            if self.use_one_hot_input:
+                x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
+                x_embed = self.input_embedding(x_one_hot.float())
+            else:
+                x_embed = self.input_embedding(x)
         else:
             x = normalize_input(x, self.S)
-            x = x.unsqueeze(-1)
+            x = x.view(B, D, 1)
             x_embed = self.input_embedding(x)
 
         input_shape = list(x_embed.shape)[:-1]
@@ -730,7 +738,9 @@ class BidirectionalTransformer2(nn.Module):
         # logits = logits + x_one_hot
         return logits
 
+
 # very similiar to Bert: https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model + MLP or ResNet at the end
+
 
 class MaskedTransformer(nn.Module):
     """Masked transformer."""
@@ -738,7 +748,11 @@ class MaskedTransformer(nn.Module):
     def __init__(self, config):
         super(MaskedTransformer, self).__init__()
         self.config = config
-        self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
+        self.use_cat = config.model.use_cat
+        self.use_one_hot_input = config.model.use_one_hot_input
+        self.S = config.data.S
+        self.embed_dim = config.model.embed_dim
+        # self.embedding = nn.Embedding(config.data.S + 1, config.model.embed_dim)
         self.trans_encoder = TransformerEncoder(config)  # config.model.num_layers = 12
 
         # I can basically use any neural net
@@ -754,8 +768,27 @@ class MaskedTransformer(nn.Module):
         else:
             raise ValueError("Unknown readout type %s" % config.model.readout)
 
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S + 1, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S + 1, self.embed_dim)
+        else:
+            self.input_embedding = nn.Linear(1, self.embed_dim)
+
     def forward(self, x, temb, pos):
-        x = self.embedding(x)
+        B, D = x.shape
+        if self.use_cat:
+            if self.use_one_hot_input:
+                x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
+                x = self.input_embedding(x_one_hot.float())
+            else:
+                x = self.input_embedding(x)
+        else:
+            x = normalize_input(x, self.S)
+            x = x.view(B, D, 1)
+            x = self.input_embedding(x)
+
         embed = self.trans_encoder(x, temb)
         embed = embed[:, pos].unsqueeze(1)  # B, 1, E
         if self.config.model.readout == "mlp":
@@ -821,11 +854,14 @@ class BertEnumTransformer(nn.Module):
     def __init__(self, config):
         super(BertEnumTransformer, self).__init__()
         self.config = config
-        self.device = config.device
+        self.use_cat = config.model.use_cat
+        self.use_one_hot_input = config.model.use_one_hot_input
         self.S = config.data.S
         self.embed_dim = config.model.embed_dim
+        self.device = config.device
+
         self.temb_scale = config.model.time_scale_factor
-        self.embedding = nn.Embedding(config.data.S, config.model.embed_dim)
+        # self.embedding = nn.Embedding(config.data.S, config.model.embed_dim)
         self.trans_encoder = TransformerEncoder(config)  # config.model.num_layers = 12
 
         # I can basically use any neural net
@@ -841,6 +877,14 @@ class BertEnumTransformer(nn.Module):
         else:
             raise ValueError("Unknown readout type %s" % config.model.readout)
 
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S, self.embed_dim)
+        else:
+            self.input_embedding = nn.Linear(1, self.embed_dim)
+
     def forward(
         self, x: TensorType["B", "D"], t: TensorType["B"]
     ) -> TensorType["B", "D", "S"]:
@@ -848,9 +892,21 @@ class BertEnumTransformer(nn.Module):
             t * self.temb_scale, self.embed_dim, self.device
         )
         x = x.view(x.shape[0], -1)
+        B, D = x.shape
 
         prefix_cond = self.config.model.get("conditional_dim", 0)
-        x = self.embedding(x)
+
+        if self.use_cat:
+            if self.use_one_hot_input:
+                x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
+                x = self.input_embedding(x_one_hot.float())
+            else:
+                x = self.input_embedding(x)
+        else:
+            x = normalize_input(x, self.S)
+            x = x.view(B, D, 1)
+            x = self.input_embedding(x)
+
         embed = self.trans_encoder(x, temb)
 
         if self.config.model.readout == "mlp":
@@ -880,6 +936,7 @@ class PrefixConditionalBidirTransformer(nn.Module):
             self.S, self.embed_dim
         )  # B, D with values to  B, D, E
         self.temb_scale = config.model.time_scale_factor
+        self.use_cat = config.model.use_cat
         self.use_one_hot_input = config.model.use_one_hot_input
         self.conditional_dim = self.config.model.get(
             "conditional_dim", 0
@@ -909,11 +966,12 @@ class PrefixConditionalBidirTransformer(nn.Module):
                 "Unknown bidir_readout: %s" % self.config.model.bidir_readout
             )
 
-        if self.use_one_hot_input:
-            self.input_embedding = nn.Linear(self.S, self.embed_dim)
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S, self.embed_dim)
         else:
-            # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
-            # if i normalize i cant use embedding
             self.input_embedding = nn.Linear(1, self.embed_dim)
 
         # macht hier keinen sinn, da ich explizit B, E brauche für torch.cat
@@ -930,14 +988,17 @@ class PrefixConditionalBidirTransformer(nn.Module):
                 t * self.temb_scale, int(self.embed_dim / 2), self.device
             )
         )  # B, E
+        B, D = x.shape
 
-        x_one_hot = nn.functional.one_hot(x, num_classes=self.S)
-        if self.use_one_hot_input:
-            x_embed = self.input_embedding(x_one_hot.float())
-
+        if self.use_cat:
+            if self.use_one_hot_input:
+                x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)
+                x_embed = self.input_embedding(x_one_hot.float())
+            else:
+                x_embed = self.input_embedding(x)
         else:
             x = normalize_input(x, self.S)
-            x = x.unsqueeze(-1)
+            x = x.view(B, D, 1)
             x_embed = self.input_embedding(x)
 
         input_shape = list(x_embed.shape)[:-1]

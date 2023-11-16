@@ -236,6 +236,7 @@ class SequenceTransformer(nn.Module):
         temb_dim = cfg.model.temb_dim
         use_one_hot_input = cfg.model.use_one_hot_input
         self.S = cfg.data.S
+        use_cat = cfg.model.use_cat
 
         # assert len(cfg.data.shape) == 1
         max_len = cfg.data.shape[0]
@@ -252,6 +253,7 @@ class SequenceTransformer(nn.Module):
             max_len,
             temb_dim,
             use_one_hot_input,
+            use_cat,
             device,
         ).to(device)
         if cfg.distributed:
