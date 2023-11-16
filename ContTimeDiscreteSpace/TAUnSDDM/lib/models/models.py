@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ContTimeDiscreteSpace.TAUnSDDM.lib.networks import ddsm_networks
+from lib.networks import ddsm_networks
 import lib.models.model_utils as model_utils
 import lib.networks.tau_networks as tau_networks
 import lib.networks.unet as unet
@@ -558,7 +558,7 @@ class UniformScoreNetEMA(EMA, SudokuScoreNet, UniformRate):
 
 
 @model_utils.register_model
-class UniformScoreNetEMA(EMA, ProteinScoreNet, UniformRate):
+class UniformProteinScoreNetEMA(EMA, ProteinScoreNet, UniformRate):
     def __init__(self, cfg, device, encoding, rank=None):
         EMA.__init__(self, cfg)
         ProteinScoreNet.__init__(self, cfg, device, encoding, rank)
