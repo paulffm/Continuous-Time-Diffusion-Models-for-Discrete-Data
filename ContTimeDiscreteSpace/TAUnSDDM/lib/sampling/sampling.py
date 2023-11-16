@@ -8,46 +8,6 @@ import time
 from lib.models.model_utils import get_logprob_with_logits
 
 # Sampling observations:
-# Exact, Tau_leaping: applyen: p0t = reverseprob
-# MNIST; MAZE
-# Euler funktioniert mit reverseprob und ohne log, obwohl training auf direct + rm => ce  > 0
-# Euler sollte auch mit rm funktionieren => eigentlich training auf rm => ce > 0
-# Unet: Euler funktioniert mit reverse_prob; nicht mit direct
-# Unet: Exact funktioniert
-
-# Synthetic:
-# Hollow Model on ratio
-# TauLeaping Campbell => schlecht
-# TauLeaping2 Sun revP + direct => gut
-# Euler/TL2 funktioniert mit direct und reverse_prob obwohl training auf direct + rm => ce > 0
-# Erklärung Unterschiede TauLeaping: Unterschiedliche Berechnung der Reverse Rates + in q_t|0 an unterschiednlichen stellen eps_ratio
-# Campbell:
-#   inner_sum = (p0t / qt0_denom) @ qt0_numer
-#   reverse_rates = h * forward_rates * inner_sum
-#   reverse_rates = reverse_rates * (1 - xt_onehot)
-# Sun:
-#   ll_all, ll_xt = get_logprob_with_logits( => ll_all = log_prob, ll_xt =
-#           ll_all = p0t @ qt0
-#           ll_all = torch.log(ll_all + 1e-35)
-#           ll_xt = torch.sum(ll_all * xt_onehot, dim=-1)
-#   log_weight = ll_all - ll_xt.unsqueeze(-1)
-#   posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
-#   posterior = posterior * (1 - xt_onehot)
-
-
-# ELBO MLP
-# TauLeaping Campbell => gut
-# TauLeaping2 Sun => schlecht
-# Euler komplett=> schlecht auch mit abänderung log_posterior
-# Exact => schlecht auch mit abänderung von where(log)
-# => nur original TauLeaping funktioniert
-
-# Frage:
-# Wieso funktioniert TauLeaping Campbell und exact bei Hollow MNIST ratio => trainiere auf ratio und sample TauLeaping Campbell sampled mit p_{0t} => Gut: bei Synthetic funtkioniert nicht => sollte so sein
-# Wieso funktioniert bei Hollow MNIST ratio Euler mit reverse_prob? => trainiere auf ratio und sample TauLeaping Campbell sampled mit p_{0t}
-# Wieso funktioniert bei Hollow Synthetic ratio Euler mit reverse_prob und exact? => trainiere auf ratio und sample mit p_{0t}
-
-
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
         x = torch.randint(low=0, high=S, size=(N, D), device=device)
@@ -65,15 +25,8 @@ def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     return x
 
 
-# hier müsste ich für dna sequenzen noch von den werten 0 bis 3 mappen auf A, C, G, T für initial samples
-# mit diesem x gehe ich ja dann in model(x, t) => dort one-hot
-# Problem: benutze x zum shapen von  qt0_denom, forward rates usw.
-# Möglichkeit: könnte schauen, ob SDDM mit 3 Dim input umgehen kann =>
-#   =>  deiniere transformer neu => one hot außerhalb
-
-
 @sampling_utils.register_sampler
-class TauLeaping:
+class ElboTauL:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
@@ -89,10 +42,6 @@ class TauLeaping:
         self.is_ordinal = cfg.sampler.is_ordinal
 
     def sample(self, model, N, num_intermediates):
-        # in init
-        # x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{i} P_{i} (\tilde{x^{1:D}_{i} - x^{1:D}_{t})
-        #  x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{d} sum_{s\x^{d}_{t}} P_{ds} (s - x^{d}_{t})
-        # Pds changes in in dim d zu während time spanne t-h
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
@@ -117,9 +66,6 @@ class TauLeaping:
                     model(x, t * torch.ones((N,), device=device)), dim=2
                 )  # (N, D, S) (not log_softmax)
 
-                x_0max = torch.max(p0t, dim=2)[1]
-
-
                 qt0_denom = (
                     qt0[
                         torch.arange(N, device=device).repeat_interleave(
@@ -132,7 +78,6 @@ class TauLeaping:
                 )
 
                 # First S is x0 second S is x tilde
-
                 qt0_numer = qt0  # (N, S, S)
 
                 forward_rates = rate[
@@ -150,135 +95,17 @@ class TauLeaping:
                     torch.arange(self.D, device=device).repeat(N),
                     x.long().flatten(),
                 ] = 0.0
-                # ll_all = torch.where(ll_all < 1e-35, -1e9, torch.log(ll_all)) => berechnen log
-                # reverse_rates = log_weight * forward_rate hier schon
-                # h = tau
 
                 diffs = torch.arange(self.S, device=device).view(1, 1, self.S) - x.view(
                     N, self.D, 1
-                )  # choices -
+                )
+
                 poisson_dist = torch.distributions.poisson.Poisson(
                     reverse_rates * h
                 )  # posterior: p_{t-eps|t}, B, D; S
                 jump_nums = (
                     poisson_dist.sample()
                 )  # how many jumps in interval [t-eps, t]
-                """
-                if not self.is_ordinal:
-                    tot_jumps = torch.sum(jump_nums, axis=-1, keepdims=True)
-                    #print("tot_jumps", tot_jumps, tot_jumps.shape)
-                    jump_mask = (tot_jumps <= 1) * 1
-                    #print("jump_mask", jump_mask, jump_mask.shape)
-                    jump_nums = jump_nums * jump_mask
-                    #print("jump_nums", jump_nums, jump_nums.shape)
-                """
-                if not self.is_ordinal:
-                    jump_num_sum = torch.sum(jump_nums, dim=2)
-                    jump_num_sum_mask = jump_num_sum <= 1
-                    jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
-
-                adj_diffs = jump_nums * diffs
-                overall_jump = torch.sum(adj_diffs, dim=2)
-                xp = x + overall_jump
-                x_new = torch.clamp(xp, min=0, max=self.S - 1)
-
-                x = x_new
-
-            p_0gt = F.softmax(
-                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
-            )  # (N, D, S)
-            x_0max = torch.max(p_0gt, dim=2)[1]
-            return x_0max.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
-
-
-@sampling_utils.register_sampler
-class TauLeaping3:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.t = 1.0
-        # C, H, W = self.cfg.data.shape
-        self.D = cfg.model.concat_dim
-        self.S = self.cfg.data.S
-        self.num_steps = cfg.sampler.num_steps
-        self.min_t = cfg.sampler.min_t
-        self.initial_dist = cfg.sampler.initial_dist
-        self.corrector_entry_time = cfg.sampler.corrector_entry_time
-        self.num_corrector_steps = cfg.sampler.num_corrector_steps
-        self.eps_ratio = cfg.sampler.eps_ratio
-        self.is_ordinal = cfg.sampler.is_ordinal
-
-    def sample(self, model, N, num_intermediates):
-        # in init
-        # x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{i} P_{i} (\tilde{x^{1:D}_{i} - x^{1:D}_{t})
-        #  x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{d} sum_{s\x^{d}_{t}} P_{ds} (s - x^{d}_{t})
-        # Pds changes in in dim d zu während time spanne t-h
-        initial_dist_std = self.cfg.model.Q_sigma
-        device = model.device
-
-        with torch.no_grad():
-            x = get_initial_samples(
-                N, self.D, device, self.S, self.initial_dist, initial_dist_std
-            )
-            # tau = 1 / num_steps
-            ts = np.concatenate(
-                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
-            )
-            t = 1.0
-
-            for idx, t in tqdm(enumerate(ts[0:-1])):
-                h = ts[idx] - ts[idx + 1]
-
-                qt0 = model.transition(t * torch.ones((N,), device=device))  # (N, S, S)
-                rate = model.rate(t * torch.ones((N,), device=device))  # (N, S, S)
-                # p_theta(x_0|x_t) ?
-
-                p0t = F.softmax(
-                    model(x, t * torch.ones((N,), device=device)), dim=2
-                )  # (N, D, S) (not log_softmax)
-
-                x_0max = torch.max(p0t, dim=2)[1]
-                # if t in save_ts:
-                #   x_hist.append(x.clone().detach().cpu().numpy())
-                #    x0_hist.append(x_0max.clone().detach().cpu().numpy())
-
-                qt0_denom = (
-                    qt0[
-                        torch.arange(N, device=device).repeat_interleave(
-                            self.D * self.S
-                        ),
-                        torch.arange(self.S, device=device).repeat(N * self.D),
-                        x.long().flatten().repeat_interleave(self.S),
-                    ].view(N, self.D, self.S)
-                    + self.eps_ratio
-                )
-
-                # First S is x0 second S is x tilde
-                xt_onehot = F.one_hot(x.long(), self.S)
-
-                qt0_numer = qt0  # (N, S, S)
-                # forward_rates == fwd_rate
-                forward_rates = rate[
-                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
-                    torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
-                ].view(N, self.D, self.S)
-                # inner sum ca. torch.exp(log_weight) => aber da abweichung
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
-                reverse_rates = h * forward_rates * inner_sum  # (N, D, S)
-                reverse_rates = reverse_rates * (1 - xt_onehot)
-                # ll_all = torch.where(ll_all < 1e-35, -1e9, torch.log(ll_all)) => berechnen log
-                # reverse_rates = log_weight * forward_rate hier schon
-                # h = tau
-                """
-                diffs = torch.arange(self.S, device=device).view(1, 1, self.S) - x.view(
-                    N, self.D, 1
-                )  # choices -
-                poisson_dist = torch.distributions.poisson.Poisson(
-                    reverse_rates
-                )  # posterior: p_{t-eps|t}
-                jump_nums = (
-                    poisson_dist.sample()
-                )  # how many jumps in interval [t-eps, t]
 
                 if not self.is_ordinal:
                     jump_num_sum = torch.sum(jump_nums, dim=2)
@@ -291,30 +118,15 @@ class TauLeaping3:
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
                 x = x_new
-                """
 
-                flips = torch.distributions.poisson.Poisson(reverse_rates).sample() # B, D most 0
-                choices = utils.expand_dims(
-                    torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
-                ) # 1,1, S
-                if not self.is_ordinal:
-                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
-                    flip_mask = (tot_flips <= 1) * 1
-                    flips = flips * flip_mask
-                diff = choices - x.unsqueeze(-1) # B, D, S
-                avg_offset = torch.sum(flips * diff, axis=-1) # B, D, S with entries -(S - 1) to S-1
-                x = x + avg_offset
-                x = torch.clip(x, min=0, max=self.S - 1)
-
-            p_0gt = F.softmax(
-                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
-            )  # (N, D, S)
+            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
+            #x_0max = x
             return x_0max.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
-class EulerLeaping:
+class ElboLBJF:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
@@ -378,23 +190,26 @@ class EulerLeaping:
                 # inner sum ca. torch.exp(log_weight) => aber da abweichung
                 # log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
 
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) # bis hierhin wie in EulerLeaping Campbell
+                inner_sum = (
+                    p0t / qt0_denom
+                ) @ qt0_numer  # (N, D, S) # bis hierhin wie in EulerLeaping Campbell
 
-                #log_prob = torch.log(inner_sum + 1e-35)
                 xt_onehot = F.one_hot(x.long(), self.S)
-                #log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-                #log_weight = log_prob - log_xt.unsqueeze(-1) # log odd: ratio of prob of every possible class to prob of true class 
 
-                posterior = h * forward_rates * inner_sum  # (N, D, S)
+                posterior = forward_rates * inner_sum  # (N, D, S)
                 post_0 = posterior * (1 - xt_onehot)
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
-                diag = torch.clip(1.0 - off_diag, min=0, max=float("inf"))
-                posterior = (posterior * post_0 + diag * xt_onehot) #* h  # eq.17
+                diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                posterior = posterior * post_0 * h + diag * xt_onehot  # * h  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
+                x = (
+                    torch.distributions.categorical.Categorical(logits=log_posterior)
+                    .sample()
+                    .view(N, self.D)
+                )
             return x.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
@@ -895,9 +710,8 @@ def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
     return new_y
 
 
-# Change: not log
 @sampling_utils.register_sampler
-class LBJFSampling:
+class CRMLBJF:
     def __init__(self, cfg):
         self.cfg = cfg
         self.D = cfg.model.concat_dim
@@ -942,17 +756,21 @@ class LBJFSampling:
 
                 xt_onehot = F.one_hot(x, self.S)
 
-                posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
+                posterior = torch.exp(log_weight) * fwd_rate  # * h  # eq.17 c != x^d_t
 
                 off_diag = torch.sum(
                     posterior * (1 - xt_onehot), axis=-1, keepdims=True
                 )
-                diag = torch.clip(1.0 - off_diag, min=0, max=float("inf"))
-                posterior = posterior * (1 - xt_onehot) + diag * xt_onehot  # eq.17
+                diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                posterior = posterior * (1 - xt_onehot) * h + diag * xt_onehot  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
+                x = (
+                    torch.distributions.categorical.Categorical(logits=log_posterior)
+                    .sample()
+                    .view(N, self.D)
+                )
 
                 if t <= self.corrector_entry_time:
                     print("corrector")
@@ -983,145 +801,19 @@ class LBJFSampling:
                         )
                         # log_posterior = torch.log(posterior + 1e-35)
                         log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                        x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
+                        x = (
+                            torch.distributions.categorical.Categorical(
+                                logits=log_posterior
+                            )
+                            .sample()
+                            .view(N, self.D)
+                        )
 
             return x.detach().cpu().numpy().astype(int)
 
 
 @sampling_utils.register_sampler
-class TauLeapingBoth:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.D = cfg.model.concat_dim
-        self.S = self.cfg.data.S
-        self.num_steps = cfg.sampler.num_steps
-        self.min_t = cfg.sampler.min_t
-        self.initial_dist = cfg.sampler.initial_dist
-        self.corrector_entry_time = cfg.sampler.corrector_entry_time
-        self.num_corrector_steps = cfg.sampler.num_corrector_steps
-        self.is_ordinal = cfg.sampler.is_ordinal
-        self.eps_ratio = 0  # cfg.sampler.eps_ratio
-
-    def sample(self, model, N, num_intermediates):
-        t = 1.0
-        initial_dist_std = self.cfg.model.Q_sigma
-        device = model.device
-        with torch.no_grad():
-            x = get_initial_samples(
-                N, self.D, device, self.S, self.initial_dist, initial_dist_std
-            )
-            # tau = 1 / num_steps
-            ts = np.concatenate(
-                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
-            )
-
-            for idx, t in tqdm(enumerate(ts[0:-1])):
-                h = ts[idx] - ts[idx + 1]
-                # p_theta(x_0|x_t) ?
-
-                # stellt sich frage:
-                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
-                logits = model(x, t * torch.ones((N,), device=device))
-                logits_camp = logits
-                ll_all, ll_xt = get_logprob_with_logits(
-                    cfg=self.cfg,
-                    model=model,
-                    xt=x,
-                    t=t * torch.ones((N,)),
-                    logits=logits,
-                )
-
-                log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
-                fwd_rate = model.rate_mat(
-                    x.long(), t * torch.ones((N,), device=device)
-                )  # B, D, S?
-
-                xt_onehot = F.one_hot(x.long(), self.S)
-                posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
-                posterior = posterior * (1 - xt_onehot)
-                # print("Posterior TL2:", posterior, posterior.shape)
-                qt0 = model.transition(t * torch.ones((N,), device=device))  # (N, S, S)
-                rate = model.rate(t * torch.ones((N,), device=device))  # (N, S, S)
-                # p_theta(x_0|x_t) ?
-
-                p0t = F.softmax(logits_camp, dim=2)  # (N, D, S) (not log_softmax)
-                x_0max = torch.max(p0t, dim=2)[1]
-                # if t in save_ts:
-                #   x_hist.append(x.clone().detach().cpu().numpy())
-                #    x0_hist.append(x_0max.clone().detach().cpu().numpy())
-
-                qt0_denom = (
-                    qt0[
-                        torch.arange(N, device=device).repeat_interleave(
-                            self.D * self.S
-                        ),
-                        torch.arange(self.S, device=device).repeat(N * self.D),
-                        x.long().flatten().repeat_interleave(self.S),
-                    ].view(N, self.D, self.S)
-                    + self.eps_ratio
-                )
-
-                # First S is x0 second S is x tilde
-
-                qt0_numer = qt0  # (N, S, S)
-
-                forward_rates = rate[
-                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
-                    torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
-                ].view(N, self.D, self.S)
-                # ll_all == p0t @  qt0_numer check => wenn kein eps_ratio in log und forward
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
-                print(
-                    "prob_all tl1",
-                    p0t @ qt0_numer,
-                    "ll_all",
-                    torch.exp(ll_all),
-                    "torch.exp(log_weight)",
-                    torch.exp(log_weight),
-                )
-                print("inner sum = exp log_weight?", inner_sum)
-                # inner sum not equal to torch.exp(log_weight)
-                reverse_rates = forward_rates * inner_sum  # (N, D, S)
-                print(
-                    "Reverse_rates TL1 0hne 0",
-                    reverse_rates * h,
-                    (reverse_rates * h).shape,
-                )
-                print("post ohne 1-", h * torch.exp(log_weight) * fwd_rate)
-                print("reverse_rate 1-", reverse_rates * h * (1 - xt_onehot))
-                reverse_rates[
-                    torch.arange(N, device=device).repeat_interleave(self.D),
-                    torch.arange(self.D, device=device).repeat(N),
-                    x.long().flatten(),
-                ] = 0.0
-                print(
-                    "Reverse_rates TL1 = 0",
-                    reverse_rates * h,
-                    (reverse_rates * h).shape,
-                )
-                print("all in 1", h * forward_rates * inner_sum * (1 - xt_onehot))
-                print("posterio 1-", posterior)
-
-                flips = torch.distributions.poisson.Poisson(posterior).sample()
-                choices = utils.expand_dims(
-                    torch.arange(self.S, dtype=torch.int32), axis=list(range(x.ndim))
-                )
-
-                if not self.is_ordinal:
-                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
-                    flip_mask = (tot_flips <= 1) * 1
-                    flips = flips * flip_mask
-                diff = choices - x.unsqueeze(-1)
-                avg_offset = torch.sum(flips * diff, axis=-1)
-                x = x + avg_offset
-                x = torch.clip(x, min=0, max=self.S - 1)
-
-            return x.detach().cpu().numpy().astype(int)
-
-
-@sampling_utils.register_sampler
-class TauLeaping2:
+class CRMTauL:
     def __init__(self, cfg):
         self.cfg = cfg
         self.D = cfg.model.concat_dim
@@ -1148,10 +840,7 @@ class TauLeaping2:
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-                # p_theta(x_0|x_t) ?
 
-                # stellt sich frage:
-                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 logits = model(x, t * torch.ones((N,), device=device))
 
                 ll_all, ll_xt = get_logprob_with_logits(
@@ -1168,20 +857,24 @@ class TauLeaping2:
                 )  # B, D, S?
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                # posterior = h * torch.exp(log_weight) * fwd_rate  # eq.17 c != x^d_t
-                posterior = h * torch.exp(log_weight) * fwd_rate
+                posterior = torch.exp(log_weight) * fwd_rate
                 posterior = posterior * (1 - xt_onehot)
 
-                flips = torch.distributions.poisson.Poisson(posterior).sample() # B, D most 0
+                flips = torch.distributions.poisson.Poisson(
+                    posterior * h
+                ).sample()  # B, D most 0
                 choices = utils.expand_dims(
-                    torch.arange(self.S, device=device, dtype=torch.int32), axis=list(range(x.ndim))
-                ) # 1,1, S
+                    torch.arange(self.S, device=device, dtype=torch.int32),
+                    axis=list(range(x.ndim)),
+                )  # 1,1, S
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
                 diff = choices - x.unsqueeze(-1)
-                avg_offset = torch.sum(flips * diff, axis=-1) # B, D, S with entries -(S - 1) to S-1
+                avg_offset = torch.sum(
+                    flips * diff, axis=-1
+                )  # B, D, S with entries -(S - 1) to S-1
                 x = x + avg_offset
                 x = torch.clip(x, min=0, max=self.S - 1)
 
