@@ -118,9 +118,7 @@ class TauLeaping:
                 )  # (N, D, S) (not log_softmax)
 
                 x_0max = torch.max(p0t, dim=2)[1]
-                # if t in save_ts:
-                #   x_hist.append(x.clone().detach().cpu().numpy())
-                #    x0_hist.append(x_0max.clone().detach().cpu().numpy())
+
 
                 qt0_denom = (
                     qt0[
@@ -370,18 +368,18 @@ class EulerLeaping:
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
-                ].view(N, self.S)
+                ].view(N, self.D, self.S)
                 # inner sum ca. torch.exp(log_weight) => aber da abweichung
                 # log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-                # ll_all - log_xt 
-                # 
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
-                log_prob = torch.log(inner_sum + 1e-35)
-                xt_onehot = F.one_hot(x.long(), self.S)
-                log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-                log_weight = log_prob - log_xt.unsqueeze(-1) # log odd: ratio of prob of every possible class to prob of true class 
 
-                posterior = h * forward_rates * torch.exp(log_weight)  # (N, D, S)
+                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) # bis hierhin wie in EulerLeaping Campbell
+
+                #log_prob = torch.log(inner_sum + 1e-35)
+                xt_onehot = F.one_hot(x.long(), self.S)
+                #log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+                #log_weight = log_prob - log_xt.unsqueeze(-1) # log odd: ratio of prob of every possible class to prob of true class 
+
+                posterior = h * forward_rates * inner_sum  # (N, D, S)
                 post_0 = posterior * (1 - xt_onehot)
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
