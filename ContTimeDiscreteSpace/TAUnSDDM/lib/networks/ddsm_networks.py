@@ -164,7 +164,7 @@ class SudokuScoreNet(nn.Module):
         return h
 
 
-class ScoreNet(nn.Module):
+class ProteinScoreNet(nn.Module):
     """A time-dependent score-based model built upon U-Net architecture."""
 
     def __init__(self, cfg, time_step=0.01):
