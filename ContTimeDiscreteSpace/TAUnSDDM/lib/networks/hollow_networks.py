@@ -740,8 +740,6 @@ class BidirectionalTransformer2(nn.Module):
 
 
 # very similiar to Bert: https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model + MLP or ResNet at the end
-
-
 class MaskedTransformer(nn.Module):
     """Masked transformer."""
 

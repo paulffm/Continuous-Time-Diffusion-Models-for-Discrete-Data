@@ -1,7 +1,7 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.config_hollow_maze import get_config
+from ContTimeDiscreteSpace.TAUnSDDM.hollow_config.config_hollow_maze import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os

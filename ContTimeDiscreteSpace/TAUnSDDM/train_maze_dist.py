@@ -188,7 +188,7 @@ def main(rank, world_size, cfg, unique_num):
 
 
 if __name__ == "__main__":
-    from config.config_hollow_maze import get_config
+    from ContTimeDiscreteSpace.TAUnSDDM.hollow_config.config_hollow_maze import get_config
 
     cfg = get_config()
     world_size = cfg.num_gpus
