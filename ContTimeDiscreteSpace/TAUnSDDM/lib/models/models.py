@@ -364,7 +364,27 @@ class MaskedModel(nn.Module):
 
         return logits
 
+class BertMLPRes(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
 
+        tmp_net = hollow_networks.BertEnumTransformer(cfg).to(device)
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+
+        logits = self.net(x, times)  # (B, D, S)
+
+        return logits
+    
 class SudokuScoreNet(nn.Module):
     def __init__(self, cfg, device, encoding, rank=None):
         super().__init__()
@@ -627,3 +647,13 @@ class UniformRateResMLP(ResidualMLP, UniformRate):
         # EMA.__init__(self, cfg)
         ResidualMLP.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
+
+
+@model_utils.register_model
+class UniformBertMLPResEMA(EMA, BertMLPRes, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BertMLPRes.__init__(self, cfg, device, rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()

@@ -8,6 +8,7 @@ diffvenv/
 **/.DS_Store
 MNISTDiffusionModel/MNIST
 **/MNIST
+**/DiscreteMNIST
 **/CIFAR-10
 **/SavedModels
 **/bin-mnist

@@ -1,7 +1,7 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from ContTimeDiscreteSpace.TAUnSDDM.config.config_hollow_protein import get_config
+from ContTimeDiscreteSpace.TAUnSDDM.config.protein_config.config_hollow_protein import get_config
 import matplotlib.pyplot as plt
 import ssl
 from lib.datasets.protein import IDX2CHAR

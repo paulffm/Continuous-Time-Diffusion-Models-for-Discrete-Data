@@ -3,7 +3,7 @@ import os
 
 
 def get_config():
-    save_directory = "SavedModels/Synthetic"
+    save_directory = "SavedModels/MNIST"
     config = ml_collections.ConfigDict()
 
     config.device = "cuda"
@@ -28,20 +28,24 @@ def get_config():
     training.resume = True
 
     config.data = data = ml_collections.ConfigDict()
+    data.name = 'DiscreteMNIST'
+    data.location = 'lib/datasets/'
     data.is_img = True
-    data.S = 255
+    data.S = 256
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.batch_size = 32  # use 128 if you have enough memory or use distributed
     data.shuffle = True
+    data.train = True
+    data.download = True
     data.image_size = 28
     data.shape = [1, data.image_size, data.image_size]
     data.use_augm = False
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniformMaskedEMA"
+    model.name = "UniformBertMLPResEMA"
     # Forward model
-    model.rate_const = 0.7
+    model.rate_const = 0.018
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
 
@@ -52,14 +56,14 @@ def get_config():
     model.use_cat = False
     # UniDirectional
     model.dropout_rate = 0.01
-    model.concat_dim = data.shape[0]
+    model.concat_dim = data.shape[0] * data.shape[1] * data.shape[2]
     # config.dtype = torch.float32
     model.num_layers = 2
     # TransformerBlock
     ## SA
     model.num_heads = 4
     model.attention_dropout_rate = 0.1
-    model.transformer_norm_type = "postnorm"  # prenorm
+    model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
     model.mlp_dim = 512 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
