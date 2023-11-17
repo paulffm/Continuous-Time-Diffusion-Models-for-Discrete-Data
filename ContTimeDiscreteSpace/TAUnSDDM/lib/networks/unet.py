@@ -294,12 +294,12 @@ class UNet(nn.Module):
             channel_multiplier: list[int],
             n_res_blocks: int,
             attn_resolutions: list,
-            x_min_max,
-            num_heads=1,
-            dropout=0,
-            model_output=str,  # 'logits' or 'logistic_pars'
-            num_classes=2,
-            img_size=28
+            x_min_max: list[int],
+            num_heads: int,
+            dropout: float,
+            model_output: str,  # 'logits' or 'logistic_pars'
+            num_classes: int,
+            img_size: int
             
     ):
         super().__init__() 

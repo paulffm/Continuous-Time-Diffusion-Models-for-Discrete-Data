@@ -3,7 +3,8 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.mnist_config.config_bert_mnist import get_config
+#from config.mnist_config.config_bert_mnist import get_config
+from config.mnist_config.config_tauUnet_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -29,7 +30,7 @@ import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, 'SavedModels/MNIST/')
     save_location_png = os.path.join(save_location, 'PNGs/')

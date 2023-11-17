@@ -590,6 +590,15 @@ class UniformProteinScoreNetEMA(EMA, ProteinScoreNet, UniformRate):
 
 
 @model_utils.register_model
+class GaussianTargetRateImageX0PredEMAPaul(EMA, ImageX0PredBasePaul, GaussianTargetRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        ImageX0PredBasePaul.__init__(self, cfg, device, rank)
+        GaussianTargetRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
@@ -597,7 +606,6 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
-
 
 # Maze, MNIST
 @model_utils.register_model

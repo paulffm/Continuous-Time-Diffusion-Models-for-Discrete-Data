@@ -1,7 +1,7 @@
 import ml_collections
 import os
 
-
+# config_bert_001: Param: 7 226 883
 def get_config():
     save_directory = "SavedModels/MNIST"
     config = ml_collections.ConfigDict()
