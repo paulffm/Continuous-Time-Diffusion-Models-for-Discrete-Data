@@ -29,7 +29,7 @@ import numpy as np
 
 
 def main():
-    train_resume = False
+    train_resume = True
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, 'SavedModels/MNIST/')
     save_location_png = os.path.join(save_location, 'PNGs/')
@@ -40,8 +40,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-02"
-        config_name = "config_001.yaml"
+        date = "2023-11-17"
+        config_name = "config_001_bert.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -54,13 +54,13 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_1.pt"
+        model_name = "model_17999_bert.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 10
-        cfg.sampler.sample_freq = 10
-        cfg.saving.checkpoint_freq = 10
-        cfg.sampler.num_steps = 10
+        cfg.training.n_iters = 30000 
+        cfg.sampler.sample_freq = 100000000
+        cfg.saving.checkpoint_freq = 2000
+        cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
     
     loss = losses_utils.get_loss(cfg)
