@@ -917,7 +917,7 @@ class BertEnumTransformer(nn.Module):
                 [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=torch.float32
             )
             logits = torch.cat([dummy_logits, logits], dim=1)
-        logits = logits.view(x.shape + (self.S,))
+        #logits = logits.view(x.shape + (self.S,))
         return logits  # B, D, S
 
 

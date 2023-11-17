@@ -3,15 +3,14 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from ContTimeDiscreteSpace.TAUnSDDM.config.mnist_config.config_hollow_mnist import get_config
+from config.mnist_config.config_bert_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
-
 ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
-import ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist as mnist
+import lib.datasets.mnist as mnist
 import lib.datasets.dataset_utils as dataset_utils
 import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
@@ -25,16 +24,12 @@ import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import time
 from torch.utils.data import DataLoader
-from ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist import (
-    create_train_discrete_mnist_dataloader,
-    get_binmnist_datasets,
-)
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, 'SavedModels/MNIST/')
     save_location_png = os.path.join(save_location, 'PNGs/')
@@ -54,24 +49,9 @@ def main():
 
     model = model_utils.create_model(cfg, device)
 
-    loss = losses_utils.get_loss(cfg)
-
-    training_step = training_utils.get_train_step(cfg)
-
     optimizer = optimizers_utils.get_optimizer(model.parameters(), cfg)
 
-    sampler = sampling_utils.get_sampler(cfg)
-
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
-
-    dataset = create_train_discrete_mnist_dataloader(dataset_location, image_size=cfg.data.image_size, use_augmentation=cfg.data.use_augm)
-    #dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
-    dataloader = DataLoader(dataset,
-        batch_size=cfg.data.batch_size,
-        shuffle=cfg.data.shuffle)
-
-    # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
-    # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
         model_name = "model_1.pt"
@@ -82,21 +62,32 @@ def main():
         cfg.saving.checkpoint_freq = 10
         cfg.sampler.num_steps = 10
         bookkeeping.save_config(cfg, save_location)
-        
+    
+    loss = losses_utils.get_loss(cfg)
+
+    training_step = training_utils.get_train_step(cfg)
+
+    sampler = sampling_utils.get_sampler(cfg)
+
+    dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
+    dataloader = torch.utils.data.DataLoader(dataset,
+        batch_size=cfg.data.batch_size,
+        shuffle=cfg.data.shuffle)
+    
     print("Info:")
     print("--------------------------------")
     print("State Iter:", state["n_iter"])
     print("--------------------------------")
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
-    print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
-    print("Logit Type:", cfg.loss.logit_type)
-    print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
+    #print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
+    #print("Logit Type:", cfg.loss.logit_type)
+    #print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
     print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
     #print("Net Arch:", cfg.model.net_arch)
-    print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
+    #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
     n_samples = 16
@@ -105,7 +96,7 @@ def main():
     training_loss = []
     exit_flag = False
     while True:
-        for minibatch, _ in tqdm(dataloader):
+        for minibatch in tqdm(dataloader):
             minibatch = minibatch.to(device)
             l = training_step.step(state, minibatch, loss)
 
@@ -115,6 +106,15 @@ def main():
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 bookkeeping.save_state(state, save_location)
+                saving_train_path = os.path.join(
+                    save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+                )
+                plt.plot(training_loss)
+                plt.xlabel('Iterations')
+                plt.ylabel('Loss')
+                plt.title("Training loss")
+                plt.savefig(saving_train_path)
+                plt.close()
                 print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
@@ -153,6 +153,8 @@ def main():
         save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
     )
     plt.plot(training_loss)
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
     plt.title("Training loss")
     plt.savefig(saving_train_path)
     plt.close()

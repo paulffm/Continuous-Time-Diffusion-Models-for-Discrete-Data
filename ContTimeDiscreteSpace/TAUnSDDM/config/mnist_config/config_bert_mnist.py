@@ -11,16 +11,16 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CTELBO"
+    loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.01
-    loss.ce_coeff = 1
+    loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 10  # 2000 #2000000
+    training.n_iters = 50000 #0  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1
@@ -32,8 +32,7 @@ def get_config():
     data.location = 'lib/datasets/'
     data.is_img = True
     data.S = 256
-    data.batch_size = 128  # use 128 if you have enough memory or use distributed
-    data.batch_size = 32  # use 128 if you have enough memory or use distributed
+    data.batch_size = 64  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.train = True
     data.download = True
@@ -45,7 +44,7 @@ def get_config():
     model.concat_dim = data.shape[0]
     model.name = "UniformBertMLPResEMA"
     # Forward model
-    model.rate_const = 0.018
+    model.rate_const = 0.022
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
 
@@ -61,11 +60,11 @@ def get_config():
     model.num_layers = 2
     # TransformerBlock
     ## SA
-    model.num_heads = 4
+    model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 512 # d_model in TAU => embed_dim?
+    model.mlp_dim = 1024 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = data.S
     # ConcatReadout
@@ -86,15 +85,15 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 500
+    saving.checkpoint_freq = 1500
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 50
+    sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
