@@ -539,7 +539,7 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
 
 @model_utils.register_model
-class UniformVariantBDTEMA(EMA, HollowTransformer, UniformVariantRate):
+class UniformVariantHollowEMA(EMA, HollowTransformer, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         HollowTransformer.__init__(self, cfg, device, rank)
@@ -663,5 +663,14 @@ class UniformBertMLPResEMA(EMA, BertMLPRes, UniformRate):
         EMA.__init__(self, cfg)
         BertMLPRes.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
+class UniformVariantBertMLPResEMA(EMA, BertMLPRes, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BertMLPRes.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()

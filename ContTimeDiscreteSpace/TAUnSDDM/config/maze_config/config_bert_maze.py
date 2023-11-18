@@ -20,10 +20,10 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 50000 #0  # 2000 #2000000
+    training.n_iters = 300000 #0  # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 3  # 1
+    training.grad_norm = 5  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
 
@@ -44,13 +44,14 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniformBertMLPResEMA"
+    model.name = "UniformVariantBertMLPResEMA"
     # Forward model
-    model.rate_const = 0.01
+    model.rate_const = 2.3
+    model.t_func = "log_sqr"
     # hollow:
 
     # BiDir
-    model.embed_dim = 256
+    model.embed_dim = 128
     model.readout = 'resnet' # 'mlp'
     model.use_one_hot_input = False
     model.use_cat = False
@@ -58,7 +59,7 @@ def get_config():
     model.dropout_rate = 0.1
     model.concat_dim = data.shape[0] * data.shape[1] * data.shape[2]
     # config.dtype = torch.float32
-    model.num_layers = 2
+    model.num_layers = 12
     # TransformerBlock
     ## SA
     model.num_heads = 8
@@ -102,6 +103,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.sample_freq = 200000000
-    sampler.is_ordinal = False
+    sampler.is_ordinal = True
 
     return config

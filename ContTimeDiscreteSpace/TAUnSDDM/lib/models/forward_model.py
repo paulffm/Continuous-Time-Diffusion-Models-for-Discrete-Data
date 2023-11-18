@@ -145,7 +145,7 @@ class UniformVariantRate(UniformRate):
         elif self.t_func == "sqrt_cos":
             return -torch.sqrt(torch.cos(torch.pi / 2 * t))  # + 1
         elif self.t_func == "log":
-            (self.time_base * (self.time_exp**t) - self.time_base)
+            return (self.time_base * (self.time_exp**t) - self.time_base)
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
@@ -206,7 +206,7 @@ class GaussianTargetRate:
         self.S = S = cfg.data.S
         self.rate_sigma = cfg.model.rate_sigma
         self.Q_sigma = cfg.model.Q_sigma
-        self.time_exponential = cfg.model.time_exponential
+        self.time_exp = cfg.model.time_exp
         self.time_base = cfg.model.time_base
         self.device = device
 
@@ -241,13 +241,13 @@ class GaussianTargetRate:
         self.inv_eigvecs = torch.from_numpy(inv_eigvecs).float().to(self.device)
 
     def _integral_rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
-        return self.time_base * (self.time_exponential**t) - self.time_base
+        return self.time_base * (self.time_exp**t) - self.time_base
 
     def _rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
         return (
             self.time_base
-            * math.log(self.time_exponential)
-            * (self.time_exponential**t)
+            * math.log(self.time_exp)
+            * (self.time_exp**t)
         )
 
     def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
@@ -256,6 +256,12 @@ class GaussianTargetRate:
         rate_scalars = self._rate_scalar(t)
 
         return self.base_rate.view(1, S, S) * rate_scalars.view(B, 1, 1)
+    
+    def rate_mat(self, y, t):
+        r = self.rate(t)
+        bidx = utils.expand_dims(torch.arange(t.size(0)), axis=tuple(range(1, y.dim())))
+        result = r[bidx, y]
+        return result
 
     def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]

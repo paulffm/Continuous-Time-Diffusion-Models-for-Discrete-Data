@@ -1,7 +1,5 @@
 import ml_collections
 import os
-import torch
-
 
 def get_config():
     save_directory = "SavedModels/MAZE/"
@@ -15,7 +13,7 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
-    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
 
@@ -27,7 +25,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 6000  # 2000 #2000000
+    training.n_iters = 60 # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -47,10 +45,14 @@ def get_config():
     data.limit = 1
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "UniformHollowEMA"
+    model.name = "UniformVariantHollowEMA"
     # Forward model
-    model.rate_const = 1.54
-    model.t_func = "loq_sqr"  # log_sqr
+    model.rate_const = 2.2
+    model.rate_sigma = 6.0
+    model.Q_sigma = 512.0
+    model.time_exp = 5  # b
+    model.time_base = 5 # a
+    model.t_func = "log_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
     model.nets = "bidir_transformer2"
@@ -78,7 +80,6 @@ def get_config():
     model.readout_dim = data.S
     # MLP
     # features, activation
-
     # ResidualReadout
     model.num_output_ffresiduals = 2
 
@@ -87,7 +88,6 @@ def get_config():
     model.qkv_dim = config.model.embed_dim
     # config.num_heads = 4
     model.ema_decay = 0.9999  # 0.9999
-    model.Q_sigma = 20.0
     model.time_scale_factor = 1000
 
     config.optimizer = optimizer = ml_collections.ConfigDict()

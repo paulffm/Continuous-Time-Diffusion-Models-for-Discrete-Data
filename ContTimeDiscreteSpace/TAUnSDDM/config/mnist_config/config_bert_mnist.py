@@ -44,10 +44,13 @@ def get_config():
     model.concat_dim = data.shape[0]
     model.name = "UniformBertMLPResEMA"
     # Forward model
-    model.rate_const = 0.022
-    model.t_func = "loq_sqr"  # log_sqr
-    # hollow:
+    model.rate_const = 0.007
+    model.t_func = "log"
 
+    model.time_base = 3
+    model.time_exp = 100
+    model.rate_sigma = 6.0
+    model.Q_sigma = 512.0
     # BiDir
     model.embed_dim = 512
     model.readout = 'resnet' # 'mlp'
@@ -80,7 +83,6 @@ def get_config():
     model.qkv_dim = config.model.embed_dim
     # config.num_heads = 4
     model.ema_decay = 0.9999  # 0.9999
-    model.Q_sigma = 20.0
     model.time_scale_factor = 1000
 
     config.optimizer = optimizer = ml_collections.ConfigDict()

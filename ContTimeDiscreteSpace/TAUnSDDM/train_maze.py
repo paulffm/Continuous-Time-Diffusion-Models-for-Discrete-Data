@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import ssl
 import os
 ssl._create_default_https_context = ssl._create_unverified_context
-#from config.maze_config.config_bert_maze import get_config
-from config.maze_config.config_hollow_maze import get_config
+from config.maze_config.config_bert_maze import get_config
+#from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -99,7 +99,7 @@ def main():
     exit_flag = False
     n = 1
     while True:
-        for minibatch in dataloader: #tqdm(dataloader):
+        for minibatch in dataloader: # tqdm(dataloader): #
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 
