@@ -3,7 +3,7 @@ import os
 
 # config_bert_001: Param: 7 226 883
 def get_config():
-    save_directory = "SavedModels/MNIST"
+    save_directory = "SavedModels/MAZE"
     config = ml_collections.ConfigDict()
 
     config.device = "cuda"
@@ -46,7 +46,7 @@ def get_config():
     model.concat_dim = data.shape[0]
     model.name = "UniformBertMLPResEMA"
     # Forward model
-    model.rate_const = 1.7
+    model.rate_const = 0.01
     # hollow:
 
     # BiDir

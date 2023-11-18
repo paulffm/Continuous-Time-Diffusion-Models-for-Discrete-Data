@@ -9,7 +9,7 @@ def get_config():
     config = ml_collections.ConfigDict()
     config.save_location = save_directory
 
-    config.device = "cpu"
+    config.device = "cuda"
     config.distributed = False
     config.num_gpus = 0
 
@@ -27,7 +27,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 5000  # 2000 #2000000
+    training.n_iters = 6000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -49,25 +49,27 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformHollowEMA"
     # Forward model
-    model.rate_const = 0.3
+    model.rate_const = 1.54
     model.t_func = "loq_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
+    model.nets = "bidir_transformer2"
+    model.use_cat = False
 
     # BiDir
-    model.embed_dim = 64
+    model.embed_dim = 128
     model.bidir_readout = "res_concat"  # res_concat, attention, concat
     model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1
-    config.concat_dim = data.image_size * data.image_size * 1
+    model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
     model.num_layers = 4
     # TransformerBlock
     ## SA
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
-    model.transformer_norm_type = "postnorm"  # prenorm
+    model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
     model.mlp_dim = 2048  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
@@ -78,7 +80,7 @@ def get_config():
     # features, activation
 
     # ResidualReadout
-    model.num_output_ffresiduals = 4
+    model.num_output_ffresiduals = 2
 
     # AttentionReadout
     ## CrossAttention
@@ -97,7 +99,7 @@ def get_config():
     saving.checkpoint_freq = 1000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "TauLeaping2"  # TauLeaping or PCTauLeaping
+    sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9

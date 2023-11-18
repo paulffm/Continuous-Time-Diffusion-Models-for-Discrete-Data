@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import ssl
 import os
 ssl._create_default_https_context = ssl._create_unverified_context
-from config.maze_config.config_bert_maze import get_config
+#from config.maze_config.config_bert_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -29,7 +30,7 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()

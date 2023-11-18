@@ -632,7 +632,7 @@ class ExactSampling:
         eps_ratio = cfg.sampler.eps_ratio
         self.initial_dist = cfg.sampler.initial_dist
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N, num_intermediates=None):
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -679,9 +679,9 @@ class ExactSampling:
                 log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
                 log_p0t = log_p0t.unsqueeze(-1)
-                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2)
+                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
-                xt = cat_dist.sample()
+                xt = cat_dist.sample().view(N, self.D, self.S)
 
             return xt.detach().cpu().numpy().astype(int)
 
