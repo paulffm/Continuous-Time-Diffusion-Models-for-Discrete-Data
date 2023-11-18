@@ -1,0 +1,19 @@
+Rechnerisch Rate: 1.54 nach Sebastian
+Minimizing L_CT loss => wird nicht 0, da abhängig von Rate
+Je kleiner die Rate desto kleiner der loss => heißt nicht dass besser lernt
+=> R=0.001 schlechter nach 3000 iter als R=0.7
+
+bei CatRM:
+Loss bei geringerer Rate auch geringer bei Maze: 0.001, 0.1, 1.5 
+Plots bei 0.001 am schlechtesten bzw. R=1.54
+=> reicht nicht Endverteilung anzusehen; vll am Ende bei t=T nahe zu Uniform Rate. aber bei t=0.5*T auch
+Loss aber nicht abhängig von Rate?
+
+MAZE: Je nach Performance: log_sqr mit Rate=2.3
+MNIST Images: GaussianRate sigma_0 = 512, sigma_r = 6, beta(t) = 3*100^t log(100)
+
+Tau schlechter als LBJF?
+
+Wie kann es sein, dass R=0.1 besser ist ? bei 
+log_sqr R = 2.3 t=0.5T: 0.4763, 0.2619, 0.2619; t = T 0.3389, 0.3305, 0.3305
+uniform R = 0.1 t=0.5T: 0.9071, 0.0464, 0.0464; t = T 0.8272, 0.0864, 0.0864

@@ -51,7 +51,7 @@ def get_config():
     # hollow:
 
     # BiDir
-    model.embed_dim = 128
+    model.embed_dim = 64
     model.readout = 'resnet' # 'mlp'
     model.use_one_hot_input = False
     model.use_cat = False
@@ -66,7 +66,7 @@ def get_config():
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 1024 # d_model in TAU => embed_dim?
+    model.mlp_dim = 2048 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = data.S
     # ConcatReadout

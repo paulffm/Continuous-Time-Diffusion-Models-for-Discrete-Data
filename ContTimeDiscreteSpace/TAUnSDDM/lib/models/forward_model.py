@@ -290,4 +290,22 @@ class GaussianTargetRate:
         return transitions
 
     def transit_between(self, t1, t2):
-        return self.transition(t2 - t1)
+        B = t2.size(0)
+        d_integral = self._integral_rate_scalar(t2) - self._integral_rate_scalar(t1)
+
+        transitions = (
+            self.eigvecs.view(1, self.S, self.S)  # Q
+            @ torch.diag_embed(
+                torch.exp(d_integral.view(B, 1) * self.eigvals.view(1, self.S))
+            )
+            @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
+        )
+        if torch.min(transitions) < -1e-6:
+            print(
+                f"[Warning] UniformVariantRate, large negative transition values {torch.min(transitions)}"
+            )
+
+        # Clamping at 1e-8 because at float level accuracy anything lower than that
+        # is probably inaccurate and should be zero anyway
+        transitions[transitions < 1e-8] = 0.0
+        return transitions

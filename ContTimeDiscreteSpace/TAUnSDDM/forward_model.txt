@@ -13,3 +13,8 @@ Music:
 Wie könnte ich Gaussian Rate parameter für Maze wählen?
 Wie könnte ich Uniform parameter log, cos wählen?
 
+# Log_sqr müsste besser sein, weil langsamer mix?
+
+Architectures:
+Embed Dim? In comparison to number of categories
+
