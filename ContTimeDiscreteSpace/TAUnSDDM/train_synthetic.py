@@ -1,17 +1,12 @@
 import torch
-import ml_collections
-import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from ContTimeDiscreteSpace.TAUnSDDM.config.synthetic_config.config_tauMLP_synthetic import get_config
+from config.synthetic_config.config_tauMLP_synthetic import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
-
-ssl._create_default_https_context = ssl._create_unverified_context
 import lib.models.models as models
 import lib.models.model_utils as model_utils
-import ContTimeDiscreteSpace.TAUnSDDM.lib.datasets.mnist as mnist
 import lib.datasets.dataset_utils as dataset_utils
 import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
@@ -19,8 +14,6 @@ import lib.training.training as training
 import lib.training.training_utils as training_utils
 import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
-import lib.loggers.loggers as loggers
-import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import time
