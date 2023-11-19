@@ -42,18 +42,29 @@ def binary_hamming_mmd(x, y):
     return binary_mmd(x, y, binary_hamming_sim)
 
 
-def eval_mmd(config, sampler, dataloader, n_rounds: int=10, num_samples: int=1024):
+def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: int=1024):
     """Eval mmd."""
     avg_mmd = 0.0
-    num_samples // config.data.batch_size
+    n_data = n_samples // config.data.batch_size
+    n = 1
+    exit_flag = False
     for i in range(n_rounds):
         gt_data = []
-        for batch in dataloader:
-            gt_data.append(batch)
+        while True:
+            for batch in dataloader:
+                gt_data.append(batch)
+                if (n) == n_data:
+                    exit_flag = True
+                    break
+            if exit_flag:
+                break
         gt_data = torch.stack(gt_data, axis=0)
         gt_data = gt_data.view(-1, config.model.concat_dim)
-        x0 = sampler()
-        x0 = x0.view(gt_data.shape)
+        print("gt_data", gt_data.shape)
+        x0 = sampler.sample(model, n_samples)
+        x0 = torch.from_numpy(x0)
+        # x0 = x0.view(gt_data.shape)
+        print(x0.shape)
         mmd = binary_exp_hamming_mmd(x0, gt_data)
         avg_mmd += mmd
     mmd = avg_mmd / n_rounds

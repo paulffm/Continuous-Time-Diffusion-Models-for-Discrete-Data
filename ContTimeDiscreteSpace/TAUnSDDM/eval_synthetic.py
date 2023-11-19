@@ -35,8 +35,8 @@ def main():
     cfg.sampler.name = 'ElboLBJF' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
     cfg.logit_type = 'direct'
     cfg.sampler.num_corrector_steps = 10
-    cfg.sampler.corrector_entry_time = ScalarFloat(0.1)
-    cfg.sampler.num_steps = 750
+    cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
+    cfg.sampler.num_steps = 500 #750
     cfg.sampler.is_ordinal = True
 
     #print(cfg)
@@ -63,7 +63,7 @@ def main():
 
     n_samples = 1024
     n_rounds = 1
-    mmd = eval_mmd(cfg, sampler, dataloader, n_rounds, num_samples=n_samples)
+    mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
     print("MMD", mmd)
 if __name__ == "__main__":
     main()
