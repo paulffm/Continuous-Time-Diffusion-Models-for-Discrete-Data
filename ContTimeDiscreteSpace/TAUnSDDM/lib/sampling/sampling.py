@@ -7,6 +7,7 @@ import lib.utils.utils as utils
 import time
 from lib.models.model_utils import get_logprob_with_logits
 
+
 # Sampling observations:
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
     if initial_dist == "uniform":
@@ -41,7 +42,7 @@ class ElboTauL:
         self.eps_ratio = cfg.sampler.eps_ratio
         self.is_ordinal = cfg.sampler.is_ordinal
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
@@ -119,9 +120,9 @@ class ElboTauL:
 
                 x = x_new
 
-            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            x_0max = torch.max(p_0gt, dim=2)[1]
-            #x_0max = x
+            # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            # x_0max = torch.max(p_0gt, dim=2)[1]
+            x_0max = x
             return x_0max.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
@@ -140,7 +141,7 @@ class ElboLBJF:
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N):
         # in init
         # x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{i} P_{i} (\tilde{x^{1:D}_{i} - x^{1:D}_{t})
         #  x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{d} sum_{s\x^{d}_{t}} P_{ds} (s - x^{d}_{t})
@@ -187,12 +188,8 @@ class ElboLBJF:
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
-                # inner sum ca. torch.exp(log_weight) => aber da abweichung
-                # log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
 
-                inner_sum = (
-                    p0t / qt0_denom
-                ) @ qt0_numer  # (N, D, S) # bis hierhin wie in EulerLeaping Campbell
+                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) #
 
                 xt_onehot = F.one_hot(x.long(), self.S)
 
@@ -210,15 +207,64 @@ class ElboLBJF:
                     .sample()
                     .view(N, self.D)
                 )
+
+                if t <= self.corrector_entry_time:
+                    print("corrector")
+                    for _ in range(self.num_corrector_steps):
+                        # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+                        p0t = F.softmax(
+                            model(x, t * torch.ones((N,), device=device)), dim=2
+                        )  #
+
+                        qt0_denom = (
+                            qt0[
+                                torch.arange(N, device=device).repeat_interleave(
+                                    self.D * self.S
+                                ),
+                                torch.arange(self.S, device=device).repeat(N * self.D),
+                                x.long().flatten().repeat_interleave(self.S),
+                            ].view(N, self.D, self.S)
+                            + self.eps_ratio
+                        )
+
+                        qt0_numer = qt0  # (N, S, S)
+                        # forward_rates == fwd_rate
+                        forward_rates = rate[
+                            torch.arange(N, device=device).repeat_interleave(
+                                self.D * self.S
+                            ),
+                            torch.arange(self.S, device=device).repeat(N * self.D),
+                            x.long().flatten().repeat_interleave(self.S),
+                        ].view(N, self.D, self.S)
+
+                        inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) #
+
+                        xt_onehot = F.one_hot(x.long(), self.S)
+
+                        posterior = forward_rates + forward_rates * inner_sum  # (N, D, S)
+                        post_0 = posterior * (1 - xt_onehot)
+
+                        off_diag = torch.sum(post_0, axis=-1, keepdims=True)
+                        diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                        posterior = (
+                            posterior * post_0 * h + diag * xt_onehot
+                        )  
+                        posterior = posterior / torch.sum(
+                            posterior, axis=-1, keepdims=True
+                        )
+                        log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+
+                        x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
+
             return x.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
-class PCTauLeaping:
+class PCTauL:
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N):
         t = 1.0
         D = self.cfg.model.concat_dim
         S = self.cfg.data.S
@@ -239,10 +285,6 @@ class PCTauLeaping:
 
             h = 1.0 / num_steps  # approximately
             ts = np.linspace(1.0, min_t + h, num_steps)
-            save_ts = ts[np.linspace(0, len(ts) - 2, num_intermediates, dtype=int)]
-
-            x_hist = []
-            x0_hist = []
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -315,10 +357,6 @@ class PCTauLeaping:
 
                 transpose_forward_rates, reverse_rates, x_0max = get_rates(x, t)
 
-                if t in save_ts:
-                    x_hist.append(x.detach().cpu().numpy())
-                    x0_hist.append(x_0max.detach().cpu().numpy())
-
                 x = take_poisson_step(x, reverse_rates, h)
 
                 if t <= corrector_entry_time:
@@ -334,9 +372,6 @@ class PCTauLeaping:
                             x, corrector_rate, corrector_step_size_multiplier * h
                         )
 
-            x_hist = np.array(x_hist).astype(int)
-            x0_hist = np.array(x0_hist).astype(int)
-
             p_0gt = F.softmax(
                 model(x, min_t * torch.ones((N,), device=device)), dim=2
             )  # (N, D, S)
@@ -349,7 +384,7 @@ class ConditionalTauLeaping:
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def sample(self, model, N, num_intermediates, conditioner):
+    def sample(self, model, N, conditioner):
         assert conditioner.shape[0] == N
 
         t = 1.0
@@ -375,7 +410,6 @@ class ConditionalTauLeaping:
             )
 
             ts = np.concatenate((np.linspace(1.0, min_t, num_steps), np.array([0])))
-            save_ts = ts[np.linspace(0, len(ts) - 2, num_intermediates, dtype=int)]
 
             x_hist = []
             x0_hist = []
@@ -394,9 +428,6 @@ class ConditionalTauLeaping:
                 p0t = p0t[:, condition_dim:, :]
 
                 x_0max = torch.max(p0t, dim=2)[1]
-                if t in save_ts:
-                    x_hist.append(x.clone().detach().cpu().numpy())
-                    x0_hist.append(x_0max.clone().detach().cpu().numpy())
 
                 qt0_denom = (
                     qt0[
@@ -450,9 +481,6 @@ class ConditionalTauLeaping:
 
                 x = x_new
 
-            x_hist = np.array(x_hist).astype(int)
-            x0_hist = np.array(x0_hist).astype(int)
-
             model_input = torch.concat((conditioner, x), dim=1)
             p_0gt = F.softmax(
                 model(model_input, min_t * torch.ones((N,), device=device)), dim=2
@@ -460,7 +488,7 @@ class ConditionalTauLeaping:
             p_0gt = p_0gt[:, condition_dim:, :]
             x_0max = torch.max(p_0gt, dim=2)[1]
             output = torch.concat((conditioner, x_0max), dim=1)
-            return output.detach().cpu().numpy().astype(int), x_hist, x0_hist
+            return output.detach().cpu().numpy().astype(int)
 
 
 @sampling_utils.register_sampler
@@ -468,7 +496,7 @@ class ConditionalPCTauLeaping:
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def sample(self, model, N, num_intermediates, conditioner):
+    def sample(self, model, N, conditioner):
         assert conditioner.shape[0] == N
 
         t = 1.0
@@ -500,10 +528,6 @@ class ConditionalPCTauLeaping:
 
             h = 1.0 / num_steps  # approximately
             ts = np.linspace(1.0, min_t + h, num_steps)
-            save_ts = ts[np.linspace(0, len(ts) - 2, num_intermediates, dtype=int)]
-
-            x_hist = []
-            x0_hist = []
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -590,10 +614,6 @@ class ConditionalPCTauLeaping:
 
                 transpose_forward_rates, reverse_rates, x_0max = get_rates(x, t)
 
-                if t in save_ts:
-                    x_hist.append(x.clone().detach().cpu().numpy())
-                    x0_hist.append(x_0max.clone().detach().cpu().numpy())
-
                 x = take_poisson_step(x, reverse_rates, h)
                 if t <= corrector_entry_time:
                     for _ in range(num_corrector_steps):
@@ -608,9 +628,6 @@ class ConditionalPCTauLeaping:
                             x, corrector_rate, corrector_step_size_multiplier * h
                         )
 
-            x_hist = np.array(x_hist).astype(int)
-            x0_hist = np.array(x0_hist).astype(int)
-
             model_input = torch.concat((conditioner, x), dim=1)
             p_0gt = F.softmax(
                 model(model_input, min_t * torch.ones((N,), device=device)), dim=2
@@ -618,7 +635,7 @@ class ConditionalPCTauLeaping:
             p_0gt = p_0gt[:, condition_dim:, :]
             x_0max = torch.max(p_0gt, dim=2)[1]
             output = torch.concat((conditioner, x_0max), dim=1)
-            return output.detach().cpu().numpy().astype(int), x_hist, x0_hist
+            return output.detach().cpu().numpy().astype(int)
 
 
 @sampling_utils.register_sampler
@@ -632,7 +649,7 @@ class ExactSampling:
         eps_ratio = cfg.sampler.eps_ratio
         self.initial_dist = cfg.sampler.initial_dist
 
-    def sample(self, model, N, num_intermediates=None):
+    def sample(self, model, N):
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -722,7 +739,7 @@ class CRMLBJF:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
 
-    def sample(self, model, N, num_intermediates=None):
+    def sample(self, model, N):
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -825,7 +842,7 @@ class CRMTauL:
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.is_ordinal = cfg.sampler.is_ordinal
 
-    def sample(self, model, N, num_intermediates):
+    def sample(self, model, N):
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device

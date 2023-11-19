@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import ssl
 import os
 ssl._create_default_https_context = ssl._create_unverified_context
-from config.maze_config.config_bert_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
+#from config.maze_config.config_bert_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -92,7 +92,7 @@ def main():
     #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 16
+    n_samples = 64
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
@@ -121,13 +121,12 @@ def main():
                 plt.title("Training loss")
                 plt.savefig(saving_train_path)
                 plt.close()
-                print("Model saved in Iteration:", state["n_iter"] + 1)
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples = sampler.sample(state["model"], n_samples, 10)
+                samples = sampler.sample(state["model"], n_samples)
                 samples = samples.reshape(
                     n_samples, 1, cfg.data.image_size, cfg.data.image_size
                 )
@@ -164,7 +163,6 @@ def main():
     plt.title("Training loss")
     plt.savefig(saving_train_path)
     plt.close()
-    print("Model saved in Iteration:", state["n_iter"] + 1)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 60 # 2000 #2000000
+    training.n_iters = 300000 # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -47,11 +47,11 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniformVariantHollowEMA"
     # Forward model
-    model.rate_const = 2.2
-    model.rate_sigma = 6.0
+    model.rate_const = 2.3
+    #model.rate_sigma = 6.0
     model.Q_sigma = 512.0
-    model.time_exp = 5  # b
-    model.time_base = 5 # a
+    #model.time_exp = 5  # b
+    #model.time_base = 5 # a
     model.t_func = "log_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
@@ -59,14 +59,14 @@ def get_config():
     model.use_cat = False
 
     # BiDir
-    model.embed_dim = 128
+    model.embed_dim = 64
     model.bidir_readout = "res_concat"  # res_concat, attention, concat
     model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    model.num_layers = 4
+    model.num_layers = 6
     # TransformerBlock
     ## SA
     model.num_heads = 8
@@ -96,18 +96,18 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 1000
+    saving.checkpoint_freq = 2000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 1000
+    sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
+    sampler.num_steps = 750
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
-    sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 5000
+    sampler.corrector_entry_time = float(0.1)
+    sampler.sample_freq = 5000000000
     sampler.is_ordinal = True
 
     return config
