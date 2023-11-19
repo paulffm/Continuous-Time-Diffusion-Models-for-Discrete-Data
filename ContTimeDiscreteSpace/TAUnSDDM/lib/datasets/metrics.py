@@ -46,9 +46,10 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
     """Eval mmd."""
     avg_mmd = 0.0
     n_data = n_samples // config.data.batch_size
-    n = 1
+    
     exit_flag = False
     for i in range(n_rounds):
+        n = 1
         gt_data = []
         while True:
             for batch in dataloader:
@@ -56,6 +57,7 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
                 if (n) == n_data:
                     exit_flag = True
                     break
+                n += 1
             if exit_flag:
                 break
         gt_data = torch.stack(gt_data, axis=0)

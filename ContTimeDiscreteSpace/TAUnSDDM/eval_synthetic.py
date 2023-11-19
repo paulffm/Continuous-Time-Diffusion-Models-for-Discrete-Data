@@ -62,7 +62,7 @@ def main():
     dataloader = DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
 
     n_samples = 1024
-    n_rounds = 1
+    n_rounds = 10
     mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
     print("MMD", mmd)
 if __name__ == "__main__":
