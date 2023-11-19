@@ -286,13 +286,13 @@ def main(argv: Sequence[str]) -> None:
     if not os.path.exists(FLAGS.data_root):
         os.makedirs(FLAGS.data_root)
     data_config = get_config()
-    db, bm, inv_bm = dataset_utils.setup_data(data_config)
+    db, bm, inv_bm = setup_data(data_config)
 
     with open(os.path.join(FLAGS.data_root, "config.yaml"), "w") as f:
         f.write(data_config.to_yaml())
     data_list = []
     for _ in tqdm.tqdm(range(FLAGS.num_samples // FLAGS.batch_size)):
-        data = dataset_utils.float2bin(
+        data = float2bin(
             db.gen_batch(FLAGS.batch_size),
             bm,
             data_config.concat_dim,
@@ -306,13 +306,13 @@ def main(argv: Sequence[str]) -> None:
         np.save(f, data)
 
     with open(os.path.join(FLAGS.data_root, "samples.pdf"), "wb") as f:
-        float_data = dataset_utils.bin2float(
+        float_data = bin2float(
             data[:10000].astype(np.int32),
             inv_bm,
             data_config.concat_dim,
             data_config.data.int_scale,
         )
-        dataset_utils.plot_samples(float_data, f, im_size=4.1, im_fmt="pdf")
+        plot_samples(float_data, f, im_size=4.1, im_fmt="pdf")
 
 
 if __name__ == "__main__":

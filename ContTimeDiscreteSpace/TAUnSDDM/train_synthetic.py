@@ -59,7 +59,7 @@ def main():
         dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle
     )
 
-    bm, inv_bm = dataset_utils.get_binmap(cfg.concat_dim, cfg.data.binmode)
+    bm, inv_bm = dataset_utils.get_binmap(cfg.model.concat_dim, cfg.data.binmode)
 
     # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
@@ -69,7 +69,7 @@ def main():
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 200000
-        cfg.sampler.name = "TauLeaping2"
+        cfg.sampler.name = "ElboTauL"
         cfg.sampler.sample_freq = 20000
         cfg.saving.checkpoint_freq = 5000
         cfg.sampler.num_steps = 1000
@@ -82,14 +82,14 @@ def main():
     print("--------------------------------")
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
-    print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
+    #print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
     print("Logit Type:", cfg.loss.logit_type)
-    print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
+    #print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
     print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
     #print("Net Arch:", cfg.model.net_arch)
-    print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
+    #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
     n_samples = 1000

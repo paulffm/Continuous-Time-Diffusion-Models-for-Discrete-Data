@@ -8,8 +8,8 @@ from lib.networks.hollow_networks import MaskedTransformer
 class BinaryMLPScoreFunc(nn.Module):
     def __init__(self, cfg):
         super(BinaryMLPScoreFunc, self).__init__()
-        self.num_layers = cfg.num_layers
-        self.hidden_size = cfg.mlp_dim
+        self.num_layers = cfg.model.num_layers
+        self.hidden_size = cfg.model.mlp_dim
         self.time_scale_factor = cfg.model.time_scale_factor
 
 
@@ -36,14 +36,17 @@ class BinaryTransformerScoreFunc(nn.Module):
         super(BinaryTransformerScoreFunc, self).__init__()
         self.config = config
         self.masked_transformer = MaskedTransformer(config)
-
+        self.embed_dim = config.model.embed_dim
+        self.time_scale_factor = self.config.modeltime_scale_factor
+        self.S = config.data.S
+        
     def forward(self, x, t):
         temb = transformer_timestep_embedding(
-            t * self.config.time_scale_factor, self.config.embed_dim
+            t * self.time_scale_factor, self.embed_dim
         )
         x = x.view(x.size(0), -1).long()
         cls_token = (
-            torch.ones((x.size(0), 1), dtype=torch.long) * self.config.vocab_size
+            torch.ones((x.size(0), 1), dtype=torch.long) * self.S
         )
         x = torch.cat([cls_token, x], dim=1)
         score = self.masked_transformer(x, temb, 0)[..., 0]
@@ -55,9 +58,9 @@ class CatMLPScoreFunc(nn.Module):
     ):
         super(CatMLPScoreFunc, self).__init__()
         self.S = cfg.data.S
-        self.cat_embed_size = cfg.embed_dim
-        self.num_layers = cfg.num_layers
-        self.hidden_size = cfg.mlp_dim
+        self.cat_embed_size = cfg.model.embed_dim
+        self.num_layers = cfg.model.num_layers
+        self.hidden_size = cfg.model.mlp_dim
         self.time_scale_factor = cfg.model.time_scale_factor
 
         self.embed = nn.Embedding(self.S, self.cat_embed_size)

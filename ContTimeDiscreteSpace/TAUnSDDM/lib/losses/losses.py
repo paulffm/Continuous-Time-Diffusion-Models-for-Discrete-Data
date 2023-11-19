@@ -765,7 +765,7 @@ class EBMAux:
         self.ratio_eps = cfg.loss.eps_ratio
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
-        self.ddim = cfg.discrete_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
 
     def calc_loss(self, minibatch, state, writer=None):
@@ -799,33 +799,32 @@ class EBMAux:
         b = utils.expand_dims(
             torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
         )
-        qt0 = qt0[b, minibatch.long()]
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)
 
         # log loss
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
         xt = torch.distributions.categorical.Categorical(
             logits=log_qt0
-        ).sample()  # bis hierhin <1 sek
-        # assert xt.ndim == 2
-        # get logits from CondFactorizedBackwardMode
+        ).sample().view(B, self.D)  # bis hierhin <1 sek
 
-        mask = torch.eye(self.ddim, device=device, dtype=torch.int32).repeat_interleave(
+
+        mask = torch.eye(self.D, device=device, dtype=torch.int32).repeat_interleave(
             B * self.S, 0
-        )
-        xrep = torch.tile(xt, (self.ddim * self.S, 1))
+        ) # check
+        xrep = torch.tile(xt, (self.D * self.S, 1))
         candidate = torch.arange(self.S, device=device).repeat_interleave(B, 0)
-        candidate = torch.tile(candidate.unsqueeze(1), ((self.ddim, 1)))
+        candidate = torch.tile(candidate.unsqueeze(1), ((self.D, 1)))
         xall = mask * candidate + (1 - mask) * xrep
-        t = torch.tile(t, (self.ddim * self.S,))
+        t = torch.tile(ts, (self.D * self.S,))
         qall = model(x=xall, t=t)  # can only be CatMLPScoreFunc or BinaryMLPScoreFunc
-        logits = torch.reshape(qall, (self.ddim, self.S, B))
+        logits = torch.reshape(qall, (self.D, self.S, B))
         logits = logits.permute(2, 0, 1)
 
         # calc loss
         ll_all = F.log_softmax(logits, dim=-1)
         ll_xt = ll_all[
             torch.arange(B, device=device)[:, None],
-            torch.arange(self.ddim, device=device)[None, :],
+            torch.arange(self.D, device=device)[None, :],
             xt,
         ]
         loss = -ll_xt.sum(dim=-1)
