@@ -359,7 +359,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         self.fc1 = nn.Linear(
             embed_dim, mlp_dim, bias=bias_init
         )  # mlp_dim => d_model in TAU
-        self.activation = nn.ReLU()  # hier GeLu?
+        self.activation = nn.GELU()  # hier GeLu?
         self.dropout1 = nn.Dropout(p=dropout_rate)
         self.fc2 = nn.Linear(
             mlp_dim, self.out_dim if self.out_dim is not None else embed_dim, bias=False
