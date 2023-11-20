@@ -14,6 +14,43 @@ MNIST Images: GaussianRate sigma_0 = 512, sigma_r = 6, beta(t) = 3*100^t log(100
 
 Tau schlechter als LBJF?
 
-Wie kann es sein, dass R=0.1 besser ist ? bei 
-log_sqr R = 2.3 t=0.5T: 0.4763, 0.2619, 0.2619; t = T 0.3389, 0.3305, 0.3305
-uniform R = 0.1 t=0.5T: 0.9071, 0.0464, 0.0464; t = T 0.8272, 0.0864, 0.0864
+Maze: 
+Hollow ab 200999 => mazes from 97, 97 to 99, 98
+Problem Evaluierung:
+Nur ein Solution Path
+Solution Path gefunden und nur diesen Markiert
+
+Problem Modell Architekturen:
+Hollow muss immer Transformer-artig sein wegen Masking
+Masked: MLP, Transformer, ResNet
+CT-ELBO: Alles
+
+Trade-Off: Flexibility und Speed:
+Ursprüngliche Idee:
+Masked Models und ELBO gleiches Modell und Hollow=Hollow
+Maze => Unet gut:
+Masked Modell kein Unet möglich?=> Nehme 12-layer Bert 
+=> Schlechter als Hollow: Vll ist Architektur aber einfach nur schlechter und ich 
+könnte ja auch ein BiDir nehmen?
+
+=> Wenn ich aber bei allen gleiche Modell nehme, 
+ja auch irgendwie doof => will ja flexibility nutzen
+
+MNIST: 
+CT-ELBO: Unet
+Masked Model: 12-layer Bert?
+Hollow: Hollow
+
+
+Archi Fragen:
+Kann ich Unet für Masked Models?
+Kann ich BiDir für Masked Models? => theoretisch ja bringt 
+aber nicht wirklich Mehrwert: Mache ja 2 Richtungen nur wegen Masking 
+
+Bert nochmal mit tiefere Hidden Dim und weniger ResBlock layers? => heute nacht
+
+
+Synthetic:
+EBM: Stärke bei schwierigen Daten durch Flexibilität, 
+aber genau da auch  Nachteil, da meist schwierige Datem hohe D und C und EBM O(DxC)
+

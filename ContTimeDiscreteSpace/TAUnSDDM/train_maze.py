@@ -37,8 +37,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_29999_hollow_logsqr.pt"
-        date = "2023-11-19"
+        model_name = "model_200999_hollow_logsqr.pt"
+        date = "2023-11-20"
         config_name = "config_001_hollow_logsqr.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
@@ -55,8 +55,8 @@ def main():
     if train_resume:
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 300000
-        cfg.sampler.sample_freq = 300000
+        cfg.training.n_iters = 400000
+        cfg.sampler.sample_freq = 400000
         cfg.saving.checkpoint_freq = 3000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)

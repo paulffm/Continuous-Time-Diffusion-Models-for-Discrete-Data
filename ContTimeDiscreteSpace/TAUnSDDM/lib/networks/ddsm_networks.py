@@ -96,11 +96,11 @@ class GaussianFourierProjection(nn.Module):
     Gaussian random features for encoding time steps.
     """
 
-    def __init__(self, embed_dim, scale=30.):
+    def __init__(self, embed_dim, device, scale=30.):
         super().__init__()
         # Randomly sample weights during initialization. These weights are fixed
         # during optimization and are not trainable.
-        self.W = nn.Parameter(torch.randn(embed_dim // 2) * scale, requires_grad=False)
+        self.W = nn.Parameter(torch.randn(embed_dim // 2, device=device) * scale, requires_grad=False)
 
     def forward(self, x):
         x_proj = x[:, None] * self.W[None, :] * 2 * np.pi
@@ -167,7 +167,7 @@ class SudokuScoreNet(nn.Module):
 class ProteinScoreNet(nn.Module):
     """A time-dependent score-based model built upon U-Net architecture."""
 
-    def __init__(self, cfg, time_step=0.01):
+    def __init__(self, cfg):
         """Initialize a time-dependent score-based network.
 
         Args:
@@ -179,12 +179,13 @@ class ProteinScoreNet(nn.Module):
         super().__init__()
         embed_dim = cfg.model.embed_dim
         self.S = cfg.data.S
+
         # Gaussian random feature embedding layer for time
-        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim),
+        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim, device=cfg.device),
                                    nn.Linear(embed_dim, embed_dim))
         n = embed_dim
         # n => bei uns anstatt 5; 48?
-        self.linear = nn.Conv1d(48, n, kernel_size=9, padding=4)
+        self.linear = nn.Conv1d(self.S, n, kernel_size=9, padding=4)
         self.blocks = nn.ModuleList([nn.Conv1d(n, n, kernel_size=9, padding=4),
                                      nn.Conv1d(n, n, kernel_size=9, padding=4),
                                      nn.Conv1d(n, n, kernel_size=9, dilation=4, padding=16),
@@ -213,11 +214,10 @@ class ProteinScoreNet(nn.Module):
         self.act = lambda x: x * torch.sigmoid(x)
         self.relu = nn.ReLU()
         self.softplus = nn.Softplus()
-        self.scale = nn.Parameter(torch.ones(1))
+        self.scale = nn.Parameter(torch.ones(1, device=cfg.device))
         self.final = nn.Sequential(nn.Conv1d(n, n, kernel_size=1),
                                    nn.GELU(),
                                    nn.Conv1d(n, self.S, kernel_size=1))
-        self.time_step = time_step
 
     def forward(self, x, t):
         # Obtain the Gaussian random feature embedding for t
@@ -228,15 +228,20 @@ class ProteinScoreNet(nn.Module):
         # x: NLC -> NCL
         x = F.one_hot(x.long(), self.S)
         out = x.permute(0, 2, 1)
-        out = self.act(self.linear(out))
+        out = self.act(self.linear(out.float()))
 
         # pos encoding
+        i = 1
         for block, dense, norm in zip(self.blocks, self.denses, self.norms):
             h = self.act(block(norm(out + dense(embed)[:, :, None])))
+            #print("h", i, h.shape)
+            #print((out == h).all())
+            i +=1
             if h.shape == out.shape:
                 out = h + out
             else:
                 out = h
+
 
         out = self.final(out)
 

@@ -786,7 +786,7 @@ class MaskedTransformer(nn.Module):
             x = x.view(B, D, 1)
             x = self.input_embedding(x)
 
-        embed = self.trans_encoder(x, temb)
+        embed = self.trans_encoder(x, temb) # B, D, E
         embed = embed[:, pos].unsqueeze(1)  # B, 1, E
         if self.config.model.readout == "mlp":
             logits = self.model(embed)
