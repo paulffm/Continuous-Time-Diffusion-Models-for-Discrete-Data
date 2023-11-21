@@ -54,3 +54,59 @@ Synthetic:
 EBM: Stärke bei schwierigen Daten durch Flexibilität, 
 aber genau da auch  Nachteil, da meist schwierige Datem hohe D und C und EBM O(DxC)
 
+
+Auswertung:
+Ziel: 
+Mit den 2 Continuous Time Diffusion Model Framework diskrete Daten erzeugen 
+und dabei herausfinden, welches Framework wann besser ist und wo es Verbesserungsansätze gibt (diese eventuell umsetzen)
+
+Fragestellung:
+Wie kann ich wissenschaftlich konsistent vergleichen?
+
+Vergleichsebenen:
+Framework an sich: CT-ELBO <=> CRM 
+Architektur: Beliebig <=> CRM hat Architektur constraints und damit verschiedenen Parametrisierungsmöglichkeiten:
+                        Tradeoff zwischen Speed und Flexibilität:
+                        => EBM: arbiträr NN, aber O(DxC) Feedforward Evaluations
+                        => Masked Model: Masking begrenzt NN (immer noch sehr flexibel), aber O(D)
+                        => HollowTransformer: Nur BiDirectional Transformer mit masked Jacobi Matrix, aber nur O(1)
+Sampling: Euler, Tau Leaping <=> CRM hat durch constraints auch neue Sampling Methode
+
+
+Fragestellung:
+Wie wähle ich nun Modellarchitekturen und nutze dabei die Vorteile(Flexibilität) der Parametrisierungen aus, um konsistent über verschiedene Datensätze vergleiche zu können?
+(Vergleich anhand verschiedener Datensätze, da möglich, dass ein Framework bei geringerer Datendimension oder Anzahl der State Spaces besser ist)
+
+Überlegungen:
+Vorwissen einbringen: Unet am besten für MNIST, eventuell für Maze auch
+CT-ELBO: Ich sollte best mögliches Modell nehmen, was es gibt für diese Task, da ich die Möglichkeit habe, diese Flexibilität zu nutzen => MNIST: MAZE
+CRM: Masked Model: best mögliches Modell nehmen 
+
+=> Gut, wenn best mögliche Modell für Masked Model und ELBO bei einem Datensatz gleich ist.
+=> Problem bei MNIST? ELBO kann Unet nutzen,  
+
+
+Datensatz Synthetic: D=32, S=2
+Einfaches Datenset: Ansätze verifyen? Verargumentieren, dass es bessere Tradeoffs als EBM
+CRM Paper: Nimmt für alle Modelle einen 3 Layer Transformer => schneiden ähnlich ab => Masked Models + HollowTransformer eher nutzen, da geringere FFEvaluations
+
+Datensatz Maze: D=225, S=3
+ELBO: Unet, 12-layer Bert + ResNet <=>  Masked Model erlaubt kein Standard Unet, 12-layer Bert + ResNet, HollowTransformer
+
+Datensatz MNIST: D=28*28, S=256
+Unet <=> Masked Model erlaubt kein Standard Unet, HollowTransformer
+
+Datensatz ProteinSequenzen: D=48, S=21
+Unet Style Architecture <=> Unet Style Architecture, HollowTransformer
+(anderes Paper hat für DNA Sequenzen so eine Unet Style Architecture)
+
+
+=> Wenn ich jedes Mal für Masked Model und ELBO anderes Model nehme, dann habe ich die Flexibilität dieser Parametrisierungen drin  
+(Nach dem Motto, wenn es ein besseres Modell gibt, nehme ich das)
+
+Sollte ich immer für ELBO und Masked Model die gleichen Modelle nehmen oder sollte ich ausnutzen, dass dieses Framework noch freiere Modelle erlauben? 
+Wie vergleiche ich dann?
+
+ToDo:
+Testweise Bilder einfügen
+Bert, Hollow Transformer beschreiben

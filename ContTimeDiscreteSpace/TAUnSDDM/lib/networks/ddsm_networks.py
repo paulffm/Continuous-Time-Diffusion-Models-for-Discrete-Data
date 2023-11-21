@@ -234,7 +234,6 @@ class ProteinScoreNet(nn.Module):
         i = 1
         for block, dense, norm in zip(self.blocks, self.denses, self.norms):
             h = self.act(block(norm(out + dense(embed)[:, :, None])))
-            #print("h", i, h.shape)
             #print((out == h).all())
             i +=1
             if h.shape == out.shape:

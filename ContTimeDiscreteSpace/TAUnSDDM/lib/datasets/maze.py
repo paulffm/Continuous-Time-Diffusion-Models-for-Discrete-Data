@@ -884,7 +884,7 @@ class Maze3S(Dataset):
             dim_x=7,
             dim_y=7,
             pixelSizeOfTile=1,
-            weightHigh=99,
-            weightLow=98,
+            weightHigh=97,
+            weightLow=97,
         )
         return self.maze[0]  # .to(self.device)
