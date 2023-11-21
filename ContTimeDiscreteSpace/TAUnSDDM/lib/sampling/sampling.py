@@ -972,14 +972,24 @@ class CRMBinaryLBJF:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        logits = model(x, t_ones)
-                        ll_all, ll_xt = get_logprob_with_logits(
-                            cfg=self.cfg,
-                            model=model,
-                            xt=x,
-                            t=t_ones,
-                            logits=logits,
-                        )
+                        qxt = model(x, t_ones)
+
+                        mask = torch.eye(self.D, device=device).repeat_interleave(N, 0)
+                        xrep = torch.tile(x, (self.D, 1))
+
+                        xneg = (mask - xrep) * mask + (1 - mask) * xrep
+                        t_tile = torch.tile(t_ones, (self.D,))
+                        qxneg = model(xneg, t_tile)
+                        qxt = torch.tile(qxt, (self.D, 1))
+
+                        qxneg = qxneg.view(-1, N).t()
+                        qxt = qxt.view(-1, N).t()
+                        xt_onehot = F.one_hot(x, num_classes=2).to(qxt.dtype)
+                        qxneg, qxt = qxneg.unsqueeze(-1), qxt.unsqueeze(-1)
+                        logits = xt_onehot * qxt + (1 - xt_onehot) * qxneg
+
+                        # logprob
+                        ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, x, t_ones, logits)
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
                         fwd_rate = model.rate_mat(
                             x, t_ones

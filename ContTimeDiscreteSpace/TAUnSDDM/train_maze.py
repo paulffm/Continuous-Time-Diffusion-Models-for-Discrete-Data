@@ -30,16 +30,16 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_224999_hollow9998.pt"
+        model_name = "model_9499_ebert10M.pt"
         date = "2023-11-21"
-        config_name = "config_001_hollow.yaml"
+        config_name = "config_001_ebert10M.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -57,7 +57,7 @@ def main():
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 225200
         cfg.sampler.sample_freq = 225200
-        cfg.saving.checkpoint_freq = 10000
+        cfg.saving.checkpoint_freq = 1000
         cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)

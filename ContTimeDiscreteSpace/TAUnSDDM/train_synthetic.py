@@ -93,7 +93,7 @@ def main():
     #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 1000
+    n_samples = 500
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []

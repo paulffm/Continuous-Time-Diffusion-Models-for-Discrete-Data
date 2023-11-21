@@ -22,7 +22,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 2  # 2000 #2000000
+    training.n_iters = 500  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -35,8 +35,8 @@ def get_config():
     data.is_img = False
     data.S = 2
     data.binmode = "gray"
-    data.int_scale = 5970.914754907331 #5995.531550196217
-    data.plot_size = 4.48793632886299
+    data.int_scale = 6003.0107336488345 #5995.531550196217
+    data.plot_size = 4.458594271092115 
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.shape = [32]
@@ -88,7 +88,7 @@ def get_config():
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMBinaryLBJF"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 5
+    sampler.num_steps = 150
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
