@@ -35,6 +35,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
     if xt_target is None:
         xt_target = xt
     xt_onehot = F.one_hot(xt_target.long(), cfg.data.S)
+    print("xt oh", xt_onehot.shape)
     if cfg.loss.logit_type == "direct":
         log_prob = F.log_softmax(logits, dim=-1)
     else:
@@ -55,6 +56,7 @@ def get_logprob_with_logits(cfg, model, xt, t, logits, xt_target=None):
             # check
         else:
             raise ValueError("Unknown logit_type: %s" % cfg.loss.logit_type)
+    print("log prob", log_prob.shape)
     log_xt = torch.sum(log_prob * xt_onehot, dim=-1) # log probability of true class 
 
     return log_prob, log_xt

@@ -359,7 +359,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         self.fc1 = nn.Linear(
             embed_dim, mlp_dim, bias=bias_init
         )  # mlp_dim => d_model in TAU
-        self.activation = nn.GELU() #nn.GELU()  # hier GeLu?
+        self.activation = nn.ReLU() #nn.GELU()  # hier GeLu? 
         self.dropout1 = nn.Dropout(p=dropout_rate)
         self.fc2 = nn.Linear(
             mlp_dim, self.out_dim if self.out_dim is not None else embed_dim, bias=False
@@ -451,13 +451,18 @@ class TransformerEncoder(nn.Module):
             self.trans_block_layers.append(TransformerBlock(config))
         self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
 
+        if config.model.is_ebm:
+            D = config.model.concat_dim + 2
+        else:
+            D = config.model.concat_dim + 1
+
         self.pos_embed = PositionalEncoding(
             config.device,
             config.model.embed_dim,
             config.model.dropout_rate,
-            config.model.concat_dim
-            + 1,  # +1 time_emb; need config.model.concat_dim + config.model.cond_dim + 1
+            D,  # +1 time_emb; need config.model.concat_dim + config.model.cond_dim + 1
         )
+        
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(
         #    torch.empty(1, seq_len, feature_dim)),requires_grad=True)
 
@@ -756,7 +761,7 @@ class MaskedTransformer(nn.Module):
         if config.model.readout == "mlp":
             self.model = MLP(
                 [config.model.embed_dim, config.model.mlp_dim, self.config.data.S],
-                activation=nn.functional.gelu,
+                activation=nn.GELU(),
             )
         elif config.model.readout == "resnet":
             self.model = ResidualReadout(
@@ -775,6 +780,7 @@ class MaskedTransformer(nn.Module):
 
     def forward(self, x, temb, pos):
         B, D = x.shape
+
         if self.use_cat:
             if self.use_one_hot_input:
                 x_one_hot = nn.functional.one_hot(x.long(), num_classes=self.S)

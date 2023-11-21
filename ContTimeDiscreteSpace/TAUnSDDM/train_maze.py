@@ -19,6 +19,7 @@ import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
+from ruamel.yaml.scalarfloat import ScalarFloat
 
 
 def main():
@@ -29,16 +30,16 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_149999.pt"
-        date = "2023-11-22"
-        config_name = "config_001_ebert5M.yaml"
+        model_name = "model_224999_hollow9998.pt"
+        date = "2023-11-21"
+        config_name = "config_001_hollow.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -54,11 +55,12 @@ def main():
     if train_resume:
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 300000
-        cfg.sampler.sample_freq = 3000000
+        cfg.training.n_iters = 225200
+        cfg.sampler.sample_freq = 225200
         cfg.saving.checkpoint_freq = 10000
         cfg.sampler.num_steps = 1000
-        bookkeeping.save_config(cfg, save_location)
+        cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
+        #bookkeeping.save_config(cfg, save_location)
     
     sampler = sampling_utils.get_sampler(cfg)
 
@@ -91,14 +93,14 @@ def main():
     #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 64
+    n_samples = 16
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
     n = 1
     while True:
-        for minibatch in dataloader: # tqdm(dataloader): #
+        for minibatch in dataloader: #tqdm(dataloader): #
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 

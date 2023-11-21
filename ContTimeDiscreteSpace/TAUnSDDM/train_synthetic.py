@@ -1,9 +1,10 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.synthetic_config.config_tauMLP_synthetic import get_config
+#from config.synthetic_config.config_tauMLP_synthetic import get_config
+from config.synthetic_config.config_ebm_synthetic import get_config
 import matplotlib.pyplot as plt
-import ssl
+import lib.datasets.synthetic as synthetic
 import os
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -59,7 +60,7 @@ def main():
         dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle
     )
 
-    bm, inv_bm = dataset_utils.get_binmap(cfg.model.concat_dim, cfg.data.binmode)
+    bm, inv_bm = synthetic.get_binmap(cfg.model.concat_dim, cfg.data.binmode)
 
     # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
@@ -100,7 +101,6 @@ def main():
     while True:
         for minibatch in tqdm(dataloader):
             minibatch = minibatch.to(device)
-            # print(minibatch, type(minibatch), minibatch.shape)
             l = training_step.step(state, minibatch, loss)
 
             training_loss.append(l.item())
@@ -115,19 +115,19 @@ def main():
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples = sampler.sample(state["model"], n_samples, 10)
+                samples = sampler.sample(state["model"], n_samples)
 
                 state["model"].train()
 
-                samples = dataset_utils.bin2float(
-                    samples.astype(np.int32), inv_bm, cfg.concat_dim, cfg.data.int_scale
+                samples = synthetic.bin2float(
+                    samples.astype(np.int32), inv_bm, cfg.model.concat_dim, cfg.data.int_scale
                 )
                 
                 saving_plot_path = os.path.join(
                     save_location_png,
                     f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
-                dataset_utils.plot_samples(
+                synthetic.plot_samples(
                     samples, saving_plot_path, im_size=4.1, im_fmt="png"
                 )
 

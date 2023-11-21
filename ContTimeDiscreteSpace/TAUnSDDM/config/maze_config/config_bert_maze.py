@@ -44,14 +44,15 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniformVariantBertMLPResEMA"
+    model.name = "UniVarBertEMA"
+    model.is_ebm = False
     # Forward model
     model.rate_const = 2.3
     model.t_func = "log_sqr"
     # hollow:
 
     # BiDir
-    model.embed_dim = 64
+    model.embed_dim = 256
     model.readout = 'resnet' # 'mlp'
     model.use_one_hot_input = False
     model.use_cat = False
@@ -59,14 +60,14 @@ def get_config():
     model.dropout_rate = 0.1
     model.concat_dim = data.shape[0] * data.shape[1] * data.shape[2]
     # config.dtype = torch.float32
-    model.num_layers = 12
+    model.num_layers = 6
     # TransformerBlock
     ## SA
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 2048 # d_model in TAU => embed_dim?
+    model.mlp_dim = 1048 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = data.S
     # ConcatReadout
@@ -91,7 +92,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 3000
+    saving.checkpoint_freq = 500
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping

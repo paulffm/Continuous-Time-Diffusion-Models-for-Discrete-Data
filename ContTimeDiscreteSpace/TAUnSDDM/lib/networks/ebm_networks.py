@@ -37,17 +37,21 @@ class BinaryTransformerScoreFunc(nn.Module):
         self.config = config
         self.masked_transformer = MaskedTransformer(config)
         self.embed_dim = config.model.embed_dim
-        self.time_scale_factor = self.config.modeltime_scale_factor
+        self.time_scale_factor = self.config.model.time_scale_factor
         self.S = config.data.S
-        
+        self.device = config.device
+
     def forward(self, x, t):
+
+
         temb = transformer_timestep_embedding(
             t * self.time_scale_factor, self.embed_dim
         )
         x = x.view(x.size(0), -1).long()
         cls_token = (
-            torch.ones((x.size(0), 1), dtype=torch.long) * self.S
+            torch.ones((x.size(0), 1), device=self.device, dtype=torch.long) * self.S
         )
+
         x = torch.cat([cls_token, x], dim=1)
         score = self.masked_transformer(x, temb, 0)[..., 0]
         return score

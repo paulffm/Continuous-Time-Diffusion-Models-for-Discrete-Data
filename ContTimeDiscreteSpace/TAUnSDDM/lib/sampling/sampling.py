@@ -757,7 +757,7 @@ class CRMLBJF:
                 # p_theta(x_0|x_t) ?
 
                 logits = model(x, t * torch.ones((N,), device=device))
-
+                print("logits", logits.shape)
                 ll_all, ll_xt = get_logprob_with_logits(
                     cfg=self.cfg,
                     model=model,
@@ -894,5 +894,115 @@ class CRMTauL:
                 )  # B, D, S with entries -(S - 1) to S-1
                 x = x + avg_offset
                 x = torch.clip(x, min=0, max=self.S - 1)
+
+            return x.detach().cpu().numpy().astype(int)
+
+@sampling_utils.register_sampler
+class CRMBinaryLBJF:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+
+    def sample(self, model, N):
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+        with torch.no_grad():
+            x = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+                # p_theta(x_0|x_t) ?
+                t_ones = t * torch.ones((N,), device=device)
+                qxt = model(x, t_ones)
+
+                mask = torch.eye(self.D, device=device).repeat_interleave(N, 0)
+                xrep = torch.tile(x, (self.D, 1))
+
+                xneg = (mask - xrep) * mask + (1 - mask) * xrep
+                t_tile = torch.tile(t_ones, (self.D,))
+                qxneg = model(xneg, t_tile)
+                qxt = torch.tile(qxt, (self.D, 1))
+
+                qxneg = qxneg.view(-1, N).t()
+                qxt = qxt.view(-1, N).t()
+                xt_onehot = F.one_hot(x, num_classes=2).to(qxt.dtype)
+                qxneg, qxt = qxneg.unsqueeze(-1), qxt.unsqueeze(-1)
+                logits = xt_onehot * qxt + (1 - xt_onehot) * qxneg
+
+                # logprob
+                ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, x, t_ones, logits)
+
+                log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
+                fwd_rate = model.rate_mat(
+                    x, t_ones
+                )  # B, D, S?
+
+                xt_onehot = F.one_hot(x, self.S)
+
+                posterior = torch.exp(log_weight) * fwd_rate  # * h  # eq.17 c != x^d_t
+
+                off_diag = torch.sum(
+                    posterior * (1 - xt_onehot), axis=-1, keepdims=True
+                )
+                diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                posterior = posterior * (1 - xt_onehot) * h + diag * xt_onehot  # eq.17
+
+                posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
+                log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                x = (
+                    torch.distributions.categorical.Categorical(logits=log_posterior)
+                    .sample()
+                    .view(N, self.D)
+                )
+
+                if t <= self.corrector_entry_time:
+                    print("corrector")
+                    for _ in range(self.num_corrector_steps):
+                        # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+                        logits = model(x, t_ones)
+                        ll_all, ll_xt = get_logprob_with_logits(
+                            cfg=self.cfg,
+                            model=model,
+                            xt=x,
+                            t=t_ones,
+                            logits=logits,
+                        )
+                        log_weight = ll_all - ll_xt.unsqueeze(-1)
+                        fwd_rate = model.rate_mat(
+                            x, t_ones
+                        )
+
+                        xt_onehot = F.one_hot(x, self.S)
+                        posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
+                        off_diag = torch.sum(
+                            posterior * (1 - xt_onehot), axis=-1, keepdims=True
+                        )
+                        diag = torch.clip(1.0 - off_diag, min=0, max=float("inf"))
+                        posterior = posterior * (1 - xt_onehot) + diag * xt_onehot
+                        posterior = posterior / torch.sum(
+                            posterior, axis=-1, keepdims=True
+                        )
+                        # log_posterior = torch.log(posterior + 1e-35)
+                        log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                        x = (
+                            torch.distributions.categorical.Categorical(
+                                logits=log_posterior
+                            )
+                            .sample()
+                            .view(N, self.D)
+                        )
 
             return x.detach().cpu().numpy().astype(int)

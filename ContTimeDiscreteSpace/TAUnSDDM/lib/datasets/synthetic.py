@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sympy.combinatorics.graycode import GrayCode
 from ml_collections import config_dict
-from . import dataset_utils
+import dataset_utils
 
 # from config_hollow_synthetic import get_config
 
@@ -269,11 +269,11 @@ def get_config():
 
 
 _CONFIG = config_flags.DEFINE_config_file("data_config", lock_config=False)
-flags.DEFINE_integer("num_samples", 10000000, "num samples to be generated")
+flags.DEFINE_integer("num_samples", 1000, "num samples to be generated")
 flags.DEFINE_integer("batch_size", 200, "batch size for datagen")
 flags.DEFINE_string(
     "data_root",
-    "/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/synthetic",
+    "DataSynthetic",
     "root folder of data",
 )
 

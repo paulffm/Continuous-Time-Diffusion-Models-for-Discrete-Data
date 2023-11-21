@@ -630,21 +630,29 @@ class CatRM:
         b = utils.expand_dims(
             torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
         )
-        qt0 = qt0[b, minibatch.long()].view(-1, self.S) # B*D, S
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
 
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.distributions.categorical.Categorical(
-            logits=log_qt0
-        ).sample().view(B, self.D) # B, D
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # B, D
 
         # get logits from CondFactorizedBackwardModel
-        logits = model(xt, ts)  # B, D, S: logits for every class in every dimension in x_t 
+        logits = model(
+            xt, ts
+        )  # B, D, S: logits for every class in every dimension in x_t
         loss = 0.0
         if self.cfg.loss.ce_coeff > 0:  # whole train step <10 sek
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
-            ll = F.log_softmax(logits, dim=-1) # B, D, S: Prob of every class in every dimension of x_t => softmax(logits, -1) =>D=2 S=3    [0.4, 0.5, 0.1]
+            ll = F.log_softmax(
+                logits, dim=-1
+            )  # B, D, S: Prob of every class in every dimension of x_t => softmax(logits, -1) =>D=2 S=3    [0.4, 0.5, 0.1]
             #                                                                                                                               [0.8, 0.1, 0.1]
-            loss = -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0], [0.8, 0 0]
+            loss = (
+                -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff
+            )  # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0], [0.8, 0 0]
         else:
             ll_all, ll_xt = get_logprob_with_logits(
                 self.cfg, model, xt, ts, logits
@@ -655,6 +663,7 @@ class CatRM:
             )
 
         return torch.sum(loss) / B
+
 
 """
 # checked
@@ -757,6 +766,7 @@ class CatRMMask:
         return average_loss_per_sequence / B
 """
 
+
 # ToDo: Check if torch.Tile does the same and check if works, check ddim?
 @losses_utils.register_loss
 class EBMAux:
@@ -803,14 +813,15 @@ class EBMAux:
 
         # log loss
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.distributions.categorical.Categorical(
-            logits=log_qt0
-        ).sample().view(B, self.D)  # bis hierhin <1 sek
-
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # bis hierhin <1 sek
 
         mask = torch.eye(self.D, device=device, dtype=torch.int32).repeat_interleave(
             B * self.S, 0
-        ) # check
+        )  # check
         xrep = torch.tile(xt, (self.D * self.S, 1))
         candidate = torch.arange(self.S, device=device).repeat_interleave(B, 0)
         candidate = torch.tile(candidate.unsqueeze(1), ((self.D, 1)))
@@ -832,13 +843,14 @@ class EBMAux:
         return loss
 
 
+@losses_utils.register_loss
 class BinEBMAux:
     def __init__(self, cfg):
         self.cfg = cfg
         self.ratio_eps = cfg.loss.eps_ratio
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
-        self.ddim = cfg.discrete_dim
+        self.D = cfg.model.concat_dim
         self.S = self.cfg.data.S
         self.B = self.cfg.data.batch_size
 
@@ -864,6 +876,7 @@ class BinEBMAux:
             minibatch = minibatch.view(B, C * H * W)
         # hollow xt, t, l_all, l_xt geht rein
         device = self.cfg.device
+        B = minibatch.shape[0]
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
         qt0 = model.transition(ts)  # (B, S, S)
@@ -871,29 +884,30 @@ class BinEBMAux:
         # rate = model.rate(ts)  # (B, S, S)
 
         b = utils.expand_dims(torch.arange(B), (tuple(range(1, minibatch.dim()))))
-        qt0 = qt0[b, minibatch.long()]
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)
 
         # log loss
         log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
-        xt = torch.distributions.categorical.Categorical(
-            logits=log_qt0
-        ).sample()  # bis hierhin <1 sek
-
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )
         # get_q
-        qxt = model(xt, t)
+        qxt = model(xt, ts)
 
-        mask = torch.eye(self.ddim, device=xt.device).repeat_interleave(self.B, 0)
-        xrep = torch.tile(xt, (self.ddim, 1))
+        mask = torch.eye(self.D, device=xt.device).repeat_interleave(B, 0)
+        xrep = torch.tile(xt, (self.D, 1))
 
         xneg = (mask - xrep) * mask + (1 - mask) * xrep
-        t = torch.tile(t, (self.ddim,))
-        qxneg = self.net(xneg, t)
-        qxt = torch.tile(qxt, (self.ddim, 1))
+        t = torch.tile(ts, (self.D,))
+        qxneg = model(xneg, t)
+        qxt = torch.tile(qxt, (self.D, 1))
 
         # get_logits
         # qxneg, qxt = self.get_q(params, xt, t)
-        qxneg = qxneg.view(-1, self.B).t()
-        qxt = qxt.view(-1, self.B).t()
+        qxneg = qxneg.view(-1, B).t()
+        qxt = qxt.view(-1, B).t()
         xt_onehot = F.one_hot(xt, num_classes=2).to(qxt.dtype)
         qxneg, qxt = qxneg.unsqueeze(-1), qxt.unsqueeze(-1)
         logits = xt_onehot * qxt + (1 - xt_onehot) * qxneg

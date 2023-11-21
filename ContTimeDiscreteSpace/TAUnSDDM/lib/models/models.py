@@ -3,12 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lib.networks import ddsm_networks
 import lib.models.model_utils as model_utils
-import lib.networks.tau_networks as tau_networks
-import lib.networks.unet as unet
 from torchtyping import TensorType
 import torch.autograd.profiler as profiler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from lib.networks import hollow_networks
+from lib.networks import hollow_networks, ebm_networks, tau_networks, unet
 from lib.models.forward_model import (
     UniformRate,
     UniformVariantRate,
@@ -429,6 +427,28 @@ class ProteinScoreNet(nn.Module):
         return logits
 
 
+class BinaryEBM(nn.Module):
+    def __init__(self, cfg, device, encoding, rank=None):
+        super().__init__()
+
+        tmp_net = ebm_networks.BinaryTransformerScoreFunc(cfg).to(device)
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+
+        logits = self.net(x, times)  # (B, D, S)
+
+        return logits
+
+
 # Based on https://github.com/yang-song/score_sde_pytorch/blob/ef5cb679a4897a40d20e94d8d0e2124c3a48fb8c/models/ema.py
 class EMA:
     def __init__(self, cfg):
@@ -539,7 +559,7 @@ class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
 
 @model_utils.register_model
-class UniformVariantHollowEMA(EMA, HollowTransformer, UniformVariantRate):
+class UniVarHollowEMA(EMA, HollowTransformer, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         HollowTransformer.__init__(self, cfg, device, rank)
@@ -656,21 +676,20 @@ class UniformRateResMLP(ResidualMLP, UniformRate):
         ResidualMLP.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
 
-
 @model_utils.register_model
-class UniformBertMLPResEMA(EMA, BertMLPRes, UniformRate):
+class UniVarBertEMA(EMA, BertMLPRes, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         BertMLPRes.__init__(self, cfg, device, rank)
-        UniformRate.__init__(self, cfg, device)
+        UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
 
 @model_utils.register_model
-class UniformVariantBertMLPResEMA(EMA, BertMLPRes, UniformVariantRate):
+class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        BertMLPRes.__init__(self, cfg, device, rank)
+        BinaryEBM.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
