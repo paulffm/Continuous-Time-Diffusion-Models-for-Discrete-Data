@@ -799,6 +799,7 @@ class EBMAux:
             B, C, H, W = minibatch.shape
             minibatch = minibatch.view(B, C * H * W)
         # hollow xt, t, l_all, l_xt geht rein
+        B, D = minibatch.shape
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
 
@@ -827,7 +828,7 @@ class EBMAux:
         candidate = torch.tile(candidate.unsqueeze(1), ((self.D, 1)))
         xall = mask * candidate + (1 - mask) * xrep
         t = torch.tile(ts, (self.D * self.S,))
-        qall = model(x=xall, t=t)  # can only be CatMLPScoreFunc or BinaryMLPScoreFunc
+        qall = model(xall, t)  # can only be CatMLPScoreFunc or BinaryMLPScoreFunc
         logits = torch.reshape(qall, (self.D, self.S, B))
         logits = logits.permute(2, 0, 1)
 

@@ -11,7 +11,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "BinEBMAux"
+    loss.name = "EBMAux"
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.logit_type = "direct"
     loss.eps_ratio = 1e-9
@@ -22,7 +22,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 500  # 2000 #2000000
+    training.n_iters = 3000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 5  # 1
@@ -47,7 +47,7 @@ def get_config():
     model.is_ebm = True
     model.name = "UniVarBinaryEBMEMA"
     # Forward model
-    model.rate_const = 0.7
+    model.rate_const = 2.7
     model.t_func = "log_sqr"  # log_sqr
     # hollow:
 
@@ -80,15 +80,15 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 1e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
     saving.checkpoint_freq = 500
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "CRMBinaryLBJF"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 150
+    sampler.name = "CRMebmLBJF"  # TauLeaping or PCTauLeaping
+    sampler.num_steps = 750
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"

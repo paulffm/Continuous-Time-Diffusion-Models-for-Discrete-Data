@@ -63,7 +63,7 @@ def get_config():
     model.model_output = 'logistic_pars'
     model.num_heads = 1
     model.attn_resolutions = [int(model.ch / 2)]
-    
+    model.Q_sigma = 1
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"

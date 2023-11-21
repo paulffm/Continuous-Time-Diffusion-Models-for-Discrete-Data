@@ -4,9 +4,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import ssl
 import os
-from config.maze_config.config_bert_maze import get_config
-from config.maze_config.config_maskedUnet_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
+#from config.maze_config.config_bert_maze import get_config
+#from config.maze_config.config_maskedUnet_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -38,9 +38,9 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_19999_ebert10M.pt"
+        model_name = "model_9.pt"
         date = "2023-11-21"
-        config_name = "config_001_ebert10M.yaml"
+        config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -56,10 +56,10 @@ def main():
     if train_resume:
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 225200
-        cfg.sampler.sample_freq = 225200
+        cfg.training.n_iters = 10
+        cfg.sampler.sample_freq = 10
         cfg.saving.checkpoint_freq = 1000
-        cfg.sampler.num_steps = 1000
+        cfg.sampler.num_steps = 2
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)
     
@@ -101,7 +101,7 @@ def main():
     exit_flag = False
     n = 1
     while True:
-        for minibatch in tqdm(dataloader): #
+        for minibatch in dataloader: #tqdm(dataloader): #
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 

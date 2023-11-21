@@ -24,7 +24,7 @@ import numpy as np
 
 
 def main():
-    train_resume = False
+    train_resume = True
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     save_location_png = os.path.join(save_location, "PNGs/")
@@ -34,8 +34,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-11-04"
-        config_name = "config_001_tauMLP.yaml"
+        date = "2023-11-21"
+        config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -66,14 +66,14 @@ def main():
     # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
 
     if train_resume:
-        model_name = "model_24999_tauMLP.pt"
+        model_name = "model_2999.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 200000
+        cfg.training.n_iters = 3000
         cfg.sampler.name = "ElboTauL"
         cfg.sampler.sample_freq = 20000
         cfg.saving.checkpoint_freq = 5000
-        cfg.sampler.num_steps = 1000
+        cfg.sampler.num_steps = 500
         cfg.logit_type = "direct"  # ""direct"
         bookkeeping.save_config(cfg, save_location)
 
