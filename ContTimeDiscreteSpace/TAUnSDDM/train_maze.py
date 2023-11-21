@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import ssl
 import os
 from config.maze_config.config_bert_maze import get_config
+from config.maze_config.config_maskedUnet_maze import get_config
 #from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -30,14 +31,14 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_9499_ebert10M.pt"
+        model_name = "model_19999_ebert10M.pt"
         date = "2023-11-21"
         config_name = "config_001_ebert10M.yaml"
         config_path = os.path.join(save_location, date, config_name)
@@ -100,7 +101,7 @@ def main():
     exit_flag = False
     n = 1
     while True:
-        for minibatch in dataloader: #tqdm(dataloader): #
+        for minibatch in tqdm(dataloader): #
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 

@@ -15,6 +15,123 @@ from lib.models.forward_model import (
 )
 
 
+class MaskedUNet(nn.Module):
+    """
+    First embedds input data with Transformer Network by: adding positional encoding and time embedding + general Embedding layer
+    Then predicts logits by an arbitrary neural network
+    """
+
+    def __init__(self, cfg, device, rank=None):
+        super(MaskedUNet, self).__init__()
+        self.cfg = cfg
+        self.device = device
+        self.S = cfg.data.S
+        self.padding = cfg.model.padding
+        self.temb_scale = cfg.model.time_scale_factor
+        self.data_shape = cfg.data.shape
+        self.fix_logistic = cfg.model.fix_logistic
+        self.model_output = self.cfg.model.model_output
+
+        if self.padding:
+            img_size = cfg.data.image_size + 1
+        else:
+            img_size = cfg.data.image_size
+
+        self.net = unet.UNet(
+            in_channel=cfg.model.input_channels,
+            out_channel=cfg.model.input_channels,
+            channel=cfg.model.ch,
+            channel_multiplier=cfg.model.ch_mult,
+            n_res_blocks=cfg.model.num_res_blocks,
+            attn_resolutions=cfg.model.attn_resolutions,
+            num_heads=cfg.model.num_heads,
+            dropout=cfg.model.dropout,
+            model_output=cfg.model.model_output,  # c or 'logistic_pars'
+            num_classes=cfg.data.S,
+            x_min_max=cfg.model.data_min_max,
+            img_size=img_size,
+        ).to(self.device)
+
+    def forward(
+        self, x: TensorType["B", "D"], t: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        x = x.view(x.shape[0], -1)
+
+        prefix_cond = self.cfg.model.get("conditional_dim", 0)
+        positions = torch.arange(prefix_cond, x.shape[1], device=self.device)
+        B, D = x.shape
+        logits_list = []
+
+        for pos in positions:
+            x_masked = x.clone()
+            x_masked[:, pos] = self.S  # B, D - cond_dim
+
+            C, H, W = self.data_shape
+            x_masked = x_masked.view(B, C, H, W)
+
+            if self.padding:
+                x_masked = nn.ReplicationPad2d((0, 1, 0, 1))(x_masked.float())
+            net_out = self.net(x_masked, t)  # B, D, S
+
+            if self.model_output == "logits":
+                logits = net_out
+
+            else:
+                mu = net_out[0].unsqueeze(-1)
+                log_scale = net_out[1].unsqueeze(-1)
+
+                inv_scale = torch.exp(-(log_scale - 2))
+
+                bin_width = 2.0 / self.S
+                bin_centers = torch.linspace(
+                    start=-1.0 + bin_width / 2,
+                    end=1.0 - bin_width / 2,
+                    steps=self.S,
+                    device=self.device,
+                ).view(1, 1, 1, 1, self.S)
+
+                sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
+                bin_left_logcdf = F.logsigmoid(sig_in_left)
+                sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
+                bin_right_logcdf = F.logsigmoid(sig_in_right)
+
+                logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
+                logits_2 = self._log_minus_exp(
+                    -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
+                )
+                if self.fix_logistic:
+                    logits = torch.min(logits_1, logits_2)
+                else:
+                    logits = logits_1
+
+            if self.padding:
+                logits = logits[:, :, :-1, :-1, :]
+                logits = logits.reshape(B, D, self.S)
+            else:
+                logits = logits.view(B, D, self.S)
+
+            logit = logits[:, pos].unsqueeze(1)
+            logit = logit.squeeze(1)  # B, S
+            logits_list.append(logit)  # list with len D of tensors with shape B, S
+
+        logits = torch.stack(logits_list, dim=1)  # B, D, S
+
+        if prefix_cond:
+            dummy_logits = torch.zeros(
+                [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=torch.float32
+            )
+            logits = torch.cat([dummy_logits, logits], dim=1)
+        logits = logits.view(x.shape + (self.S,))
+        return logits  # B, D, S
+
+    def _log_minus_exp(self, a, b, eps=1e-6):
+        """
+        Compute log (exp(a) - exp(b)) for (b<a)
+        From https://arxiv.org/pdf/2107.03006.pdf
+        """
+        return a + torch.log1p(-torch.exp(b - a) + eps)
+
+
 class ImageX0PredBasePaul(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
@@ -362,6 +479,7 @@ class MaskedModel(nn.Module):
 
         return logits
 
+
 class BertMLPRes(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
@@ -382,7 +500,8 @@ class BertMLPRes(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
-    
+
+
 class SudokuScoreNet(nn.Module):
     def __init__(self, cfg, device, encoding, rank=None):
         super().__init__()
@@ -610,13 +729,16 @@ class UniformProteinScoreNetEMA(EMA, ProteinScoreNet, UniformRate):
 
 
 @model_utils.register_model
-class GaussianTargetRateImageX0PredEMAPaul(EMA, ImageX0PredBasePaul, GaussianTargetRate):
+class GaussianTargetRateImageX0PredEMAPaul(
+    EMA, ImageX0PredBasePaul, GaussianTargetRate
+):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         ImageX0PredBasePaul.__init__(self, cfg, device, rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):
@@ -626,6 +748,7 @@ class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 # Maze, MNIST
 @model_utils.register_model
@@ -676,6 +799,7 @@ class UniformRateResMLP(ResidualMLP, UniformRate):
         ResidualMLP.__init__(self, cfg, device, rank)
         UniformRate.__init__(self, cfg, device)
 
+
 @model_utils.register_model
 class UniVarBertEMA(EMA, BertMLPRes, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
@@ -685,11 +809,22 @@ class UniVarBertEMA(EMA, BertMLPRes, UniformVariantRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         BinaryEBM.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+# MaskedUNet
+@model_utils.register_model
+class UniVarMaskUNetEMA(EMA, MaskedUNet, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        MaskedUNet.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()

@@ -241,20 +241,26 @@ class ElboLBJF:
 
                         xt_onehot = F.one_hot(x.long(), self.S)
 
-                        posterior = forward_rates + forward_rates * inner_sum  # (N, D, S)
+                        posterior = (
+                            forward_rates + forward_rates * inner_sum
+                        )  # (N, D, S)
                         post_0 = posterior * (1 - xt_onehot)
 
                         off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                         diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                        posterior = (
-                            posterior * post_0 * h + diag * xt_onehot
-                        )  
+                        posterior = posterior * post_0 * h + diag * xt_onehot
                         posterior = posterior / torch.sum(
                             posterior, axis=-1, keepdims=True
                         )
                         log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
 
-                        x = torch.distributions.categorical.Categorical(logits=log_posterior).sample().view(N, self.D)
+                        x = (
+                            torch.distributions.categorical.Categorical(
+                                logits=log_posterior
+                            )
+                            .sample()
+                            .view(N, self.D)
+                        )
 
             return x.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
 
@@ -698,7 +704,7 @@ class ExactSampling:
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
-                xt = cat_dist.sample().view(N, self.D, self.S)
+                xt = cat_dist.sample().view(N, self.D)
 
             return xt.detach().cpu().numpy().astype(int)
 
@@ -757,7 +763,7 @@ class CRMLBJF:
                 # p_theta(x_0|x_t) ?
 
                 logits = model(x, t * torch.ones((N,), device=device))
-                print("logits", logits.shape)
+
                 ll_all, ll_xt = get_logprob_with_logits(
                     cfg=self.cfg,
                     model=model,
@@ -897,6 +903,7 @@ class CRMTauL:
 
             return x.detach().cpu().numpy().astype(int)
 
+
 @sampling_utils.register_sampler
 class CRMBinaryLBJF:
     def __init__(self, cfg):
@@ -943,12 +950,12 @@ class CRMBinaryLBJF:
                 logits = xt_onehot * qxt + (1 - xt_onehot) * qxneg
 
                 # logprob
-                ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, x, t_ones, logits)
+                ll_all, ll_xt = get_logprob_with_logits(
+                    self.cfg, model, x, t_ones, logits
+                )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
-                fwd_rate = model.rate_mat(
-                    x, t_ones
-                )  # B, D, S?
+                fwd_rate = model.rate_mat(x, t_ones)  # B, D, S?
 
                 xt_onehot = F.one_hot(x, self.S)
 
@@ -989,11 +996,11 @@ class CRMBinaryLBJF:
                         logits = xt_onehot * qxt + (1 - xt_onehot) * qxneg
 
                         # logprob
-                        ll_all, ll_xt = get_logprob_with_logits(self.cfg, model, x, t_ones, logits)
-                        log_weight = ll_all - ll_xt.unsqueeze(-1)
-                        fwd_rate = model.rate_mat(
-                            x, t_ones
+                        ll_all, ll_xt = get_logprob_with_logits(
+                            self.cfg, model, x, t_ones, logits
                         )
+                        log_weight = ll_all - ll_xt.unsqueeze(-1)
+                        fwd_rate = model.rate_mat(x, t_ones)
 
                         xt_onehot = F.one_hot(x, self.S)
                         posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)

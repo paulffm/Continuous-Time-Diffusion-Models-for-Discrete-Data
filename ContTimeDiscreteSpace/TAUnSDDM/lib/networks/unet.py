@@ -304,7 +304,7 @@ class UNet(nn.Module):
     ):
         super().__init__() 
         self.model_output = model_output
-        self.num_classes = num_classes
+        self.S = num_classes
         self.out_channel = out_channel
         time_dim = channel * 4
 
@@ -398,21 +398,22 @@ class UNet(nn.Module):
             )
         else:
             self.out = nn.Sequential(
-                nn.GroupNorm(32, in_channel, eps=1e-06),
+                nn.GroupNorm(in_channel, in_channel, eps=1e-06),
                 Swish(),
-                conv2d(in_channel, out_channel * self.num_classes, 3, padding=1, scale=1e-10),
+                conv2d(in_channel, out_channel * self.S, 3, padding=1, scale=1e-10),
             )
-
-    # difference to: https://github.com/rosinality/denoising-diffusion-pytorch/blob/master/model.py#L267
-    # input_onehot wird gemacht und am ende wieder geaddet 
+        self.i = 1
+        self.D = img_size*img_size
     def forward(self, input, time):
+        print(self.i)
+        self.i +=1
         time_embed = self.time(time)
-
         feats = []
         #
         # out = spatial_fold(input, self.fold)
-        batch_size, channels, height, width = input.shape
-        input_onehot = F.one_hot(input.to(torch.int64), num_classes=self.num_classes)
+        B, C, H, W = input.shape
+        #input_onehot = F.one_hot(input.view(B, self.D).long(), num_classes=self.S)
+        #input_onehot = input_onehot.view(B, C, H, W, self.S)
         hid = input = network_utils.center_data(input, self.x_min_max)
 
         for layer in self.down:
@@ -438,9 +439,9 @@ class UNet(nn.Module):
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
-            out = torch.reshape(out, (batch_size, self.out_channel, self.num_classes, height, width))
+            out = torch.reshape(out, (B, self.out_channel, self.S, H, W))
             out = out.permute(0, 1, 3, 4, 2).contiguous()
-            out = out + input_onehot
+            out = out #+ input_onehot
         return out
 
 ### 1D Unet
