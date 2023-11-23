@@ -38,9 +38,9 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_9.pt"
-        date = "2023-11-21"
-        config_name = "config_001.yaml"
+        model_name = "model_8999_hollowRevP.pt"
+        date = "2023-11-23"
+        config_name = "config_001_hollowRevP.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -56,10 +56,10 @@ def main():
     if train_resume:
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 10
-        cfg.sampler.sample_freq = 10
-        cfg.saving.checkpoint_freq = 1000
-        cfg.sampler.num_steps = 2
+        cfg.training.n_iters = 300000
+        cfg.sampler.sample_freq = 500000000000
+        cfg.saving.checkpoint_freq = 3000
+        cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)
     
@@ -117,7 +117,11 @@ def main():
                 saving_train_path = os.path.join(
                     save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
                 )
+                saving_train_loss = os.path.join(
+                    save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.npy"
+                )
                 plt.plot(training_loss)
+                np.save(saving_train_loss, training_loss)
                 plt.xlabel('Iterations')
                 plt.ylabel('Loss')
                 plt.title("Training Loss")
@@ -145,7 +149,7 @@ def main():
                     save_location_png,
                     f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
-                print(saving_plot_path)
+
                 plt.savefig(saving_plot_path)
                 plt.close()
 

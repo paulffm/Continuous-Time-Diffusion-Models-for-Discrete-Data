@@ -415,7 +415,7 @@ class Maze:
         self.__mazeIsDone = True
         return True
 
-    def makeMazeGrowTree(self, weightHigh=99, weightLow=97):
+    def makeMazeGrowTree(self, weightHigh=99, weightLow=97, random_entry=False):
         """Algorithm to form the final maze. It works like the Grow Tree algorithm
         http://weblog.jamisbuck.org/2011/1/27/maze-generation-growing-tree-algorithm
 
@@ -515,7 +515,7 @@ class Maze:
                 choiceList.append(connectTile)
                 self.__connectTiles(nextTile, connectTile)
 
-        self.__makeEntryandExit()  # finally marking an Entry and an Exit
+        self.__makeEntryandExit(random_entry)  # finally marking an Entry and an Exit
         self.__mazeIsDone = True
         return True
 
@@ -753,12 +753,39 @@ class Maze:
         image.save(image_path)
         return True
 
+def find_entries(array):
+    H, W = array.shape
+    entries = []
 
-def find_path(maze):
+    for i in range(W):
+        if array[0, i] == 2:
+            entries.append((0, i))
+        if array[-1, i] == 2:
+            entries.append((H - 1, i))
+
+    for j in range(1, H - 1):
+        if array[j, 0] == 2:
+            entries.append((j, 0))
+        if array[j, -1] == 2:
+            entries.append((j, W - 1))
+
+    
+    if len(entries) >= 2:
+        return entries[:2]
+
+    return entries
+
+def find_path(maze, random_entry=False):
     # BFS-Algorithmus, um den kürzesten Pfad zu finden
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    start = (0, 1)
-    end = (14, 13)
+    if random_entry:
+        entries = find_entries(maze)
+        start = entries[0]
+        end = entries[1]
+    else:
+        start = (0, 1)
+        end = (14, 13)
+
     visited = np.zeros_like(maze, dtype=bool)
     visited[start] = True
     queue = Queue()
@@ -789,34 +816,31 @@ def maze_gen(
     limit: int,
     size: int = None,
     crop: bool = False,
-    dim_x: int = 10,
-    dim_y: int = 10,
+    random_entry: bool=True,
+    dim_x: int = 7,
+    dim_y: int = 7,
     pixelSizeOfTile: int = 1,
     weightHigh: int = 99,
-    weightLow: int = 99,
-    device="cpu",
+    weightLow: int = 97,
+    device="cuda",
 ):
     n = 1
-    # Fügen Sie hier die Resize-Transformation hinzu
-    transform = transforms.Compose(
-        [transforms.PILToTensor()]  # Ändern Sie dies auf (32, 32) für 32x32 Größe
-    )
     image_list = []
     while n <= limit:
         newMaze = Maze(dim_x, dim_y, mazeName=f"maze_{n}")
-        newMaze.makeMazeGrowTree(weightHigh, weightLow)
+        newMaze.makeMazeGrowTree(weightHigh, weightLow, random_entry)
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
         if crop:
             cropped_size = pixelSizeOfTile * (dim_x * 2 + 1) - 1
             mazeImageBW = mazeImageBW.crop((1, 1, cropped_size, cropped_size))
 
         image_array = np.array(mazeImageBW) * 2
-        solved_maze = find_path(image_array)
+        solved_maze = find_path(image_array, random_entry)
 
         img_tensor = torch.tensor(solved_maze, device=device).unsqueeze(0)
 
         image_list.append(img_tensor)
-        # newMaze.saveImage(mazeImageBW, n)
+        #newMaze.saveImage(mazeImageBW, n)
         if n % 1000 == 0:
             print(f"{n} samples generated.")
         n += 1
@@ -854,9 +878,10 @@ class Maze3SComplete(Dataset):
             crop=cfg.data.crop_wall,
             dim_x=7,
             dim_y=7,
+            random_entry = cfg.data.random_entry,
             pixelSizeOfTile=1,
             weightHigh=99,
-            weightLow=98,
+            weightLow=97,
         )
 
     def __len__(self):
@@ -869,7 +894,6 @@ class Maze3SComplete(Dataset):
 @dataset_utils.register_dataset
 class Maze3S(Dataset):
     def __init__(self, cfg, device, _):
-        # Wandelt das TensorFlow Dataset in Listen von Bildern und Labels um
         self.cfg = cfg
         self.device = device
 
@@ -881,10 +905,11 @@ class Maze3S(Dataset):
             limit=self.cfg.data.limit,
             device=self.device,
             crop=self.cfg.data.crop_wall,
+            random_entry = self.cfg.data.random_entry,
             dim_x=7,
             dim_y=7,
             pixelSizeOfTile=1,
-            weightHigh=97,
+            weightHigh=99,
             weightLow=97,
         )
         return self.maze[0]  # .to(self.device)

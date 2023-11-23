@@ -43,6 +43,7 @@ def get_config():
     data.use_augm = False
     data.crop_wall = False
     data.limit = 1
+    data.random_entry = True
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniVarHollowEMA"
@@ -106,7 +107,7 @@ def get_config():
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
-    sampler.corrector_entry_time = float(0.1)
+    sampler.corrector_entry_time = float(0.0)
     sampler.sample_freq = 5000000000
     sampler.is_ordinal = True
 

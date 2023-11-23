@@ -880,11 +880,11 @@ class CRMTauL:
                 )  # B, D, S?
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                posterior = torch.exp(log_weight) * fwd_rate
+                posterior = torch.exp(log_weight) * fwd_rate * h
                 posterior = posterior * (1 - xt_onehot)
 
                 flips = torch.distributions.poisson.Poisson(
-                    posterior * h
+                    posterior
                 ).sample()  # B, D most 0
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),

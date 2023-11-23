@@ -136,20 +136,14 @@ class CTElbo:
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
             reg_x = x_t
 
-        # For (B, D, S, S) first S is x_0 second S is x'
-        # => first ones and then place 0 where x_tilde/x_t has entry: Why? => x != x'
-        # x_tilde = (1, 2, 0)
-        # => mask_reg = (1, 0, 1)
-        #               (1, 1, 0)
-        #               (0, 1, 1)
-
+        # same as 1-one_hot 
         mask_reg = torch.ones((B, D, S), device=device)
         mask_reg[
             torch.arange(B, device=device).repeat_interleave(D),
             torch.arange(D, device=device).repeat(B),
             reg_x.long().flatten(),
         ] = 0.0  # (B, D, S)
-
+        
         # q_{t|0} (x ̃|x_0)
         qt0_numer_reg = qt0.view(B, S, S)
 
@@ -163,6 +157,7 @@ class CTElbo:
             ].view(B, D, S)
             + self.ratio_eps
         )
+
 
         # puts diagonal (-values) of rate where x_tilde has its entry
         rate_vals_reg = rate[
@@ -395,8 +390,6 @@ class CondCTElbo:
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, d, S)
             reg_x = x_t
 
-        # For (B, d, S, S) first S is x_0 second S is x'
-        # ToDO: Why masking?
         mask_reg = torch.ones((B, d, S), device=device)
         mask_reg[
             torch.arange(B, device=device).repeat_interleave(d),
@@ -580,11 +573,13 @@ class CatRM:
             b = utils.expand_dims(
                 torch.arange(xt.shape[0], device=device), tuple(range(1, xt.dim()))
             )
+
             qt0_x2y = model.transition(t)
             qt0_y2x = qt0_x2y.permute(0, 2, 1)
             qt0_y2x = qt0_y2x[b, xt.long()]
             ll_xt = ll_xt.unsqueeze(-1)
-
+            # ll_xt: log p_t(X^d=x^d_t|x^ohned)
+            # ll_all 
             backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
             first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
 
@@ -604,7 +599,6 @@ class CatRM:
     def calc_loss(self, minibatch, state):
         """
         ce > 0 == ce < 0 + direct + rm
-
 
         Args:
             minibatch (_type_): _description_
@@ -649,7 +643,7 @@ class CatRM:
             ll = F.log_softmax(
                 logits, dim=-1
             )  # B, D, S: Prob of every class in every dimension of x_t => softmax(logits, -1) =>D=2 S=3    [0.4, 0.5, 0.1]
-            #                                                                                                                               [0.8, 0.1, 0.1]
+            #                                                                                               [0.8, 0.1, 0.1]
             loss = (
                 -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff
             )  # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0], [0.8, 0 0]
@@ -657,12 +651,12 @@ class CatRM:
             ll_all, ll_xt = get_logprob_with_logits(
                 self.cfg, model, xt, ts, logits
             )  # ll_all= log prov of all states, ll_xt = log prob of true states
-            # ll_all, ll_xt = model.get_logprob_with_logits(xt, ts, logits)
+            
             loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
                 1 - self.cfg.loss.ce_coeff
             )
 
-        return torch.sum(loss) / B
+        return torch.sum(loss) / B # sum over D
 
 
 """
