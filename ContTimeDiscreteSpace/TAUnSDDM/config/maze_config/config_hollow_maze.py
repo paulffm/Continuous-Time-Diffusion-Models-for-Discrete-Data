@@ -43,7 +43,7 @@ def get_config():
     data.use_augm = False
     data.crop_wall = False
     data.limit = 1
-    data.random_entry = True
+    data.random_transform = True
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniVarHollowEMA"

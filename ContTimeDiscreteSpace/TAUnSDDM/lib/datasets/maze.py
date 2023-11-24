@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 import numpy as np
 import torchvision.transforms as transforms
 from queue import Queue
+import random
 import torch
 from torch.utils.data import Dataset
 from . import dataset_utils
@@ -753,6 +754,7 @@ class Maze:
         image.save(image_path)
         return True
 
+
 def find_entries(array):
     H, W = array.shape
     entries = []
@@ -769,11 +771,11 @@ def find_entries(array):
         if array[j, -1] == 2:
             entries.append((j, W - 1))
 
-    
     if len(entries) >= 2:
         return entries[:2]
 
     return entries
+
 
 def find_path(maze, random_entry=False):
     # BFS-Algorithmus, um den kürzesten Pfad zu finden
@@ -798,7 +800,7 @@ def find_path(maze, random_entry=False):
             return maze
         for dx, dy in directions:
             next_node = (node[0] + dx, node[1] + dy)
-            # Prüfenob der nächste Knoten innerhalb des Labyrinths liegt und ein Weg ist
+
             if (
                 0 <= next_node[0]
                 and next_node[0] < maze.shape[0]
@@ -816,7 +818,7 @@ def maze_gen(
     limit: int,
     size: int = None,
     crop: bool = False,
-    random_entry: bool=True,
+    random_transform: bool = True,
     dim_x: int = 7,
     dim_y: int = 7,
     pixelSizeOfTile: int = 1,
@@ -828,23 +830,26 @@ def maze_gen(
     image_list = []
     while n <= limit:
         newMaze = Maze(dim_x, dim_y, mazeName=f"maze_{n}")
-        newMaze.makeMazeGrowTree(weightHigh, weightLow, random_entry)
+        newMaze.makeMazeGrowTree(weightHigh, weightLow, random_transform)
         mazeImageBW = newMaze.makePP(pixelSizeOfTile=pixelSizeOfTile)
         if crop:
             cropped_size = pixelSizeOfTile * (dim_x * 2 + 1) - 1
             mazeImageBW = mazeImageBW.crop((1, 1, cropped_size, cropped_size))
 
         image_array = np.array(mazeImageBW) * 2
-        solved_maze = find_path(image_array, random_entry)
+        solved_maze = find_path(image_array, random_transform)
+
+        if random_transform and random.choice([True, False]):
+            solved_maze = np.rot90(solved_maze).copy()
 
         img_tensor = torch.tensor(solved_maze, device=device).unsqueeze(0)
 
         image_list.append(img_tensor)
-        #newMaze.saveImage(mazeImageBW, n)
+        # newMaze.saveImage(mazeImageBW, n)
         if n % 1000 == 0:
             print(f"{n} samples generated.")
         n += 1
-    image_list = torch.stack(image_list, 0).to(device) 
+    image_list = torch.stack(image_list, 0).to(device)
 
     return image_list
 
@@ -868,6 +873,7 @@ def maze_gen(
 # mazeImageBW.show()
 # newMaze.saveImage(mazeImageBW)
 
+
 @dataset_utils.register_dataset
 class Maze3SComplete(Dataset):
     def __init__(self, cfg, device, _):
@@ -878,7 +884,7 @@ class Maze3SComplete(Dataset):
             crop=cfg.data.crop_wall,
             dim_x=7,
             dim_y=7,
-            random_entry = cfg.data.random_entry,
+            random_transform=cfg.data.random_transform,
             pixelSizeOfTile=1,
             weightHigh=99,
             weightLow=97,
@@ -905,7 +911,7 @@ class Maze3S(Dataset):
             limit=self.cfg.data.limit,
             device=self.device,
             crop=self.cfg.data.crop_wall,
-            random_entry = self.cfg.data.random_entry,
+            random_transform=self.cfg.data.random_transform,
             dim_x=7,
             dim_y=7,
             pixelSizeOfTile=1,

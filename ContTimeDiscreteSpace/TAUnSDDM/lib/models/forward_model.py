@@ -5,6 +5,7 @@ from torchtyping import TensorType
 import math
 from lib.utils import utils
 
+
 class BirthDeathForwardBase:
     def __init__(self, cfg, device):
         self.S = S = cfg.data.S
@@ -60,7 +61,7 @@ class BirthDeathForwardBase:
             @ torch.diag_embed(torch.exp(adj_eigvals))
             @ self.base_eigvecs.T.view(1, S, S)
         )
-
+        transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         # Some entries that are supposed to be very close to zero might be negative
         if torch.min(transitions) < -1e-6:
             print(
@@ -145,7 +146,7 @@ class UniformVariantRate(UniformRate):
         elif self.t_func == "sqrt_cos":
             return -torch.sqrt(torch.cos(torch.pi / 2 * t))  # + 1
         elif self.t_func == "log":
-            return (self.time_base * (self.time_exp**t) - self.time_base)
+            return self.time_base * (self.time_exp**t) - self.time_base
         else:
             raise ValueError("Unknown t_func %s" % self.t_func)
 
@@ -193,6 +194,7 @@ class UniformVariantRate(UniformRate):
 
         # Clamping at 1e-8 because at float level accuracy anything lower than that
         # is probably inaccurate and should be zero anyway
+        transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         transitions[transitions < 1e-8] = 0.0
         return transitions
 
@@ -244,11 +246,7 @@ class GaussianTargetRate:
         return self.time_base * (self.time_exp**t) - self.time_base
 
     def _rate_scalar(self, t: TensorType["B"]) -> TensorType["B"]:
-        return (
-            self.time_base
-            * math.log(self.time_exp)
-            * (self.time_exp**t)
-        )
+        return self.time_base * math.log(self.time_exp) * (self.time_exp**t)
 
     def rate(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         B = t.shape[0]
@@ -256,7 +254,7 @@ class GaussianTargetRate:
         rate_scalars = self._rate_scalar(t)
 
         return self.base_rate.view(1, S, S) * rate_scalars.view(B, 1, 1)
-    
+
     def rate_mat(self, y, t):
         r = self.rate(t)
         bidx = utils.expand_dims(torch.arange(t.size(0)), axis=tuple(range(1, y.dim())))
@@ -276,7 +274,7 @@ class GaussianTargetRate:
             @ torch.diag_embed(torch.exp(adj_eigvals))
             @ self.inv_eigvecs.view(1, S, S)
         )
-
+        transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         # Some entries that are supposed to be very close to zero might be negative
         if torch.min(transitions) < -1e-6:
             print(
@@ -300,6 +298,7 @@ class GaussianTargetRate:
             )
             @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
         )
+        transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         if torch.min(transitions) < -1e-6:
             print(
                 f"[Warning] UniformVariantRate, large negative transition values {torch.min(transitions)}"
