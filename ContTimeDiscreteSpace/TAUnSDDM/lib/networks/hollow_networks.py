@@ -227,44 +227,45 @@ class CrossAttention(nn.Module):
         seq_len = l2r_embed.shape[1]
         temb = temb.unsqueeze(1)  # B, 1, D
 
-        query = self.dense_query(l2r_embed + r2l_embed).view(
-            l2r_embed.size(0), l2r_embed.size(1), self.num_heads, self.head_dim
-        )  # B, D, E => B, D, E
+        query = self.dense_query(l2r_embed + r2l_embed).view(l2r_embed.size(0), l2r_embed.size(1), self.num_heads, self.head_dim)  # B, D, E => B, D, E
         all_embed = torch.cat([temb, l2r_embed, r2l_embed], dim=1)  # B, 2D + 1, E
 
-        key = self.dense_key(all_embed).view(
-            all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim
-        )
-        val = self.dense_val(all_embed).view(
-            all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim
-        )
-
-        query = query / torch.sqrt(torch.tensor(query.shape[-1], dtype=torch.float32))
+        key = self.dense_key(all_embed).view(all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim) # 
+        val = self.dense_val(all_embed).view(all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim)
+        #print("quer1", query.shape)
+        query = query / torch.sqrt(torch.tensor(query.shape[-1], device=self.device,dtype=torch.float32))
+        #print("query2", query.shape)
         logits = torch.einsum("bqhd,bkhd->bhqk", query, key)
-        # logits = torch.einsum("bqe,bke->bkq", query, key) # without view
+        #logits = torch.einsum("bqe,bke->bkq", query, key) # without view
+        #print("logits,", logits.shape)
 
         att_l2r_mask = torch.triu(
             torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
             diagonal=1,
         ).unsqueeze(0)
+        #print("att_r2l_mask", att_l2r_mask.shape)
         att_r2l_mask = torch.tril(
             torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
             diagonal=-1,
         ).unsqueeze(0)
-        att_t = torch.ones((1, seq_len, 1), device=self.device)
+        #print("att_r2l_mask", att_r2l_mask.shape)
 
+        att_t = torch.ones((1, seq_len, 1), device=self.device)
+        #print("att_t", att_t.shape)
         joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(
             0
-        )  # 1, 1, seq_len, 2 * seq_len + 1
-        attn_weights = torch.where(joint_mask, logits, torch.finfo(torch.float32).min)
+        ) > 0
+        attn_weights = torch.where(joint_mask, logits, torch.tensor(torch.finfo(logits.dtype).min, device=self.device))
         attn_weights = F.softmax(attn_weights, dim=-1)
-
+        #print("attn", attn_weights.shape)
         x = torch.einsum(
             "bhqk,bkhd->bqhd", attn_weights, val
         )  # B, D, self.num_heads, self.head_dim
         # x = torch.einsum("bkq,bke->bqe", attn_weights, val) # without view
-        x = x.view(x.shape[0], x.shape[1], self.num_heads * self.head_dim)
+        x = x.reshape(x.shape[0], x.shape[1], self.num_heads * self.head_dim)
+        #print("before lin", x.shape)
         x = self.out_linear(x)
+        #print("x", x.shape)
         return x
 
 
@@ -741,6 +742,7 @@ class BidirectionalTransformer2(nn.Module):
 
         logits = logits.view(input_shape + [self.readout_dim])  # B, D, S
         # logits = logits + x_one_hot
+
         return logits
 
 

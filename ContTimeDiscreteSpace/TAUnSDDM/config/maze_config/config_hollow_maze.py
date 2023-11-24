@@ -61,7 +61,7 @@ def get_config():
 
     # BiDir
     model.embed_dim = 128
-    model.bidir_readout = "res_concat"  # res_concat, attention, concat
+    model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1

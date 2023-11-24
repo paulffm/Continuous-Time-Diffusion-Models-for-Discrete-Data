@@ -75,7 +75,7 @@ class BitDiffusion(nn.Module):
 
         time_difference = default(time_difference, self.time_difference)
 
-        time_pairs = self.get_sampling_timesteps(batch, device=device)
+        time_pairs = self.get_sampling_timesteps(batch, device=device) # immer tuple (1, 0.99), (0.99, 0.98)
 
         img = torch.randn(shape, device=device)
 

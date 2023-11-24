@@ -761,20 +761,20 @@ class CRMLBJF:
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
                 # p_theta(x_0|x_t) ?
-
-                logits = model(x, t * torch.ones((N,), device=device))
+                t_ones = t * torch.ones((N,), device=device)
+                logits = model(x, t_ones)
 
                 ll_all, ll_xt = get_logprob_with_logits(
                     cfg=self.cfg,
                     model=model,
                     xt=x,
-                    t=t * torch.ones((N,), device=device),
+                    t=t_ones,
                     logits=logits,
                 )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
                 fwd_rate = model.rate_mat(
-                    x, t * torch.ones((N,), device=device)
+                    x, t_ones
                 )  # B, D, S?
 
                 xt_onehot = F.one_hot(x, self.S)
@@ -799,17 +799,17 @@ class CRMLBJF:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        logits = model(x, t * torch.ones((N,), device=device))
+                        logits = model(x, t_ones)
                         ll_all, ll_xt = get_logprob_with_logits(
                             cfg=self.cfg,
                             model=model,
                             xt=x,
-                            t=t * torch.ones((N,), device=device),
+                            t=t_ones,
                             logits=logits,
                         )
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
                         fwd_rate = model.rate_mat(
-                            x, t * torch.ones((N,), device=device)
+                            x, t_ones
                         )
 
                         xt_onehot = F.one_hot(x, self.S)
