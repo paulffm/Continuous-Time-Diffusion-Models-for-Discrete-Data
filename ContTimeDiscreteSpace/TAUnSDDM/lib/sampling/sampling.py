@@ -119,11 +119,11 @@ class ElboTauL:
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
 
-                change_jump.append((torch.sum(xp != x, dim=1) / (N * self.D)).float())
+                change_jump.append((torch.sum(xp != x) / (N * self.D)).float())
 
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
-                change_clamp.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
+                change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).float())
                 x = x_new
 
             # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
@@ -267,7 +267,7 @@ class ElboLBJF:
                             .sample()
                             .view(N, self.D)
                         )
-                change_jump.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
+                change_jump.append((torch.sum(x_new != x) / (N * self.D)).float())
                 x = x_new
             return x.detach().cpu().numpy().astype(int), change_jump  # , x_hist, x0_hist
 
@@ -676,7 +676,7 @@ class ExactSampling:
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
             # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
-
+            change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
 
@@ -711,9 +711,11 @@ class ExactSampling:
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
-                xt = cat_dist.sample().view(N, self.D)
+                x_new = cat_dist.sample().view(N, self.D)
+                change_jump.append((torch.sum(x_new != xt) / (N * self.D)).float())
+                xt = x_new
 
-            return xt.detach().cpu().numpy().astype(int)
+            return xt.detach().cpu().numpy().astype(int), change_jump
 
 
 def lbjf_corrector_step(cfg, model, xt, t, h, N, device, xt_target=None):
@@ -838,7 +840,7 @@ class CRMLBJF:
                             .sample()
                             .view(N, self.D)
                         )
-                change_jump.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
+                change_jump.append((torch.sum(x_new != x) / (N * self.D)).float())
                 x = x_new
             return x.detach().cpu().numpy().astype(int), change_jump
 
@@ -868,6 +870,8 @@ class CRMTauL:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            change_jump = []
+            change_clamp = []
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -906,10 +910,14 @@ class CRMTauL:
                 avg_offset = torch.sum(
                     flips * diff, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
-                x = x + avg_offset
-                x = torch.clip(x, min=0, max=self.S - 1)
+                xp = x + avg_offset
 
-            return x.detach().cpu().numpy().astype(int)
+                change_jump.append((torch.sum(xp != x) / (N * self.D)).float())
+                x_new = torch.clip(xp, min=0, max=self.S - 1)
+                change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).float())
+                x = x_new
+
+            return x.detach().cpu().numpy().astype(int), change_jump
 
 
 @sampling_utils.register_sampler
