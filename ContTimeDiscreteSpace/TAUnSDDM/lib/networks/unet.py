@@ -115,7 +115,6 @@ class ResBlock(nn.Module):
         self.conv2 = conv2d(out_channel, out_channel, 3, padding=1, scale=1e-10)
 
         if in_channel != out_channel:
-            # TODO
             # self.skip = conv2d(in_channel, out_channel, 1)
             self.skip = linear(in_channel, out_channel)
 
@@ -132,8 +131,7 @@ class ResBlock(nn.Module):
         out = self.conv2(self.dropout(self.activation2(self.norm2(out))))
 
         if self.skip is not None:
-            # TODO
-            # input = self.skip(input)
+
             input = self.skip(input.permute(0, 2, 3, 1).contiguous())
             input = input.permute(0, 3, 1, 2)
 
@@ -402,11 +400,9 @@ class UNet(nn.Module):
                 Swish(),
                 conv2d(in_channel, out_channel * self.S, 3, padding=1, scale=1e-10),
             )
-        self.i = 1
         self.D = img_size*img_size
+        
     def forward(self, input, time):
-        print(self.i)
-        self.i +=1
         time_embed = self.time(time)
         feats = []
         #

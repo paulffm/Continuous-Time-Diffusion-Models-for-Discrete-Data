@@ -760,6 +760,14 @@ class UniformRateUnetEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniVarUnetEMA(EMA, ImageX0PredBasePaul, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        ImageX0PredBasePaul.__init__(self, cfg, device, rank=rank)
+        UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 # make sure EMA inherited first so it can override the state dict functions
 @model_utils.register_model

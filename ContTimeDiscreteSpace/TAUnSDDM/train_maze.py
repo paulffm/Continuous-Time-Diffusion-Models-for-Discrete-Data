@@ -31,16 +31,16 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_8999_hollowRevP.pt"
-        date = "2023-11-23"
-        config_name = "config_001_hollowRevP.yaml"
+        model_name = "model_92999_hollowAtt.pt"
+        date = "2023-11-24"
+        config_name = "config_001_hollow10MRAtt.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 

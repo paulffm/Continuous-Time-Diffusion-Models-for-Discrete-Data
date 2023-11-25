@@ -55,6 +55,8 @@ class ElboTauL:
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
             t = 1.0
+            change_jump = []
+            change_clamp = []
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -116,14 +118,18 @@ class ElboTauL:
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
+
+                change_jump.append((torch.sum(xp != x, dim=1) / (N * self.D)).float())
+
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
+                change_clamp.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
                 x = x_new
 
             # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = x
-            return x_0max.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
+            return x_0max.detach().cpu().numpy().astype(int), change_jump  # , x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
@@ -158,7 +164,7 @@ class ElboLBJF:
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
             t = 1.0
-
+            change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
 
@@ -202,7 +208,7 @@ class ElboLBJF:
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                x = (
+                x_new = (
                     torch.distributions.categorical.Categorical(logits=log_posterior)
                     .sample()
                     .view(N, self.D)
@@ -213,7 +219,7 @@ class ElboLBJF:
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         p0t = F.softmax(
-                            model(x, t * torch.ones((N,), device=device)), dim=2
+                            model(x_new, t * torch.ones((N,), device=device)), dim=2
                         )  #
 
                         qt0_denom = (
@@ -222,7 +228,7 @@ class ElboLBJF:
                                     self.D * self.S
                                 ),
                                 torch.arange(self.S, device=device).repeat(N * self.D),
-                                x.long().flatten().repeat_interleave(self.S),
+                                x_new.long().flatten().repeat_interleave(self.S),
                             ].view(N, self.D, self.S)
                             + self.eps_ratio
                         )
@@ -234,12 +240,12 @@ class ElboLBJF:
                                 self.D * self.S
                             ),
                             torch.arange(self.S, device=device).repeat(N * self.D),
-                            x.long().flatten().repeat_interleave(self.S),
+                            x_new.long().flatten().repeat_interleave(self.S),
                         ].view(N, self.D, self.S)
 
                         inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) #
 
-                        xt_onehot = F.one_hot(x.long(), self.S)
+                        xt_onehot = F.one_hot(x_new.long(), self.S)
 
                         posterior = (
                             forward_rates + forward_rates * inner_sum
@@ -254,15 +260,16 @@ class ElboLBJF:
                         )
                         log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
 
-                        x = (
+                        x_new = (
                             torch.distributions.categorical.Categorical(
                                 logits=log_posterior
                             )
                             .sample()
                             .view(N, self.D)
                         )
-
-            return x.detach().cpu().numpy().astype(int)  # , x_hist, x0_hist
+                change_jump.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
+                x = x_new
+            return x.detach().cpu().numpy().astype(int), change_jump  # , x_hist, x0_hist
 
 
 @sampling_utils.register_sampler
@@ -757,7 +764,7 @@ class CRMLBJF:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
-
+            change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
                 # p_theta(x_0|x_t) ?
@@ -789,7 +796,7 @@ class CRMLBJF:
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                x = (
+                x_new = (
                     torch.distributions.categorical.Categorical(logits=log_posterior)
                     .sample()
                     .view(N, self.D)
@@ -799,20 +806,20 @@ class CRMLBJF:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        logits = model(x, t_ones)
+                        logits = model(x_new, t_ones)
                         ll_all, ll_xt = get_logprob_with_logits(
                             cfg=self.cfg,
                             model=model,
-                            xt=x,
+                            xt=x_new,
                             t=t_ones,
                             logits=logits,
                         )
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
                         fwd_rate = model.rate_mat(
-                            x, t_ones
+                            x_new, t_ones
                         )
 
-                        xt_onehot = F.one_hot(x, self.S)
+                        xt_onehot = F.one_hot(x_new, self.S)
                         posterior = h * (torch.exp(log_weight) * fwd_rate + fwd_rate)
                         off_diag = torch.sum(
                             posterior * (1 - xt_onehot), axis=-1, keepdims=True
@@ -824,15 +831,16 @@ class CRMLBJF:
                         )
                         # log_posterior = torch.log(posterior + 1e-35)
                         log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
-                        x = (
+                        x_new = (
                             torch.distributions.categorical.Categorical(
                                 logits=log_posterior
                             )
                             .sample()
                             .view(N, self.D)
                         )
-
-            return x.detach().cpu().numpy().astype(int)
+                change_jump.append((torch.sum(x_new != x, dim=1) / (N * self.D)).float())
+                x = x_new
+            return x.detach().cpu().numpy().astype(int), change_jump
 
 
 @sampling_utils.register_sampler
