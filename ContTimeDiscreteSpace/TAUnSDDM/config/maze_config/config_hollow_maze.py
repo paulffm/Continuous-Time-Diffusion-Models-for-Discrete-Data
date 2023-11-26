@@ -18,9 +18,7 @@ def get_config():
     loss.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0.001
     loss.min_time = 0.01
-    loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -67,14 +65,14 @@ def get_config():
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    model.num_layers = 6
+    model.num_layers = 8
     # TransformerBlock
     ## SA
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 2048  # d_model in TAU => embed_dim?
+    model.mlp_dim = 3072  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = None
     # ConcatReadout

@@ -289,7 +289,7 @@ class AttentionReadout(nn.Module):
         elif self.config.model.transformer_norm_type == "postnorm":
             x = self.cross_attention(l2r_embed, r2l_embed, temb)
             x = x + inputs
-            x = self.ln1(x)  # adjust based on your requirements
+            x = self.ln1(x)  
         else:
             raise ValueError(
                 "unknown norm type %s" % self.config.model.transformer_norm_type

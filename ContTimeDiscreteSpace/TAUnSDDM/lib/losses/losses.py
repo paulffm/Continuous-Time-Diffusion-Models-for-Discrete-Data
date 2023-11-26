@@ -814,6 +814,7 @@ class EBMAux:
             .view(B, self.D)
         )  # bis hierhin <1 sek
 
+        # get_logits
         mask = torch.eye(self.D, device=device, dtype=torch.int32).repeat_interleave(
             B * self.S, 0
         )  # check

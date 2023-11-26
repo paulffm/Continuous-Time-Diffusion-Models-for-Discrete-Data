@@ -45,7 +45,7 @@ def get_config():
     model.name = "UniformHollowEMA"
     # Forward model
     model.rate_const = 0.7
-    model.t_func = "loq_sqr"  # log_sqr
+    model.t_func = "log_sqr"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
 
