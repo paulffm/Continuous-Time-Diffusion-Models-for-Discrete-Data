@@ -839,8 +839,8 @@ def maze_gen(
         image_array = np.array(mazeImageBW) * 2
         solved_maze = find_path(image_array, random_transform)
 
-        if random_transform and random.choice([True, False]):
-            solved_maze = np.rot90(solved_maze).copy()
+        #if random_transform and random.choice([True, False]):
+        #    solved_maze = np.rot90(solved_maze).copy()
 
         img_tensor = torch.tensor(solved_maze, device=device).unsqueeze(0)
 

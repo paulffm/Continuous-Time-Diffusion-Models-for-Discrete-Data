@@ -55,7 +55,7 @@ class ElboTauL:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
-            t = 1.0
+            ts[0] = 0.99999
             change_jump = []
             change_clamp = []
 
@@ -167,6 +167,7 @@ class ElboLBJF:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            ts[0] = 0.99999
             t = 1.0
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
@@ -757,6 +758,7 @@ class ExactSampling:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            ts[0] = 0.99999
             # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
@@ -863,6 +865,7 @@ class CRMLBJF:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            ts[0] = 0.99999
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -958,6 +961,7 @@ class CRMTauL:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            ts[0] = 0.99999
             change_jump = []
             change_clamp = []
 
@@ -1032,6 +1036,7 @@ class CRMBinary:
             ts = np.concatenate(
                 (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
             )
+            ts[0] = 0.99999
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -1058,3 +1063,19 @@ class CRMBinary:
                 x = x_new
 
         return x.detach().cpu().numpy().astype(int), change_jump
+
+
+"""
+ def adaptive_tau(self, x, rate, h, threshold=10):
+        # Berechnen der erwarteten Anzahl von Ereignissen
+        # Angenommen, dass 'rate' die Raten für die entsprechenden Zustandsübergänge enthält
+        expected_events = rate.sum(dim=2) * h  # Summiert über alle Zustände
+
+        # Anpassen von h basierend auf der erwarteten Anzahl von Ereignissen
+        max_events = expected_events.max()
+        if max_events > threshold:
+            # Verringern Sie h, wenn die Anzahl der erwarteten Ereignisse zu hoch ist
+            h = h * threshold / max_events
+
+        return h
+"""

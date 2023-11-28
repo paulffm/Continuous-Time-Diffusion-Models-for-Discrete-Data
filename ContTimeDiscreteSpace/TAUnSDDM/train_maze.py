@@ -21,6 +21,7 @@ import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 from ruamel.yaml.scalarfloat import ScalarFloat
+import time
 
 
 def main():
@@ -100,13 +101,14 @@ def main():
     training_loss = []
     exit_flag = False
     n = 1
+    start = time.time()
     while True:
         for minibatch in dataloader: #tqdm(dataloader): #
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 
             if n % 100 == 0:
-                print("Iter:", n)
+                print("Iter:", n, time.time() - start)
             n += 1
 
             if (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0 or state[

@@ -26,7 +26,7 @@ def get_config():
     training.n_iters = 300000 # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 5  # 1
+    training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
 
@@ -45,13 +45,14 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniVarHollowEMA"
+    model.log_prob = 'cat'
     # Forward model
-    model.rate_const = 2.3
+    model.rate_const = 1.9
     #model.rate_sigma = 6.0
     model.Q_sigma = 512.0
     #model.time_exp = 5  # b
     #model.time_base = 5 # a
-    model.t_func = "log_sqr"  # log_sqr
+    model.t_func = "sqrt_cos"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"
     model.nets = "bidir_transformer2"
@@ -72,7 +73,7 @@ def get_config():
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 3072  # d_model in TAU => embed_dim?
+    model.mlp_dim = 2048  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = None
     # ConcatReadout
@@ -91,11 +92,11 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 2e-4  # 2e-4
+    optimizer.lr = 2e-3  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 3000
+    saving.checkpoint_freq = 2000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping

@@ -31,6 +31,7 @@ class CTElbo:
 
         # get random timestep between 1.0 and self.min_time
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
 
         qt0 = model.transition(
             ts
@@ -618,6 +619,7 @@ class CatRM:
         B = minibatch.shape[0]
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
 
         qt0 = model.transition(ts)  # (B, S, S)
 
@@ -796,6 +798,7 @@ class EBMAux:
         B, D = minibatch.shape
         device = self.cfg.device
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
 
         qt0 = model.transition(ts)  # (B, S, S)
 
@@ -874,6 +877,7 @@ class BinEBMAux:
         device = self.cfg.device
         B = minibatch.shape[0]
         ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
 
         qt0 = model.transition(ts)  # (B, S, S)
 
