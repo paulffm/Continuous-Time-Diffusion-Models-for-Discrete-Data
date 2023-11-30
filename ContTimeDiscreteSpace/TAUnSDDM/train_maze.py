@@ -39,9 +39,9 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_92999_hollowAtt.pt"
-        date = "2023-11-24"
-        config_name = "config_001_hollow10MRAtt.yaml"
+        model_name = "model_139999.pt"
+        date = "2023-11-29"
+        config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -57,9 +57,9 @@ def main():
     if train_resume:
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 300000
+        cfg.training.n_iters = 500000
         cfg.sampler.sample_freq = 500000000000
-        cfg.saving.checkpoint_freq = 3000
+        cfg.saving.checkpoint_freq = 5000
         cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)

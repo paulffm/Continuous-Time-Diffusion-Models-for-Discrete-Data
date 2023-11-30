@@ -556,6 +556,7 @@ class CatRM:
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
         self.D = self.cfg.model.concat_dim
+        self.direct_model_supervision = self.cfg.loss.dms
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         device = model.device
@@ -640,26 +641,45 @@ class CatRM:
             xt, ts
         )  # B, D, S: logits for every class in every dimension in x_t
         loss = 0.0
-        if self.cfg.loss.ce_coeff > 0:  # whole train step <10 sek
+
+        if self.direct_model_supervision:
+            xt_onehot = F.one_hot(xt.long(), self.S)
+            p0t = F.softmax(logits, dim=-1)
+            qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
+            prob_all = p0t @ qt0
+            log_prob = torch.log(prob_all + 1e-35)
+            ll_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+            loss = -ll_xt
+            weight = torch.ones((B,), device=device, dtype=torch.float32)
+            weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
+            loss = loss * weight * (1 - self.cfg.loss.ce_coeff)
+
             x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
+            ll = F.log_softmax(logits, dim=-1)
+            ll_loss = -torch.sum(ll * x0_onehot, dim=-1) 
+            loss = loss + self.cfg.loss.nll_weight * ll_loss
+        else:
+
+            ll_all, ll_xt = get_logprob_with_logits(
+                self.cfg, model, xt, ts, logits
+            )  # ll_all= log prov of all states, ll_xt = log prob of true states
+            
+            loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
+                1 - self.cfg.loss.ce_coeff
+            )
+
+
+        return torch.sum(loss) / B # sum over D
+"""
+x0_onehot = F.one_hot(minibatch.long(), self.cfg.data.S)
             ll = F.log_softmax(
                 logits, dim=-1
             )  # B, D, S: Prob of every class in every dimension of x_t => softmax(logits, -1) =>D=2 S=3    [0.4, 0.5, 0.1]
             #                                                                                               [0.8, 0.1, 0.1]
             loss = (
                 -torch.sum(ll * x0_onehot, dim=-1) * self.cfg.loss.ce_coeff
-            )  # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0], [0.8, 0 0]
-        else:
-            ll_all, ll_xt = get_logprob_with_logits(
-                self.cfg, model, xt, ts, logits
-            )  # ll_all= log prov of all states, ll_xt = log prob of true states
-            
-            loss = loss + self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
-                1 - self.cfg.loss.ce_coeff
-            )
-
-        return torch.sum(loss) / B # sum over D
-
+            )  # ll * x0_onehot: True class in dim D_1=2, D_2=1: [0, 0.5, 0]
+"""
 
 """
 # checked

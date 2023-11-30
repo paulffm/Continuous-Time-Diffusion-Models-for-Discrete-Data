@@ -969,8 +969,15 @@ class CRMTauL:
                 h = ts[idx] - ts[idx + 1]
 
                 t_ones = t * torch.ones((N,), device=device)
-                ll_all, ll_xt = self.get_logprob(
-                    self.cfg, model, x, t_ones, N, self.D, self.S
+                #ll_all, ll_xt = self.get_logprob(self.cfg, model, x, t_ones, N, self.D, self.S)
+                logits = model(x, t * torch.ones((N,), device=device))
+
+                ll_all, ll_xt = get_logprob_with_logits(
+                    cfg=self.cfg,
+                    model=model,
+                    xt=x,
+                    t=t * torch.ones((N,), device=device),
+                    logits=logits,
                 )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
