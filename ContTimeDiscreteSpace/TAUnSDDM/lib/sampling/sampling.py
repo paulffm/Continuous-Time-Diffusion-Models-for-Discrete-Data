@@ -127,9 +127,9 @@ class ElboTauL:
                 change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
                 x = x_new
 
-            # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            # x_0max = torch.max(p_0gt, dim=2)[1]
-            x_0max = x
+            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            x_0max = torch.max(p_0gt, dim=2)[1]
+            #x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
@@ -989,6 +989,89 @@ class CRMTauL:
 
                 flips = torch.distributions.poisson.Poisson(
                     posterior
+                ).sample()  # B, D most 0
+                choices = utils.expand_dims(
+                    torch.arange(self.S, device=device, dtype=torch.int32),
+                    axis=list(range(x.ndim)),
+                )  # 1,1, S
+                if not self.is_ordinal:
+                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                    flip_mask = (tot_flips <= 1) * 1
+                    flips = flips * flip_mask
+                diff = choices - x.unsqueeze(-1)
+                avg_offset = torch.sum(
+                    flips * diff, axis=-1
+                )  # B, D, S with entries -(S - 1) to S-1
+                xp = x + avg_offset
+
+                change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+                x_new = torch.clip(xp, min=0, max=self.S - 1)
+                change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
+                x = x_new
+
+            return x.detach().cpu().numpy().astype(int), change_jump
+
+
+@sampling_utils.register_sampler
+class CRMMidPointTau:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.is_ordinal = cfg.sampler.is_ordinal
+
+        if cfg.model.log_prob == "bin_ebm":
+            self.get_logprob = partial(bin_ebm_logits)
+        elif cfg.model.log_prob == "ebm":
+            self.get_logprob = partial(ebm_logits)
+        else:  # cfg.model.log_prob == 'cat':
+            self.get_logprob = partial(cat_logits)
+
+    def sample(self, model, N):
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+        with torch.no_grad():
+            x = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+            ts[0] = 0.99999
+            change_jump = []
+            change_clamp = []
+
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+
+                t_ones = t * torch.ones((N,), device=device)
+                #ll_all, ll_xt = self.get_logprob(self.cfg, model, x, t_ones, N, self.D, self.S)
+                logits = model(x, t * torch.ones((N,), device=device))
+
+                ll_all, ll_xt = get_logprob_with_logits(
+                    cfg=self.cfg,
+                    model=model,
+                    xt=x,
+                    t=t * torch.ones((N,), device=device),
+                    logits=logits,
+                )
+
+                log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
+                fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S?
+
+                xt_onehot = F.one_hot(x.long(), self.S)
+                posterior = torch.exp(log_weight) * fwd_rate 
+                
+
+                flips = torch.distributions.poisson.Poisson(
+                    posterior * h
                 ).sample()  # B, D most 0
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),

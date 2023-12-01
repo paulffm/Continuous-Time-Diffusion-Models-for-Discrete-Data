@@ -13,12 +13,14 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
-    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
-    loss.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
+    loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
+    loss.nll_weight = 0.001
+    loss.dms = False
 
     loss.eps_ratio = 1e-9
-    loss.min_time = 0.01
+    loss.min_time = 0.005
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -47,7 +49,7 @@ def get_config():
     model.name = "UniVarHollowEMA"
     model.log_prob = 'cat'
     # Forward model
-    model.rate_const = 1.9
+    model.rate_const = 1.7
     #model.rate_sigma = 6.0
     model.Q_sigma = 512.0
     #model.time_exp = 5  # b
@@ -92,16 +94,16 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 2e-3  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 2000
+    saving.checkpoint_freq = 3000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 750
-    sampler.min_t = 0.01
+    sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10

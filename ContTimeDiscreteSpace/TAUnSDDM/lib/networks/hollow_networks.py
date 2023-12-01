@@ -202,7 +202,7 @@ def transformer_timestep_embedding(
     return emb
 
 
-# probably wrong
+
 class CrossAttention(nn.Module):
     def __init__(self, config):
         super(CrossAttention, self).__init__()
@@ -232,40 +232,38 @@ class CrossAttention(nn.Module):
 
         key = self.dense_key(all_embed).view(all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim) # 
         val = self.dense_val(all_embed).view(all_embed.size(0), all_embed.size(1), self.num_heads, self.head_dim)
-        #print("quer1", query.shape)
+         # B, D, H, HD
         query = query / torch.sqrt(torch.tensor(query.shape[-1], device=self.device,dtype=torch.float32))
-        #print("query2", query.shape)
-        logits = torch.einsum("bqhd,bkhd->bhqk", query, key)
+         # B, D, H, HD
+        logits = torch.einsum("bqhd,bkhd->bhqk", query, key) # B, H, D, H*HD
         #logits = torch.einsum("bqe,bke->bkq", query, key) # without view
-        #print("logits,", logits.shape)
 
-        att_l2r_mask = torch.triu(
+
+        att_l2r_mask = ~torch.triu(
             torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
             diagonal=1,
-        ).unsqueeze(0)
-        #print("att_r2l_mask", att_l2r_mask.shape)
-        att_r2l_mask = torch.tril(
+        ).unsqueeze(0) # 1, D, D
+
+        att_r2l_mask = ~torch.tril(
             torch.ones((seq_len, seq_len), device=self.device, dtype=torch.bool),
             diagonal=-1,
-        ).unsqueeze(0)
-        #print("att_r2l_mask", att_r2l_mask.shape)
+        ).unsqueeze(0) # 1, D, D
+ 
 
-        att_t = torch.ones((1, seq_len, 1), device=self.device)
-        #print("att_t", att_t.shape)
-        joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(
-            0
-        ) > 0
-        attn_weights = torch.where(joint_mask, logits, torch.tensor(torch.finfo(logits.dtype).min, device=self.device))
+        att_t = torch.ones((1, seq_len, 1), device=self.device) # 1, D, 1
+ 
+        joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(0) # 1, 1, D, H*HD
+        #print("joint_maks", joint_mask.shape)
+        joint_mask = joint_mask > 0
+        attn_weights = torch.where(joint_mask, logits, torch.tensor(torch.finfo(logits.dtype).min, device=self.device)) # B, D, H, H*HD
         attn_weights = F.softmax(attn_weights, dim=-1)
-        #print("attn", attn_weights.shape)
         x = torch.einsum(
             "bhqk,bkhd->bqhd", attn_weights, val
         )  # B, D, self.num_heads, self.head_dim
+    
         # x = torch.einsum("bkq,bke->bqe", attn_weights, val) # without view
-        x = x.reshape(x.shape[0], x.shape[1], self.num_heads * self.head_dim)
-        #print("before lin", x.shape)
+        x = x.reshape(x.shape[0], x.shape[1], self.num_heads * self.head_dim) # B, D, H, HD
         x = self.out_linear(x)
-        #print("x", x.shape)
         return x
 
 
@@ -538,7 +536,8 @@ class UniDirectionalTransformer(nn.Module):
                     (concat_dim, concat_dim), device=self.device, dtype=torch.bool
                 ),
                 diagonal=1,  # concat_dim = D; if conditioner:
-            )  # right mask
+            )  
+            mask = torch.where(mask, torch.tensor(float('-inf')), torch.tensor(0.0))
 
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)  # B, D-1, E + B, 1or2, E
@@ -547,7 +546,9 @@ class UniDirectionalTransformer(nn.Module):
                     (concat_dim, concat_dim), device=self.device, dtype=torch.bool
                 ),
                 diagonal=-1,
-            )  # right mask
+            )  
+            mask = torch.where(mask, torch.tensor(float('-inf')), torch.tensor(0.0))
+
 
         # if K != D => need to initialize pos_embed with cfg.concat_dim + n
         x = self.pos_embed(x)
