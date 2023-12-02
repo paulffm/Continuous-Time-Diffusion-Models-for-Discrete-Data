@@ -124,8 +124,6 @@ class CTElbo:
         # ---------- First term of ELBO (regularization) ---------------
         # use forward from UNet, MLP, Sequencetransformer
 
-        # softmax(logits) => probabilities
-        # p0t_reg = ptheta_{0|t}(x_0|x) = q_{0|t}(x0|x)
         if self.one_forward_pass:
             x_logits = model(x_tilde, ts)  # (B, D, S)
             # ensures that positive
@@ -137,7 +135,7 @@ class CTElbo:
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
             reg_x = x_t
 
-        # same as 1-one_hot 
+        # same as 1-one_hot => diagonals to 0
         mask_reg = torch.ones((B, D, S), device=device)
         mask_reg[
             torch.arange(B, device=device).repeat_interleave(D),
@@ -173,20 +171,8 @@ class CTElbo:
 
         reg_term = torch.sum((p0t_reg / qt0_denom_reg) * reg_tmp, dim=(1, 2))
 
-        # R^theta_t(x,x ̃) = R_t(x ̃,x) * sum_x_0 (q_{t|0} (x ̃|x_0) / q_{t | 0} (x|x_0)) * ptheta_{0|t}(x_0|x)
-        # (mask_reg * rate_vals_reg) = sum_x' R^theta_t(x',x) for x != x'
-        # qt0_numer_reg  = q_{t|0} (x ̃|x_0)
-        # qt0_denom_reg = q_{t|0} (x|x_0)
-        # p0t_reg = ptheta_{0|t}(x_0|x)
 
         # ----- second term of continuous ELBO (signal term) ------------
-
-        # To evaluate the LCT objective, we naively need to perform two forward passes of the denoising
-        # network: p^{θ}_{0|t}(x0|x) to calculate Rˆtθ(x, x′) and p^{θ}_{0|t}(x0|x ̃) to calculate Rˆtθ(x ̃, x). This is wasteful
-
-        # because x ̃ is created from x by applying a single forward transition which on multi-dimensional problems
-        # means x ̃ differs from x in only a single dimension. To exploit the fact that x ̃ and x are very similar,
-        # we approximate the sample x ∼ qt(x) with the sample x ̃ ∼ Px qt(x)rt(x ̃|x).
 
         if self.one_forward_pass:
             p0t_sig = p0t_reg
