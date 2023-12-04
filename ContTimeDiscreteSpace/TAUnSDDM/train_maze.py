@@ -39,9 +39,9 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_122999_hollowXtProb.pt"
-        date = "2023-12-01"
-        config_name = "config_001_hollowXtCos14Prob.yaml"
+        model_name = "model_50999_hollowXtELBO.pt"
+        date = "2023-12-02"
+        config_name = "config_001_hollowXtELBO.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 

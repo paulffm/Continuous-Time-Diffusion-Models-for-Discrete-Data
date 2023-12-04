@@ -551,9 +551,12 @@ class CatRM:
             loss = -ll_xt
         elif self.cfg.loss.loss_type == "mle":
             # check
+            # - ((S-1) * log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)
+            #          + sum_y^d log(1 - exp(-|log p^{\theta}_t(y^{d}_t|x^{\backslash d}_t)|))
+            #          - log(1 - exp(-|log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)|))           
             loss = -(
                 (self.cfg.data.S - 1) * ll_xt
-                + torch.sum(utils.log1mexp(ll_all), dim=-1)
+                + torch.sum(utils.log1mexp(ll_all), dim=-1) # log(1 - exp(-|x|)) elementwise in a numerically stable way.
                 - utils.log1mexp(ll_xt)
             )
         elif self.cfg.loss.loss_type == "elbo":  # direct + elbo => - Loss

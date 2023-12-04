@@ -14,7 +14,7 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "elbo"  # rm, mle, elbo
+    loss.loss_type = "mle"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
     loss.nll_weight = 0.001
     loss.dms = False
