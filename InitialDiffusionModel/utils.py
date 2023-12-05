@@ -6,7 +6,7 @@ from tqdm import tqdm
 from initialdiffusionmodel import InitialDiffusionModel
 import torch.optim
 from typing import Tuple
-
+#
 def sample_batch(batch_size: int, device='cpu') -> torch.Tensor:
     data, _ = make_swiss_roll(batch_size)
     # Only 2D

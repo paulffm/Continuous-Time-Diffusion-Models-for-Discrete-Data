@@ -1,5 +1,5 @@
 
-# one hot encode sequence und filter: N steht oft für unbekannt => das wird hier gelöscht
+
 X_train = np.array(
     [one_hot_encode(x, NUCLEOTIDES, 200) for x in tqdm_notebook(raw_dataset['raw_sequence']) if 'N' not in x]
 )
