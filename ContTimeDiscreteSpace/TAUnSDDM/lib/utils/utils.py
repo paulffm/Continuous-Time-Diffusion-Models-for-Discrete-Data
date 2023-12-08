@@ -81,8 +81,10 @@ def categorical_log_likelihood(x, logits):
     x_onehot = F.one_hot(x, logits.shape[-1]).float()
     return (log_probs * x_onehot).sum(dim=-1)
 
-
+# expm1(x) = exp(x) - 1
+# log1p(x) = log(1+x)
 def log1mexp(x):
+    # log(1 - exp(x))
     x = -torch.abs(x)
     return torch.where(
         x > -0.693, torch.log(-torch.expm1(x)), torch.log1p(-torch.exp(x))

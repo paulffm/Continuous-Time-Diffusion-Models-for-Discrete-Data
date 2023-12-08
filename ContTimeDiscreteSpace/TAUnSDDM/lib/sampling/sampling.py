@@ -980,25 +980,31 @@ class CRMTauL:
                     logits=logits,
                 )
 
+
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
-                fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S?
+                fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                posterior = torch.exp(log_weight) * fwd_rate * h
-                posterior = posterior * (1 - xt_onehot)
+                posterior = torch.exp(log_weight) * fwd_rate 
+                posterior = posterior * (1 - xt_onehot) # B, D, S
+                print("posterior", posterior, posterior.shape)
 
                 flips = torch.distributions.poisson.Poisson(
-                    posterior
+                    posterior * h
                 ).sample()  # B, D most 0
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
                     axis=list(range(x.ndim)),
                 )  # 1,1, S
+                print("choices", choices, choices.shape)
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
+
                 diff = choices - x.unsqueeze(-1)
+                print("x", x.unsqueeze(-1), x.unsqueeze(-1).shape)
+                print("diff", diff, diff.shape)
                 avg_offset = torch.sum(
                     flips * diff, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
@@ -1062,12 +1068,14 @@ class CRMMidPointTau:
                     t=t * torch.ones((N,), device=device),
                     logits=logits,
                 )
+                
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
                 fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S?
 
                 xt_onehot = F.one_hot(x.long(), self.S)
                 posterior = torch.exp(log_weight) * fwd_rate 
+                x_strich = x + 0.5 * h * posterior * ()
                 
 
                 flips = torch.distributions.poisson.Poisson(

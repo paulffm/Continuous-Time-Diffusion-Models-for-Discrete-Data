@@ -739,6 +739,17 @@ class GaussianTargetRateImageX0PredEMAPaul(
 
         self.init_ema()
 
+@model_utils.register_model
+class GaussianHollowEMA(
+    EMA, HollowTransformer, GaussianTargetRate
+):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        HollowTransformer.__init__(self, cfg, device, rank)
+        GaussianTargetRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMA(EMA, ImageX0PredBase, GaussianTargetRate):

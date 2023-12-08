@@ -4,7 +4,7 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.mnist_config.config_bert_mnist import get_config
-from config.mnist_config.config_tauUnet_mnist import get_config
+from config.mnist_config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -122,7 +122,7 @@ def main():
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples = sampler.sample(state["model"], n_samples, 10)
+                samples, _ = sampler.sample(state["model"], n_samples)
                 samples = samples.reshape(
                     n_samples, 1, cfg.data.image_size, cfg.data.image_size
                 )

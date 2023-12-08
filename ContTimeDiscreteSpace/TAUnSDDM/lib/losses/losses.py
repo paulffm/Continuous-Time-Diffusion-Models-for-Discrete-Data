@@ -15,7 +15,7 @@ class CTElbo:
         self.ratio_eps = cfg.loss.eps_ratio
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
-        self.one_forward_pass = cfg.loss.one_forward_pass
+        self.one_forward_pass = cfg.loss.one_forward_pass   
         self.cross_ent = nn.CrossEntropyLoss()
 
     def calc_loss(self, minibatch, state):
@@ -43,16 +43,6 @@ class CTElbo:
         )  # (B, S, S) # no proability in here (diagonal = - sum of rows)
 
         # --------------- Sampling x_t, x_tilde --------------------
-        # qt0_rows_reg = (B * D, S) probability distribution
-        # diagonal elements of qt0 (higher probability) will be put at column of value of x_t
-        # we do this because then we sample from qt0_rows_reg and then it is most likely more similar to x0=batch
-        # example: q_t0 =   [0.4079, 0.2961, 0.2961],
-        #                   [0.2961, 0.4079, 0.2961],
-        #                   [0.2961, 0.2961, 0.4079]],
-        # batch = (2, 0, 1)
-        # qt0_rows_reg = [0.2961, 0.2961, 0.4079],
-        #                [0.4079, 0.2961, 0.4079],
-        #                [0.2961, 0.4079, 0.2961]
 
         qt0_rows_reg = qt0[
             torch.arange(B, device=device).repeat_interleave(
@@ -90,8 +80,6 @@ class CTElbo:
         )
 
         # Samples where transitions takes place in every row of B
-        # if x_t = (0, 1, 2, 4, 3) (B = 1) and square_dims = 3
-        # x_t = (0, 1, 2, X, 3) => will change
         square_dims = square_dimcat.sample()  # (B,) taking values in [0, D)
 
         rate_new_val_probs = rate_vals_square[
@@ -164,7 +152,7 @@ class CTElbo:
             :,
             reg_x.long().flatten(),
         ].view(B, D, S)
-        # mask_reg * rate_vals_reg => - values => 0
+        
         reg_tmp = (mask_reg * rate_vals_reg) @ qt0_numer_reg.transpose(
             1, 2
         )  # (B, D, S)
@@ -226,11 +214,12 @@ class CTElbo:
             + self.ratio_eps
         )  # (B, D)
 
+        # r(\tilde{x}|x) = (1 - delta) R(x, \tilde{x}) 
         outer_sum_sig = torch.sum(
             x_tilde_mask
-            * outer_rate_sig
+            * outer_rate_sig # forward rate B, D, S
             * (outer_qt0_numer_sig / outer_qt0_denom_sig.view(B, D, 1))
-            * inner_log_sig,
+            * inner_log_sig, # nur ratio der reverse rate 
             dim=(1, 2),
         )
 
@@ -542,7 +531,6 @@ class CatRM:
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
         self.D = self.cfg.model.concat_dim
-        self.direct_model_supervision = self.cfg.loss.dms
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         device = model.device
@@ -559,6 +547,118 @@ class CatRM:
                 + torch.sum(utils.log1mexp(ll_all), dim=-1) # log(1 - exp(-|x|)) elementwise in a numerically stable way.
                 - utils.log1mexp(ll_xt)
             )
+        elif self.cfg.loss.loss_type == "elbo":  # direct + elbo => - Loss
+            xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
+            b = utils.expand_dims(
+                torch.arange(xt.shape[0], device=device), tuple(range(1, xt.dim()))
+            )
+
+            qt0_x2y = model.transition(t)
+            qt0_y2x = qt0_x2y.permute(0, 2, 1)
+            qt0_y2x = qt0_y2x[b, xt.long()]
+            ll_xt = ll_xt.unsqueeze(-1)
+            # ll_xt: log p_t(X^d=x^d_t|x^ohned)
+            # ll_all 
+            backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
+            first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
+
+            qt0_x2y = qt0_x2y[b, xt.long()]
+            fwd = (ll_xt - ll_all) * qt0_x2y
+            second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
+            loss = first_term - second_term
+
+        else:
+            raise ValueError("Unknown loss_type: %s" % self.cfg.loss_type)
+        weight = torch.ones((B,), device=device, dtype=torch.float32)
+        weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
+        loss = loss * weight
+
+        return loss
+
+    def calc_loss(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+
+        model = state["model"]
+
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+
+        B = minibatch.shape[0]
+        device = self.cfg.device
+        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
+
+        qt0 = model.transition(ts)  # (B, S, S)
+
+        b = utils.expand_dims(
+            torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
+        )
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
+
+        log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # B, D
+
+        # get logits from CondFactorizedBackwardModel
+        logits = model(
+            xt, ts
+        )  # B, D, S: logits for every class in every dimension in x_t
+        loss = 0.0
+
+
+        ll_all, ll_xt = get_logprob_with_logits(
+            self.cfg, model, xt, ts, logits
+        )  # ll_all= log prov of all states, ll_xt = log prob of true states
+        
+        loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
+            1 - self.cfg.loss.ce_coeff
+        )
+
+
+        return torch.sum(loss) / B # sum over D
+
+# checked
+@losses_utils.register_loss
+class CatRMTest:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.min_time = cfg.loss.min_time
+        self.S = self.cfg.data.S
+        self.D = self.cfg.model.concat_dim
+        self.direct_model_supervision = self.cfg.loss.dms
+
+    def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
+        device = model.device
+        B = xt.shape[0]
+        if self.cfg.loss.loss_type == "rm":
+            loss = -ll_xt
+            print("RM", loss)
+        elif self.cfg.loss.loss_type == "mle":
+            # check
+            # - ((S-1) * log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)
+            #          + sum_y^d log(1 - exp(-|log p^{\theta}_t(y^{d}_t|x^{\backslash d}_t)|))
+            #          - log(1 - exp(-|log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)|))           
+            loss = -(
+                (self.cfg.data.S - 1) * ll_xt
+                + torch.sum(utils.log1mexp(ll_all), dim=-1) # log(1 - exp(-|x|)) elementwise in a numerically stable way.
+                - utils.log1mexp(ll_xt)
+            )
+            print("MLE", loss)
         elif self.cfg.loss.loss_type == "elbo":  # direct + elbo => - Loss
             xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
             b = utils.expand_dims(
@@ -656,7 +756,23 @@ class CatRM:
             loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
                 1 - self.cfg.loss.ce_coeff
             )
-
+            print("loss shape", loss.shape)
+            loss_mled = torch.sum(loss, dim=1)
+            loss_mle = torch.sum(loss) / B
+            print("loss MLE", loss_mle)
+            self.cfg.loss.loss_type = "rm"
+            loss_rm = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
+                1 - self.cfg.loss.ce_coeff
+            )
+            print("Divide all", loss /loss_rm)
+            loss_rmd = torch.sum(loss_rm, dim=1)
+            print("Divide d", loss_mled /loss_rmd)
+            loss_rm = torch.sum(loss_rm) / B
+            print("loss RM", loss_rm)
+            print("Equal", (loss_rm == loss_mle).all()) # False
+            print("Divide", loss_mle /loss_rm) # about 2.75, 2.76
+            print("Minus", loss_mle - loss_rm) # 
+            self.cfg.loss.loss_type = "mle"
 
         return torch.sum(loss) / B # sum over D
 """

@@ -22,7 +22,7 @@ import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 from ruamel.yaml.scalarfloat import ScalarFloat
 import time
-
+# MLE: Iter: 300000 168214.7792992592
 
 def main():
     data_name = 'MAZE'
@@ -32,18 +32,19 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_50999_hollowXtELBO.pt"
-        date = "2023-12-02"
-        config_name = "config_001_hollowXtELBO.yaml"
+        model_name = "model_194999_hollowMLEProbRand.pt"
+        date = "2023-12-07"
+        config_name = "config_001_hollowMLEProbRand.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
+        #cfg.loss.name = "CatRMTest"
 
     device = torch.device(cfg.device)
 
@@ -134,7 +135,7 @@ def main():
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples = sampler.sample(state["model"], n_samples)
+                samples,_ = sampler.sample(state["model"], n_samples)
                 samples = samples.reshape(
                     n_samples, 1, cfg.data.image_size, cfg.data.image_size
                 )

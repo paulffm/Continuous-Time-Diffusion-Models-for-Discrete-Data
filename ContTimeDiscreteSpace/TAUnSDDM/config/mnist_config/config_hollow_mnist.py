@@ -6,28 +6,27 @@ def get_config():
     save_directory = "SavedModels/MNIST"
     config = ml_collections.ConfigDict()
 
-    config.device = "cpu"
+    config.device = "cuda"
     config.distributed = False
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
-    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "rm"  # rm, mle, elbo
-    loss.ce_coeff = 1  # >0 whole train_step with backward < 10 sek
+    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.loss_type = "mle"  # rm, mle, elbo
+    loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.min_time = 0.005
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 2  # 2000 #2000000
+    training.n_iters = 300000  # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 5  # 1
+    training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
 
@@ -44,113 +43,54 @@ def get_config():
     data.use_augm = False
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "UniformBDTEMA"
-    # Forward model
-    model.rate_const = 0.01
-    model.t_func = "loq_sqr"  # log_sqr
-    # hollow:
+    model.name = "GaussianHollowEMA"
     model.net_arch = "bidir_transformer"
+    model.nets = "bidir_transformer2"
+    model.use_cat = False
 
     # BiDir
-    model.embed_dim = 512
-    model.bidir_readout = "res_concat"  # res_concat, attention, concat
+    model.embed_dim = 320
+    model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
-    # UniDirectional
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
-    # config.dtype = torch.float32
-    model.num_layers = 1
-    # TransformerBlock
-    ## SA
-    model.num_heads = 1
+    model.num_layers = 6
+    model.num_heads = 8
     model.attention_dropout_rate = 0.1
-    model.transformer_norm_type = "postnorm"  # prenorm
+    model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
     model.mlp_dim = 512  # d_model in TAU => embed_dim?
-    ### TransformerMLPBlock
     model.out_dim = data.S
-    # ConcatReadout
     model.readout_dim = data.S
-    # MLP
-    # features, activation
-
-    # ResidualReadout
-    model.num_output_ffresiduals = 1
-
-    # AttentionReadout
-    ## CrossAttention
-    model.qkv_dim = config.embed_dim
-    # config.num_heads = 4
+    model.num_output_ffresiduals = 2
+    model.qkv_dim = model.embed_dim
     model.ema_decay = 0.9999  # 0.9999
-    model.Q_sigma = 20.0
     model.time_scale_factor = 1000
+
+    model.rate_sigma = 6.0
+    model.Q_sigma = 512.0
+    model.time_exp = 100.0
+    model.time_base = 3.0
+    model.log_prob = 'cat'
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 5
+    saving.checkpoint_freq = 5000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "TauLeaping"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 2
-    sampler.min_t = 0.01
+    sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
+    sampler.num_steps = 1000
+    sampler.min_t = 0.005
     sampler.eps_ratio = 1e-9
-    sampler.initial_dist = "uniform"
+    sampler.initial_dist = "gaussian"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 2
     sampler.is_ordinal = True
-
-    """
-    model.num_layers = 6
-    model.d_model = 256
-    model.num_heads = 8
-    model.dim_feedforward = 1024 # 2048
-    model.dropout = 0.1
-    model.temb_dim = 256
-    model.num_output_FFresiduals = 2
-    model.time_scale_factor = 1000
-    model.use_one_hot_input = False
-    model.ema_decay = 0.9999 #0.9999
-
-    model.rate_const = 0.03
-    config.logit_type = "reverse_logscale"
-
-    model.rate_sigma = 3.0
-    model.Q_sigma = 20.0
-    model.time_exponential = 1000.0
-    model.time_base = 0.5
-
-    model.sigma_min = 1.0
-    model.sigma_max = 100.0
-    """
-    # unet
-    """
-    model.rate_const = 0.03
-    model.ch = 32 #128
-    model.num_res_blocks = 2
-    model.num_scales = 4
-    model.ch_mult = [1, 2, 2] # [1, 2, 2, 2]
-    model.input_channels = 1 #3
-    model.scale_count_to_put_attn = 1
-    model.data_min_max = [0, 255]
-    model.dropout = 0.1
-    model.skip_rescale = True
-    model.time_embed_dim = model.ch
-    model.time_scale_factor = 1000
-    model.fix_logistic = False
-    model.ema_decay = 0.9999 #0.9999
-    model.model_output = "logistic_pars"
-    model.Q_sigma = 512.0
-    
-    model.rate_sigma = 6.0
-    model.Q_sigma = 512.0
-    model.time_exponential = 100.0
-    model.time_base = 3.0
-    """
+    sampler.sample_freq = 22000000
 
     return config
