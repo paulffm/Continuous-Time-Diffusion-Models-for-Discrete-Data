@@ -17,3 +17,6 @@ MNISTDiffusionModel/MNIST
 **/Synthetic
 **/Protein_sequences
 ._*
+**/cifar-10-batches-py
+**/cifar-10-python.tar.gz
+**/.png
