@@ -14,9 +14,9 @@ from urllib.request import urlretrieve
 
 @dataset_utils.register_dataset
 class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
-    def __init__(self, cfg, device):
+    def __init__(self, cfg, device, root=None):
         super().__init__(
-            root=cfg.data.root, train=cfg.data.train, download=cfg.data.download
+            root=root, train=cfg.data.train, download=cfg.data.download
         )
 
         self.data = torch.from_numpy(self.data)
@@ -28,7 +28,7 @@ class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
         # Put both data and targets on GPU in advance
         self.data = self.data.to(device).view(-1, 3, 32, 32)
 
-        self.random_flips = cfg.data.random_flips
+        self.random_flips = cfg.data.use_augm
         if self.random_flips:
             self.flip = torchvision.transforms.RandomHorizontalFlip()
 

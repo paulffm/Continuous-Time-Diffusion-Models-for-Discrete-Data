@@ -301,7 +301,7 @@ class GaussianTargetRate:
         transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         if torch.min(transitions) < -1e-6:
             print(
-                f"[Warning] UniformVariantRate, large negative transition values {torch.min(transitions)}"
+                f"[Warning] GaussianTargetRate, large negative transition values {torch.min(transitions)}"
             )
 
         # Clamping at 1e-8 because at float level accuracy anything lower than that

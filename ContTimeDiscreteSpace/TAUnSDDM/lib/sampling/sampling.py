@@ -798,7 +798,7 @@ class ExactSampling:
 
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.log(qt0)
-                log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
                 log_p0t = log_p0t.unsqueeze(-1)
                 log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
@@ -970,13 +970,13 @@ class CRMTauL:
 
                 t_ones = t * torch.ones((N,), device=device)
                 #ll_all, ll_xt = self.get_logprob(self.cfg, model, x, t_ones, N, self.D, self.S)
-                logits = model(x, t * torch.ones((N,), device=device))
+                logits = model(x, t_ones)
 
                 ll_all, ll_xt = get_logprob_with_logits(
                     cfg=self.cfg,
                     model=model,
                     xt=x,
-                    t=t * torch.ones((N,), device=device),
+                    t=t_ones,
                     logits=logits,
                 )
 
@@ -987,7 +987,7 @@ class CRMTauL:
                 xt_onehot = F.one_hot(x.long(), self.S)
                 posterior = torch.exp(log_weight) * fwd_rate 
                 posterior = posterior * (1 - xt_onehot) # B, D, S
-                print("posterior", posterior, posterior.shape)
+                #print("posterior", posterior, posterior.shape)
 
                 flips = torch.distributions.poisson.Poisson(
                     posterior * h
@@ -996,15 +996,15 @@ class CRMTauL:
                     torch.arange(self.S, device=device, dtype=torch.int32),
                     axis=list(range(x.ndim)),
                 )  # 1,1, S
-                print("choices", choices, choices.shape)
+                #print("choices", choices, choices.shape)
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
 
                 diff = choices - x.unsqueeze(-1)
-                print("x", x.unsqueeze(-1), x.unsqueeze(-1).shape)
-                print("diff", diff, diff.shape)
+                #print("x", x.unsqueeze(-1), x.unsqueeze(-1).shape)
+                #print("diff", diff, diff.shape)
                 avg_offset = torch.sum(
                     flips * diff, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
@@ -1014,8 +1014,10 @@ class CRMTauL:
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
                 change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
                 x = x_new
+                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                x_0max = torch.max(p_0gt, dim=2)[1]
 
-            return x.detach().cpu().numpy().astype(int), change_jump
+            return x_0max.detach().cpu().numpy().astype(int), change_jump
 
 
 @sampling_utils.register_sampler

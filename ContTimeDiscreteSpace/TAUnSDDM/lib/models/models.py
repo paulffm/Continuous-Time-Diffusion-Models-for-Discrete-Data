@@ -828,6 +828,14 @@ class UniVarBertEMA(EMA, BertMLPRes, UniformVariantRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniformBertEMA(EMA, BertMLPRes, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BertMLPRes.__init__(self, cfg, device, rank)
+        UniformRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 @model_utils.register_model
 class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):

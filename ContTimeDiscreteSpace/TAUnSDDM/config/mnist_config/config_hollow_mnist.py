@@ -41,6 +41,7 @@ def get_config():
     data.image_size = 28
     data.shape = [1, data.image_size, data.image_size]
     data.use_augm = False
+    data.location = 'lib/datasets/'
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "GaussianHollowEMA"
@@ -72,6 +73,9 @@ def get_config():
     model.time_exp = 100.0
     model.time_base = 3.0
     model.log_prob = 'cat'
+
+    model.rate_const = 2.1
+    model.t_func = "sqrt_cos"
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
