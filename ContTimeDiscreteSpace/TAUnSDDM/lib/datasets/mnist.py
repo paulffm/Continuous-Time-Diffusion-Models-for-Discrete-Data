@@ -15,9 +15,7 @@ from urllib.request import urlretrieve
 @dataset_utils.register_dataset
 class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
     def __init__(self, cfg, device, root=None):
-        super().__init__(
-            root=root, train=cfg.data.train, download=cfg.data.download
-        )
+        super().__init__(root=root, train=cfg.data.train, download=cfg.data.download)
 
         self.data = torch.from_numpy(self.data)
         self.data = self.data.transpose(1, 3)
@@ -60,7 +58,7 @@ class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
 class DiscreteMNIST(torchvision.datasets.MNIST):
     def __init__(self, cfg, device, root=None):
         super().__init__(root=root, train=cfg.data.train, download=cfg.data.download)
-        #self.data = torch.from_numpy(self.data) # (N, H, W, C)
+        # self.data = torch.from_numpy(self.data) # (N, H, W, C)
         self.data = self.data.to(device).view(-1, 1, 28, 28)
 
         self.targets = torch.from_numpy(np.array(self.targets))
@@ -79,9 +77,9 @@ class DiscreteMNIST(torchvision.datasets.MNIST):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        
+
         img, target = self.data[index], self.targets[index]
-        #img = self.resize(img)
+        # img = self.resize(img)
 
         if self.random_flips:
             img = self.flip(img)
@@ -108,84 +106,6 @@ class LakhPianoroll(Dataset):
 def denormalize_image(image):
     return image * 255
 
-
-# data
-def create_train_discrete_mnist_dataloader(
-    root: str,
-    image_size: int,
-    use_augmentation: bool = False,
-) -> DataLoader:
-    """
-    preprocess=transforms.Compose([transforms.Resize((image_size,image_size)),\
-                                    transforms.ToTensor(),\
-                                    transforms.Normalize([0.5],[0.5])]) #[0,1] to [-1,1]
-    
-    """
-    base_transforms = [transforms.Resize((image_size, image_size))]
-
-    # Add augmentations if needed
-    if use_augmentation:
-        base_transforms.append(transforms.RandomRotation((-10, 10)))
-
-    base_transforms.append(transforms.ToTensor())
-    base_transforms.append(denormalize_image)
-    base_transforms = transforms.Compose(
-        base_transforms
-    )  # Add random rotation of 10 degrees
-    # change path here
-
-    train_dataset = MNIST(
-        root=root,
-        train=True,
-        download=True,
-        transform=base_transforms,
-    )
-    """
-    if use_subset:
-        subset_size = 5000
-        indices = torch.randperm(len(train_dataset))[:subset_size]  # Choose a random subset of specified size
-        train_dataset = Subset(train_dataset, indices)
-    """
-
-    return train_dataset
-
-@dataset_utils.register_dataset
-class MNIST():
-    def __init__(self, cfg, device, root=None):
-        image_size = cfg.data.image_size
-        base_transforms = [transforms.Resize((image_size, image_size))]
-
-    # Add augmentations if needed
-        if cfg.use_augm:
-            base_transforms.append(transforms.RandomRotation((-10, 10)))
-
-        base_transforms.append(transforms.ToTensor())
-        base_transforms.append(denormalize_image)
-        base_transforms = transforms.Compose(
-            base_transforms
-        )  # Add random rotation of 10 degrees
-        # change path here
-
-        train_dataset = MNIST(
-            root=root,
-            train=True,
-            download=True,
-            transform=base_transforms,
-        )
-    def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-
-        Returns:
-            tuple: (image, target) where target is index of the target class.
-        """
-        img, target = self.data[index], self.targets[index]
-
-        if self.random_flips:
-            img = self.flip(img)
-
-        return img
 
 def create_discrete_mnist_dataloader(
     batch_size: int,
@@ -306,6 +226,3 @@ def get_binmnist_datasets(root, device="cpu"):
 
 def denormalize_image(image):
     return image * 255
-
-
-

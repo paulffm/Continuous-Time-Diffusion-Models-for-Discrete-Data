@@ -136,6 +136,7 @@ class UniformVariantRate(UniformRate):
         super(UniformVariantRate, self).__init__(config, device)
         self.config = config
         self.t_func = config.model.t_func
+        self.device = config.device
         if self.t_func == "log":
             self.time_base = config.model.time_base
             self.time_exp = config.model.time_exp
@@ -172,7 +173,7 @@ class UniformVariantRate(UniformRate):
 
     def rate_mat(self, y, t):
         r = self.rate(t)
-        bidx = utils.expand_dims(torch.arange(t.size(0)), axis=tuple(range(1, y.dim())))
+        bidx = utils.expand_dims(torch.arange(t.size(0), device=self.device), axis=tuple(range(1, y.dim()))) # , device=self.device
         result = r[bidx, y]
         return result
 
@@ -200,7 +201,7 @@ class UniformVariantRate(UniformRate):
 
     def transition(self, t: TensorType["B"]) -> TensorType["B", "S", "S"]:
         # difference to jnp => they give only 0
-        return self.transit_between(torch.zeros_like(t), t)
+        return self.transit_between(torch.zeros_like(t, device=self.device), t) # , device=self.device
 
 
 class GaussianTargetRate:

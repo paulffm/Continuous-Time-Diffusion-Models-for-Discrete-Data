@@ -537,7 +537,7 @@ class UniDirectionalTransformer(nn.Module):
                 ),
                 diagonal=1,  # concat_dim = D; if conditioner:
             )  
-            mask = torch.where(mask, torch.tensor(float('-inf')), torch.tensor(0.0))
+            mask = torch.where(mask, torch.tensor(float('-inf'), device=self.device), torch.tensor(0.0, device=self.device))
 
         else:
             x = torch.cat([x[:, 1:], conditioner], dim=1)  # B, D-1, E + B, 1or2, E
@@ -547,7 +547,7 @@ class UniDirectionalTransformer(nn.Module):
                 ),
                 diagonal=-1,
             )  
-            mask = torch.where(mask, torch.tensor(float('-inf')), torch.tensor(0.0))
+            mask = torch.where(mask, torch.tensor(float('-inf'), device=self.device), torch.tensor(0.0, device=self.device))
 
 
         # if K != D => need to initialize pos_embed with cfg.concat_dim + n

@@ -1014,10 +1014,10 @@ class CRMTauL:
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
                 change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
                 x = x_new
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-                x_0max = torch.max(p_0gt, dim=2)[1]
-
-            return x_0max.detach().cpu().numpy().astype(int), change_jump
+                #p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                #x_0max = torch.max(p_0gt, dim=2)[1]
+                # x_0max.detach().cpu().numpy().astype(int)
+            return x.detach().cpu().numpy().astype(int), change_jump
 
 
 @sampling_utils.register_sampler
@@ -1033,6 +1033,18 @@ class CRMMidPointTau:
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.is_ordinal = cfg.sampler.is_ordinal
 
+        if cfg.data.name == 'DiscreteMNIST':
+            self.state_change = torch.load('SavedModels/MNIST/state_change_matrix_mnist.pth')
+            self.state_change = self.state_change.to('cuda')
+        elif cfg.data.name == 'Maze3S':
+            if self.is_ordinal:
+                self.state_change = torch.load('SavedModels/MAZE/state_change_matrix_maze_ordinal.pth')
+                self.state_change = self.state_change.to('cuda')
+            else:
+                self.state_change = torch.load('SavedModels/MAZE/state_change_matrix_maze.pth')
+                self.state_change = self.state_change.to('cuda')
+
+
         if cfg.model.log_prob == "bin_ebm":
             self.get_logprob = partial(bin_ebm_logits)
         elif cfg.model.log_prob == "ebm":
@@ -1044,6 +1056,7 @@ class CRMMidPointTau:
         t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
+        self.state_change = torch.tile(self.state_change, (N, 1, 1))
         with torch.no_grad():
             x = get_initial_samples(
                 N, self.D, device, self.S, self.initial_dist, initial_dist_std
@@ -1077,7 +1090,12 @@ class CRMMidPointTau:
 
                 xt_onehot = F.one_hot(x.long(), self.S)
                 posterior = torch.exp(log_weight) * fwd_rate 
-                x_strich = x + 0.5 * h * posterior * ()
+                state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                    torch.arange(self.S, device=device).repeat(N * self.D),
+                    x.long().flatten().repeat_interleave(self.S),
+                ].view(N, self.D, self.S)
+                
+                x_strich = x + 0.5 * h * posterior * state_change
                 
 
                 flips = torch.distributions.poisson.Poisson(

@@ -190,7 +190,9 @@ class ImageX0PredBasePaul(nn.Module):
         else:
             mu = net_out[0].unsqueeze(-1)
             log_scale = net_out[1].unsqueeze(-1)
-
+            mu = mu[:, :, :-1, :-1, :]
+            log_scale = log_scale[:, :, :-1, :-1, :]
+            
             # The probability for a state is then the integral of this continuous distribution between
             # this state and the next when mapped onto the real line. To impart a residual inductive bias
             # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
@@ -221,8 +223,9 @@ class ImageX0PredBasePaul(nn.Module):
                 logits = logits_1
 
         if self.padding:
-            logits = logits[:, :, :-1, :-1, :]
-            logits = logits.reshape(B, D, self.S)
+            #logits = logits[:, :, :-1, :-1, :]
+            #logits = logits.reshape(B, D, self.S)
+            logits = logits.view(B, D, self.S)
         else:
             logits = logits.view(B, D, self.S)
 

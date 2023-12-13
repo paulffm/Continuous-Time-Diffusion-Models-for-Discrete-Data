@@ -16,7 +16,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CTELBO"
+    loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.01
@@ -24,9 +24,9 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 2200  # 2000 #2000000
+    training.n_iters = 400000  # 2000 #2000000
     training.clip_grad = True
-    training.grad_norm = 5
+    training.grad_norm = 3
     training.warmup = 0  # 5000
 
     config.data = data = ml_collections.ConfigDict()
@@ -64,16 +64,16 @@ def get_config():
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
 
-    model.rate_const = 2.3
-    model.t_func = "log_sqr"
-
+    model.rate_const = 1.7
+    model.t_func = "sqrt_cos"
+    model.Q_sigma = 512.0
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
     optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
 
-    saving.checkpoint_freq = 500
+    saving.checkpoint_freq = 2000
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
@@ -85,7 +85,7 @@ def get_config():
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.is_ordinal = True
-    sampler.sample_freq = 2200
+    sampler.is_ordinal = False
+    sampler.sample_freq = 2200000
 
     return config

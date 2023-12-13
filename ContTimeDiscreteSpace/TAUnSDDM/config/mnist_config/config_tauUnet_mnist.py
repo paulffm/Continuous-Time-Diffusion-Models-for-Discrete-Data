@@ -24,7 +24,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 5000  # 2000 #2000000
+    training.n_iters = 5000000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
@@ -47,7 +47,7 @@ def get_config():
     model.padding = False
     model.ema_decay = 0.9999  # 0.9999
 
-    model.ch = 64  # 128 => 4mal so viele Params
+    model.ch = 96  # 128 => 4mal so viele Params
     model.num_res_blocks = 2
     model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  
@@ -59,13 +59,14 @@ def get_config():
     model.time_scale_factor = 1000
     model.fix_logistic = False
     model.model_output = 'logistic_pars'
-    model.num_heads = 2
+    model.num_heads = 8
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
+    model.padding = False
 
     model.rate_sigma = 6.0
     model.Q_sigma = 512.0
-    model.time_exponential = 100.0
+    model.time_exp = 100.0
     model.time_base = 3.0
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
@@ -74,7 +75,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
 
-    saving.checkpoint_freq = 1000
+    saving.checkpoint_freq = 10000
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
@@ -87,6 +88,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
-    sampler.sample_freq = 22000000
+    sampler.sample_freq = 220000000
 
     return config

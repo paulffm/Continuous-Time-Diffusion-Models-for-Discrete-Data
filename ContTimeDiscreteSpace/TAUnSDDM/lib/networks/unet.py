@@ -103,13 +103,13 @@ class ResBlock(nn.Module):
     def __init__(self, in_channel, out_channel, time_dim, dropout):
         super().__init__()
 
-        self.norm1 = nn.GroupNorm(in_channel*1, in_channel, eps=1e-06) #32
+        self.norm1 = nn.GroupNorm(num_groups=min(in_channel//4, 32), num_channels=in_channel, eps=1e-06) #32
         self.activation1 = Swish()
         self.conv1 = conv2d(in_channel, out_channel, 3, padding=1)
 
         self.time = nn.Sequential(Swish(), linear(time_dim, out_channel))
 
-        self.norm2 = nn.GroupNorm(out_channel*1, out_channel, eps=1e-06) #32
+        self.norm2 = nn.GroupNorm(num_groups=min(out_channel//4, 32), num_channels=out_channel, eps=1e-06) #32
         self.activation2 = Swish()
         self.dropout = nn.Dropout(dropout)
         self.conv2 = conv2d(out_channel, out_channel, 3, padding=1, scale=1e-10)
@@ -157,7 +157,7 @@ class SelfAttention(nn.Module):
         self.channels = channels
         self.num_heads = n_head
 
-        self.norm = nn.GroupNorm(channels*1, channels)
+        self.norm = nn.GroupNorm(num_groups=min(channels//4, 32), num_channels=channels)
         self.qkv = nn.Conv1d(channels, channels * 3, 1)
         self.attention = QKVAttention()
         self.proj_out = zero_module(nn.Conv1d(channels, channels, 1))
@@ -322,14 +322,14 @@ class UNet(nn.Module):
 
         down_layers = [conv2d(in_channel, channel, 3, padding=1)]
         feat_channels = [channel]
-        in_channel = channel
+        in_ch = channel
         for i in range(n_block):
             for _ in range(n_res_blocks):
                 channel_mult = channel * channel_multiplier[i]
 
                 down_layers.append(
                     ResBlockWithAttention(
-                        in_channel,
+                        in_ch,
                         channel_mult,
                         time_dim,
                         dropout,
@@ -339,26 +339,26 @@ class UNet(nn.Module):
                 )
 
                 feat_channels.append(channel_mult)
-                in_channel = channel_mult
+                in_ch = channel_mult
 
             if i != n_block - 1:
-                down_layers.append(Downsample(in_channel))
-                feat_channels.append(in_channel)
+                down_layers.append(Downsample(in_ch))
+                feat_channels.append(in_ch)
 
         self.down = nn.ModuleList(down_layers)
 
         self.mid = nn.ModuleList(
             [
                 ResBlockWithAttention(
-                    in_channel,
-                    in_channel,
+                    in_ch,
+                    in_ch,
                     time_dim,
                     dropout=dropout,
                     attention_head=num_heads,
                     use_attention=True,
                 ),
                 ResBlockWithAttention(
-                    in_channel, in_channel, time_dim, dropout=dropout
+                    in_ch, in_ch, time_dim, dropout=dropout
                 ),
             ]
         )
@@ -370,7 +370,7 @@ class UNet(nn.Module):
 
                 up_layers.append(
                     ResBlockWithAttention(
-                        in_channel + feat_channels.pop(),
+                        in_ch + feat_channels.pop(),
                         channel_mult,
                         time_dim,
                         dropout=dropout,
@@ -379,10 +379,10 @@ class UNet(nn.Module):
                     )
                 )
 
-                in_channel = channel_mult
+                in_ch = channel_mult
 
             if i != 0:
-                up_layers.append(Upsample(in_channel))
+                up_layers.append(Upsample(in_ch))
 
         self.up = nn.ModuleList(up_layers)
 
@@ -390,15 +390,15 @@ class UNet(nn.Module):
             # The output represents logits or the log scale and loc of a
             # logistic distribution.
             self.out = nn.Sequential(
-                nn.GroupNorm(in_channel*1, in_channel, eps=1e-06),
+                nn.GroupNorm(min(in_ch//4, 32), in_ch, eps=1e-06),
                 Swish(),
-                conv2d(in_channel, out_channel * 2, 3, padding=1, scale=1e-10),
+                conv2d(in_ch, out_channel * 2, 3, padding=1, scale=1e-10),
             )
         else:
             self.out = nn.Sequential(
-                nn.GroupNorm(in_channel, in_channel, eps=1e-06),
+                nn.GroupNorm(min(in_ch//4, 32), in_ch, eps=1e-06),
                 Swish(),
-                conv2d(in_channel, out_channel * self.S, 3, padding=1, scale=1e-10),
+                conv2d(in_ch, out_channel * self.S, 3, padding=1, scale=1e-10),
             )
         self.D = img_size*img_size
         
@@ -424,6 +424,8 @@ class UNet(nn.Module):
             hid = layer(hid, time_embed)
         for layer in self.up:
             if isinstance(layer, ResBlockWithAttention):
+                #print("hid", hid.shape)
+                #print("feats", feats)
                 hid = layer(torch.cat((hid, feats.pop()), 1), time_embed)
 
             else:

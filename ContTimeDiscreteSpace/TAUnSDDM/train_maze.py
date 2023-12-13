@@ -6,7 +6,7 @@ import ssl
 import os
 #from config.maze_config.config_bert_maze import get_config
 #from config.maze_config.config_maskedUnet_maze import get_config
-from config.maze_config.config_hollow_maze import get_config
+from config.maze_config.config_tauUnet_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -32,15 +32,15 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_194999_hollowMLEProbRand.pt"
-        date = "2023-12-07"
+        model_name = "model_299999_hollowMLEProbRand.pt"
+        date = "2023-12-13"
         config_name = "config_001_hollowMLEProbRand.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
