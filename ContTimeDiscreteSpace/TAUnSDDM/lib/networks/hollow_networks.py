@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 import functorch
 from torchtyping import TensorType
-
+from einops.layers.torch import Rearrange
 
 """
 class PositionwiseFeedForward(nn.Module):
@@ -504,11 +504,16 @@ class UniDirectionalTransformer(nn.Module):
         # concat_dim in
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
         # if K != D => need to initialize pos_embed with cfg.concat_dim + n
+        if config.model.nets == 'visual':
+            seq_len = int((config.data.image_size / config.model.patch_size) ** 2)
+            print(seq_len)
+        else:
+            seq_len = config.model.concat_dim
         self.pos_embed = PositionalEncoding(
             config.device,
             config.model.embed_dim,
             config.model.dropout_rate,
-            config.model.concat_dim,
+            seq_len,
         )
 
     def forward(
@@ -746,7 +751,101 @@ class BidirectionalTransformer2(nn.Module):
         # logits = logits + x_one_hot
 
         return logits
+    
+class BiVisualTransformer(nn.Module):
+    def __init__(self, config, readout_dim=None):
+        super(BiVisualTransformer, self).__init__()
+        self.config = config
+        self.device = config.device
+        self.S = config.data.S
+        self.embed_dim = config.model.embed_dim
+        self.mlp_dim = config.model.mlp_dim
+        self.embedding = nn.Embedding(
+            self.S, config.model.embed_dim
+        )  # B, D with values to  B, D, E
+        self.temb_scale = config.model.time_scale_factor
+        self.use_cat = config.model.use_cat
+        self.use_one_hot_input = config.model.use_one_hot_input
+        self.data_shape = config.data.shape
+            #def __init__(self, *, image_size, patch_size, num_classes, dim, transformer, pool = 'cls', channels = 3):
+        image_size = config.data.image_size
+        patch_size = config.model.patch_size
+        channels = self.data_shape[0]
 
+        assert image_size % patch_size == 0, 'image dimensions must be divisible by the patch size'
+        patch_dim = channels * patch_size ** 2
+
+        self.to_patch_embedding = nn.Sequential(
+            Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = patch_size, p2 = patch_size),
+            nn.LayerNorm(patch_dim),
+            nn.Linear(patch_dim, self.embed_dim),
+            nn.LayerNorm(self.embed_dim)
+        )
+        if self.config.model.net_arch == "bidir_transformer":
+            self.module_l2r = UniDirectionalTransformer(self.config, "l2r")
+            self.module_r2l = UniDirectionalTransformer(self.config, "r2l")
+        else:
+            raise ValueError("Unknown net_arch: %s" % self.config.model.net_arch)
+
+        if readout_dim is None:
+            readout_dim = self.S
+
+        self.readout_dim = readout_dim
+
+        if self.config.model.bidir_readout == "concat":
+            self.readout_module = ConcatReadout(self.config, readout_dim=readout_dim)
+        elif self.config.model.bidir_readout == "res_concat":
+            self.readout_module = ConcatResidualReadout(
+                self.config, readout_dim=readout_dim
+            )
+        elif self.config.model.bidir_readout == "attention":
+            self.readout_module = AttentionReadout(self.config, readout_dim=readout_dim)
+        else:
+            raise ValueError(
+                "Unknown bidir_readout: %s" % self.config.model.bidir_readout
+            )
+
+        if self.use_cat:
+            if self.use_one_hot_input:
+                self.input_embedding = nn.Linear(self.S, self.embed_dim)
+            else:
+                self.input_embedding = nn.Embedding(self.S, self.embed_dim)
+        else:
+            # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
+            # if i normalize i cant use embedding
+            # transformiert die Eingabewerte durch eine gewichtete Summe (plus einem Bias),
+            self.input_embedding = nn.Linear(1, self.embed_dim)
+
+        self.temb_net = nn.Sequential(
+            nn.Linear(int(self.embed_dim / 2), self.mlp_dim),
+            nn.ReLU(),
+            nn.Linear(self.mlp_dim, self.embed_dim),
+        )
+
+    # Difference: add one hot in the end; time_step_embedding not learned
+    def forward(
+        self, x: TensorType["B", "D"], t: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        temb = transformer_timestep_embedding(
+            t * self.temb_scale, self.embed_dim, device=self.device
+        )  # B, E
+        B, D = x.shape
+        C, H, W = self.data_shape
+        x = x.view(B, C, H, W)
+        print("visual")
+        x = normalize_input(x, self.S)
+        
+        x = self.to_patch_embedding(x)
+
+        l2r_embed = self.module_l2r(x, temb)
+        r2l_embed = self.module_r2l(x, temb)
+        print("l2r_embed", l2r_embed.shape)
+        logits = self.readout_module(l2r_embed, r2l_embed, temb)
+        print("logits", logits.shape)
+        logits = logits.view(B, D, self.readout_dim)  # B, D, S
+        # logits = logits + x_one_hot
+
+        return logits
 
 # very similiar to Bert: https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model + MLP or ResNet at the end
 class MaskedTransformer(nn.Module):

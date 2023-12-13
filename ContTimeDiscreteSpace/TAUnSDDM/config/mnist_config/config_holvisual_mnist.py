@@ -13,7 +13,7 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "elbo"  # rm, mle, elbo
+    loss.loss_type = "mle"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
@@ -46,11 +46,12 @@ def get_config():
     config.model = model = ml_collections.ConfigDict()
     model.name = "GaussianHollowEMA"
     model.net_arch = "bidir_transformer"
-    model.nets = "bidir_transformer2"
+    model.nets = "visual"
     model.use_cat = False
+    model.patch_size = 4
 
     # BiDir
-    model.embed_dim = 320
+    model.embed_dim = 32
     model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
     model.dropout_rate = 0.1

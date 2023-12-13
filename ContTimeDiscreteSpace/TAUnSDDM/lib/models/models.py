@@ -190,8 +190,10 @@ class ImageX0PredBasePaul(nn.Module):
         else:
             mu = net_out[0].unsqueeze(-1)
             log_scale = net_out[1].unsqueeze(-1)
-            mu = mu[:, :, :-1, :-1, :]
-            log_scale = log_scale[:, :, :-1, :-1, :]
+
+            #if self.padding: 
+            #    mu = mu[:, :, :-1, :-1, :]
+            #    log_scale = log_scale[:, :, :-1, :-1, :]
             
             # The probability for a state is then the integral of this continuous distribution between
             # this state and the next when mapped onto the real line. To impart a residual inductive bias
@@ -223,9 +225,9 @@ class ImageX0PredBasePaul(nn.Module):
                 logits = logits_1
 
         if self.padding:
-            #logits = logits[:, :, :-1, :-1, :]
-            #logits = logits.reshape(B, D, self.S)
-            logits = logits.view(B, D, self.S)
+            logits = logits[:, :, :-1, :-1, :]
+            logits = logits.reshape(B, D, self.S)
+            #logits = logits.view(B, D, self.S)
         else:
             logits = logits.view(B, D, self.S)
 
@@ -437,6 +439,10 @@ class HollowTransformer(nn.Module):
         super().__init__()
         if cfg.model.nets == "bidir_transformer2":
             tmp_net = hollow_networks.BidirectionalTransformer2(
+                cfg, readout_dim=None
+            ).to(device)
+        elif cfg.model.nets == "visual":
+            tmp_net = hollow_networks.BiVisualTransformer(
                 cfg, readout_dim=None
             ).to(device)
         else:

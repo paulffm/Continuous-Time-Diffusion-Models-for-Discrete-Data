@@ -208,7 +208,7 @@ class ElboLBJF:
                 post_0 = posterior * (1 - xt_onehot)
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
-                diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                diag = torch.clip(1.0 - h * off_diag, min=0, max=1)
                 posterior = posterior * post_0 * h + diag * xt_onehot  # * h  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)

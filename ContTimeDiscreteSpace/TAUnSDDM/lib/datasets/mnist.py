@@ -192,17 +192,18 @@ def load_mnist_binarized(root):
     x_train, x_valid, x_test = joblib.load(open(dataset, "rb"))
     return x_train, x_valid, x_test
 
-
+@dataset_utils.register_dataset
 class BinMNIST(Dataset):
     """Binary MNIST dataset"""
 
-    def __init__(self, data, device="cpu", transform=None):
+    def __init__(self, cfg, device, root=None):
         h, w, c = 28, 28, 1
         self.device = device
-        self.data = torch.tensor(data, device=device, dtype=torch.float).view(
+        data, _, _ = load_mnist_binarized(root)
+        self.data = torch.tensor(data, device=device).view(
             -1, c, h, w
         )
-        self.transform = transform
+        self.transform = False
 
     def __len__(self):
         return len(self.data)
@@ -211,7 +212,7 @@ class BinMNIST(Dataset):
         sample = self.data[idx]
         if self.transform:
             sample = self.transform(sample)
-        return sample, idx
+        return sample
 
 
 def get_binmnist_datasets(root, device="cpu"):

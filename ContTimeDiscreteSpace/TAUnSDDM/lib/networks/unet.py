@@ -430,9 +430,7 @@ class UNet(nn.Module):
 
             else:
                 hid = layer(hid)
-
         out = self.out(hid)
-
         if self.model_output == 'logistic_pars':
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale

@@ -32,16 +32,16 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_299999_hollowMLEProbRand.pt"
+        model_name = "model_91999_unet.pt"
         date = "2023-12-13"
-        config_name = "config_001_hollowMLEProbRand.yaml"
+        config_name = "config_001_unet.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
         #cfg.loss.name = "CatRMTest"
@@ -60,7 +60,7 @@ def main():
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 500000
         cfg.sampler.sample_freq = 500000000000
-        cfg.saving.checkpoint_freq = 5000
+        cfg.saving.checkpoint_freq = 2000
         cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)
