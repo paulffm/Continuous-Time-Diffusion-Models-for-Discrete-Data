@@ -200,11 +200,11 @@ class BinMNIST(Dataset):
         h, w, c = 28, 28, 1
         self.device = device
         data, _, _ = load_mnist_binarized(root)
-        self.data = torch.tensor(data, device=device).view(
+        self.data = torch.tensor(data).view(
             -1, c, h, w
         )
         self.transform = False
-
+        print("device", self.data.device)
     def __len__(self):
         return len(self.data)
 
@@ -212,8 +212,7 @@ class BinMNIST(Dataset):
         sample = self.data[idx]
         if self.transform:
             sample = self.transform(sample)
-        return sample
-
+        return sample.to(device=self.device)
 
 def get_binmnist_datasets(root, device="cpu"):
     x_train, x_valid, x_test = load_mnist_binarized(root)

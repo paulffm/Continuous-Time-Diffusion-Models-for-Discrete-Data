@@ -2,7 +2,7 @@ import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.synthetic_config.config_tauMLP_synthetic import get_config
-from config.synthetic_config.config_ebm_synthetic import get_config
+from config.synthetic_config.config_hollow_synthetic import get_config
 import matplotlib.pyplot as plt
 import lib.datasets.synthetic as synthetic
 import os
@@ -24,7 +24,7 @@ import numpy as np
 
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     save_location_png = os.path.join(save_location, "PNGs/")

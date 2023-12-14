@@ -19,8 +19,10 @@ class Standard:
 
         # print("Loss in train", l)
         if l.isnan().any() or l.isinf().any():
-            # print("Loss is nan")
-            assert False
+            print("Loss is nan")
+            return 0 
+            #return l.detach()
+            #assert False
         l.backward()
         if self.clip_grad:
             torch.nn.utils.clip_grad_norm_(state["model"].parameters(), self.grad_norm)

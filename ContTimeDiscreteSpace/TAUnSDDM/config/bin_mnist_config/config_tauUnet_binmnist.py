@@ -85,7 +85,7 @@ def get_config():
     sampler.num_steps = 1000
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
-    sampler.initial_dist = "gaussian"
+    sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)

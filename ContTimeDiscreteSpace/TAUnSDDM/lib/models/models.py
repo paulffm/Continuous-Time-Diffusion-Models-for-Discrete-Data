@@ -441,10 +441,10 @@ class HollowTransformer(nn.Module):
             tmp_net = hollow_networks.BidirectionalTransformer2(
                 cfg, readout_dim=None
             ).to(device)
-        elif cfg.model.nets == "visual":
-            tmp_net = hollow_networks.BiVisualTransformer(
-                cfg, readout_dim=None
-            ).to(device)
+        #elif cfg.model.nets == "visual":
+        #    tmp_net = hollow_networks.BiVisualTransformer(
+        #        cfg, readout_dim=None
+        #    ).to(device)
         else:
             tmp_net = hollow_networks.BidirectionalTransformer(
                 cfg, readout_dim=None

@@ -7,6 +7,7 @@ import os
 #from config.maze_config.config_bert_maze import get_config
 #from config.maze_config.config_maskedUnet_maze import get_config
 from config.maze_config.config_tauUnet_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -32,14 +33,14 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_91999_unet.pt"
+        model_name = "model_99999_unet.pt"
         date = "2023-12-13"
         config_name = "config_001_unet.yaml"
         config_path = os.path.join(save_location, date, config_name)
@@ -60,7 +61,7 @@ def main():
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 500000
         cfg.sampler.sample_freq = 500000000000
-        cfg.saving.checkpoint_freq = 2000
+        cfg.saving.checkpoint_freq = 5000
         cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)

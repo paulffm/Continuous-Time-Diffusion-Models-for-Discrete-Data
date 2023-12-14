@@ -504,11 +504,11 @@ class UniDirectionalTransformer(nn.Module):
         # concat_dim in
         # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
         # if K != D => need to initialize pos_embed with cfg.concat_dim + n
-        if config.model.nets == 'visual':
-            seq_len = int((config.data.image_size / config.model.patch_size) ** 2)
-            print(seq_len)
-        else:
-            seq_len = config.model.concat_dim
+        #if config.model.nets == 'visual':
+        #    seq_len = int((config.data.image_size / config.model.patch_size) ** 2)
+        #    print(seq_len)
+        #else:
+        seq_len = config.model.concat_dim
         self.pos_embed = PositionalEncoding(
             config.device,
             config.model.embed_dim,

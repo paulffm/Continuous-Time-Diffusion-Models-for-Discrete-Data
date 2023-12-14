@@ -12,12 +12,12 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRMTest"
+    loss.name = "ScoreElbo"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "mle"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
     loss.nll_weight = 0.001
-    loss.dms = False
+    loss.one_forward_pass = True
 
     loss.eps_ratio = 1e-9
     loss.min_time = 0.005
