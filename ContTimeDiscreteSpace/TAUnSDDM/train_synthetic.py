@@ -3,6 +3,7 @@ import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.synthetic_config.config_tauMLP_synthetic import get_config
 from config.synthetic_config.config_hollow_synthetic import get_config
+#from config.synthetic_config.config_masked_synthetic import get_config
 import matplotlib.pyplot as plt
 import lib.datasets.synthetic as synthetic
 import os
@@ -110,12 +111,23 @@ def main():
             ] == cfg.training.n_iters - 1:
                 bookkeeping.save_state(state, save_location)
                 print("Model saved in Iteration:", state["n_iter"] + 1)
+                saving_train_path = os.path.join(
+                    save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+                )
+                plt.plot(training_loss)
+                plt.xlabel('Iterations')
+                plt.ylabel('Loss')
+                plt.title("Training loss")
+                plt.savefig(saving_train_path)
+                plt.close()
+                print("Model saved in Iteration:", state["n_iter"] + 1)
+
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples = sampler.sample(state["model"], n_samples)
+                samples, _ = sampler.sample(state["model"], n_samples)
 
                 state["model"].train()
 

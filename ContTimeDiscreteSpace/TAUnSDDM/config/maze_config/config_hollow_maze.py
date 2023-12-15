@@ -12,15 +12,15 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "ScoreElbo"
+    loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "mle"  # rm, mle, elbo
+    loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
     loss.nll_weight = 0.001
     loss.one_forward_pass = True
 
     loss.eps_ratio = 1e-9
-    loss.min_time = 0.005
+    loss.min_time = 0.007
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -61,21 +61,21 @@ def get_config():
     model.use_cat = False
 
     # BiDir
-    model.embed_dim = 128
+    model.embed_dim = 64
     model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    model.num_layers = 8
+    model.num_layers = 6
     # TransformerBlock
     ## SA
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 2048  # d_model in TAU => embed_dim?
+    model.mlp_dim = 1024  # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = None
     # ConcatReadout

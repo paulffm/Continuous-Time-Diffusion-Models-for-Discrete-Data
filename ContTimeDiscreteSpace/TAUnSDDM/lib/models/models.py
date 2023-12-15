@@ -706,6 +706,14 @@ class UniformMaskedEMA(EMA, MaskedModel, UniformRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniVarMaskedEMA(EMA, MaskedModel, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        MaskedModel.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 @model_utils.register_model
 class UniformHollowEMA(EMA, HollowTransformer, UniformRate):

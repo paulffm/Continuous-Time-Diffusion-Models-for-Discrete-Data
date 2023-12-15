@@ -3,7 +3,7 @@ import os
 
 
 def get_config():
-    save_directory = "SavedModels/MNIST"
+    save_directory = "SavedModels/Synthetic"
     config = ml_collections.ConfigDict()
 
     config.device = "cuda"
@@ -12,11 +12,11 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
-    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
-
     loss.eps_ratio = 1e-9
+    loss.nll_weight = 0.001
     loss.min_time = 0.007
     loss.one_forward_pass = True
 
@@ -28,73 +28,75 @@ def get_config():
     training.clip_grad = True
     training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
-    training.resume = True
 
     config.data = data = ml_collections.ConfigDict()
-    data.name = "DiscreteMNIST"
-    data.is_img = True
-    data.train = True
-    data.download = True
-    data.S = 256
-    data.batch_size = 32  # use 128 if you have enough memory or use distributed
+    data.name = "SyntheticData"
+    data.type = "2spirals"
+    data.is_img = False
+    data.S = 2
+    data.binmode = "gray"
+    data.int_scale = 6003.0107336488345
+    data.plot_size = 4.458594271092115
+    data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
-    data.image_size = 28
-    data.shape = [1, data.image_size, data.image_size]
-    data.use_augm = False
-    data.location = 'lib/datasets/'
+    data.shape = [32]
+    data.location = f"lib/datasets/Synthetic/data_{data.type}.npy"
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "GaussianHollowEMA"
+    model.name = "UniVarHollowEMA"
+    model.log_prob = 'cat'
+    # Forward model
+    model.rate_const = 2.1
+    model.Q_sigma = 512.0
+    model.t_func = "sqrt_cos"  # log_sqr
+    # hollow:
     model.net_arch = "bidir_transformer"
     model.nets = "bidir_transformer2"
     model.use_cat = False
 
     # BiDir
-    model.embed_dim = 256
+    model.embed_dim = 64
     model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
     model.dropout_rate = 0.1
-    model.concat_dim = data.image_size * data.image_size * 1
-    model.num_layers = 4
+    model.concat_dim = data.shape[0]
+    model.num_layers = 2
+
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 512  # d_model in TAU => embed_dim?
+    model.mlp_dim = 256  # d_model in TAU => embed_dim?
     model.out_dim = data.S
     model.readout_dim = data.S
+    # MLP
+
     model.num_output_ffresiduals = 2
-    model.qkv_dim = model.embed_dim
+
+    # AttentionReadout
+    ## CrossAttention
+    model.qkv_dim = config.model.embed_dim
     model.ema_decay = 0.9999  # 0.9999
     model.time_scale_factor = 1000
 
-    model.rate_sigma = 6.0
-    model.Q_sigma = 512.0
-    model.time_exp = 100.0
-    model.time_base = 3.0
-    model.log_prob = 'cat'
-
-    model.rate_const = 2.1
-    model.t_func = "sqrt_cos"
-
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 2e-4  # 2e-4
+    optimizer.lr = 1.5e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 2000
+    saving.checkpoint_freq = 20000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
-    sampler.num_steps = 1000
+    sampler.num_steps = 500
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
-    sampler.initial_dist = "gaussian"
+    sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
+    sampler.sample_freq = 200000000
     sampler.is_ordinal = True
-    sampler.sample_freq = 22000000
 
     return config

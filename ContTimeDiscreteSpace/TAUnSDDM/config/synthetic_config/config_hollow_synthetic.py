@@ -11,19 +11,19 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "ScoreElbo"
+    loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.005
+    loss.min_time = 0.007
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 100000  # 2000 #2000000
+    training.n_iters = 500000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1
@@ -60,13 +60,13 @@ def get_config():
     model.use_one_hot_input = False
     model.dropout_rate = 0.1
     model.concat_dim = data.shape[0]
-    model.num_layers = 3
+    model.num_layers = 2
 
-    model.num_heads = 4
+    model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 512  # d_model in TAU => embed_dim?
+    model.mlp_dim = 256  # d_model in TAU => embed_dim?
     model.out_dim = data.S
     model.readout_dim = data.S
     # MLP
@@ -85,7 +85,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 500
+    saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
@@ -96,7 +96,7 @@ def get_config():
     sampler.num_corrector_steps = 10
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
-    sampler.sample_freq = 2000
+    sampler.sample_freq = 200000000
     sampler.is_ordinal = True
 
     return config

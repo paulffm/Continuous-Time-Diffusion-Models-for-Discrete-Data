@@ -388,10 +388,6 @@ class ScoreElbo:
             square_newvalcat.sample()
         )  # (B, ) taking values in [0, S)
 
-        # x_noisy => in every Batch exactly one transition
-        # so in every row: one difference between x_t and x_tilde
-        # x_t =     (0, 1, 2, 4, 3)
-        # x_tilde = (0, 1, 2, 1, 3)
         x_tilde = x_t.clone()
         x_tilde[torch.arange(B, device=device), square_dims] = square_newval_samples
 
@@ -430,9 +426,7 @@ class ScoreElbo:
             reg_x.long().flatten(),
         ].view(B, D, S)
 
-        reg_tmp = (mask_reg * rate_vals_reg) @ qt0_numer_reg.transpose(
-            1, 2
-        )  # (B, D, S)
+        reg_tmp = (mask_reg * rate_vals_reg)  # (B, D, S)
         ll_all, ll_xt = get_logprob_with_logits(
             self.cfg, model, x_tilde, ts, logits_reg
         )
@@ -440,7 +434,7 @@ class ScoreElbo:
         backwd = torch.exp(ll_all - ll_xt)
         # first term; exactly as in formula
         reg_term = torch.sum(backwd * reg_tmp, dim=(1, 2))
-
+        #reg_term = backwd * reg_tmp
 
         # ----- second term of continuous ELBO (signal term) ------------
 
@@ -467,7 +461,7 @@ class ScoreElbo:
             torch.arange(S, device=device).repeat(B * D),
             x_tilde.long().flatten().repeat_interleave(S),
         ].view(B, D, S)
-
+        
         # probability of going from state S, specified by x to any other state in this dimension
         outer_qt0_numer_sig = qt0[
             torch.arange(B, device=device).repeat_interleave(D * S),
@@ -484,16 +478,18 @@ class ScoreElbo:
             ]
             + self.ratio_eps
         )  # (B, D)
+        
+        #outer_sum_sig = x_tilde_mask * outer_rate_sig * inner_log_sig
 
         
         outer_sum_sig = torch.sum(
             x_tilde_mask
             * outer_rate_sig # forward rate B, D, S
-            * (outer_qt0_numer_sig / outer_qt0_denom_sig.view(B, D, 1))
+            * (outer_qt0_numer_sig / outer_qt0_denom_sig.view(B, D, 1)) 
             * inner_log_sig, # nur ratio der reverse rate 
             dim=(1, 2),
         )
-
+        
         # now getting the 2nd term normalization
         # Sum of transition rates for each row in a batch => for one state s, sum to transition to another state s' and s included
         rate_row_sums = -rate[
@@ -501,7 +497,7 @@ class ScoreElbo:
             torch.arange(S, device=device).repeat(B),
             torch.arange(S, device=device).repeat(B),
         ].view(B, S)
-
+ 
         # choose transition rates for x_tilde
         base_Z_tmp = rate_row_sums[
             torch.arange(B, device=device).repeat_interleave(D),
@@ -517,8 +513,8 @@ class ScoreElbo:
             - Z_subtraction.view(B, D, 1)
             + Z_addition.view(B, 1, S)
         )
-
-        # forward rate 
+        
+        # forward rate: outer_rate_sig
         rate_sig_norm = rate[
             torch.arange(B, device=device).repeat_interleave(D * S),
             torch.arange(S, device=device).repeat(B * D),
@@ -541,15 +537,19 @@ class ScoreElbo:
             ].view(B, D)
             + self.ratio_eps
         )
-
+        # since rate_sig_norm * x_tilde_mask = same rate in outer_sig_norm
+        # since qt0_sig_norm_numer, qt0_sig_norm_denom.view(B, D, 1)) same qt0 as in outer_sig_norm
+        # if I sum later => same result?
+    
         sig_norm = torch.sum(
-            (rate_sig_norm * qt0_sig_norm_numer * x_tilde_mask)
+            (rate_sig_norm * x_tilde_mask * qt0_sig_norm_numer)
             / (Z_sig_norm * qt0_sig_norm_denom.view(B, D, 1)),
             dim=(1, 2),
         )
 
         sig_mean = torch.mean(-outer_sum_sig / sig_norm)
-
+        #neg_elbo = torch.sum(reg_term, dim=-1) - torch.sum(outer_sum_sig, dim=-1)
+        #neg_elbo = torch.sum(neg_elbo) / B
         reg_mean = torch.mean(reg_term)
 
         neg_elbo = sig_mean + reg_mean
@@ -559,7 +559,7 @@ class ScoreElbo:
         #else:
         nll = 0
 
-        return neg_elbo + self.nll_weight * nll
+        return neg_elbo #+ self.nll_weight * nll
 
 @losses_utils.register_loss
 class CondCTElbo:

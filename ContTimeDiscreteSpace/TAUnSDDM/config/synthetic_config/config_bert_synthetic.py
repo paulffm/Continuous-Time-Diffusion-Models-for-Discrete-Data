@@ -11,13 +11,14 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRM"
+    loss.name = "CTElbo"
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.logit_type = "reverse_prob"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.007
     loss.ce_coeff = 0
+    loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -44,7 +45,7 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniVarMaskedEMA"
+    model.name = "UniVarBertEMA"
     # Forward model
     model.rate_const = 2.0
     model.t_func = "sqrt_cos"  # log_sqr
@@ -94,10 +95,10 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 2500
+    saving.checkpoint_freq = 5000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
+    sampler.name = "ElboLBJF"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 500
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
