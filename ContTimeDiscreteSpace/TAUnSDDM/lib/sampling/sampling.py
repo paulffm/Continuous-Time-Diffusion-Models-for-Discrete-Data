@@ -26,9 +26,60 @@ def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
         raise NotImplementedError("Unrecognized initial dist " + initial_dist)
     return x
 
+def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
+    if cfg.loss.name == 'CTElbo':
+        device = model.device
+        qt0 = model.transition(t_ones)  # (N, S, S)
+        rate = model.rate(t_ones)  # (N, S, S)
+
+        p0t = F.softmax(logits, dim=2)  # (N, D, S) (not log_softmax)
+
+        qt0_denom = (
+            qt0[
+                torch.arange(N, device=device).repeat_interleave(
+                    D * S
+                ),
+                torch.arange(S, device=device).repeat(N * D),
+                x.long().flatten().repeat_interleave(S),
+            ].view(N, D, S)
+            + cfg.sampler.eps_ratio
+        )
+
+        # First S is x0 second S is x tilde
+        qt0_numer = qt0  # (N, S, S)
+
+        forward_rates = rate[
+            torch.arange(N, device=device).repeat_interleave(D * S),
+            torch.arange(S, device=device).repeat(N * D),
+            x.long().flatten().repeat_interleave(S),
+        ].view(N, D, S)
+
+        ratio = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
+
+        reverse_rates = forward_rates * ratio  # (N, D, S)
+
+    else:
+
+        ll_all, ll_xt = get_logprob_with_logits(
+                    cfg=cfg,
+                    model=model,
+                    xt=x,
+                    t=t_ones,
+                    logits=logits,
+                )
+
+
+        log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
+        fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S
+        ratio = torch.exp(log_weight)
+        reverse_rates = ratio * fwd_rate 
+
+        # B, D, S
+
+    return reverse_rates, ratio
 
 @sampling_utils.register_sampler
-class ElboTauL:
+class TauL:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
@@ -61,39 +112,10 @@ class ElboTauL:
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
+                t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
 
-                qt0 = model.transition(t * torch.ones((N,), device=device))  # (N, S, S)
-                rate = model.rate(t * torch.ones((N,), device=device))  # (N, S, S)
-                # p_theta(x_0|x_t) ?
-
-                p0t = F.softmax(
-                    model(x, t * torch.ones((N,), device=device)), dim=2
-                )  # (N, D, S) (not log_softmax)
-
-                qt0_denom = (
-                    qt0[
-                        torch.arange(N, device=device).repeat_interleave(
-                            self.D * self.S
-                        ),
-                        torch.arange(self.S, device=device).repeat(N * self.D),
-                        x.long().flatten().repeat_interleave(self.S),
-                    ].view(N, self.D, self.S)
-                    + self.eps_ratio
-                )
-
-                # First S is x0 second S is x tilde
-                qt0_numer = qt0  # (N, S, S)
-
-                forward_rates = rate[
-                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
-                    torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
-                ].view(N, self.D, self.S)
-
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
-
-                reverse_rates = forward_rates * inner_sum  # (N, D, S)
-
+                logits = model(x, t_ones)
+                reverse_rates = get_reverse_rates(model, logits, x, t_ones, self.cfg, N, self.D, self.S)
                 reverse_rates[
                     torch.arange(N, device=device).repeat_interleave(self.D),
                     torch.arange(self.D, device=device).repeat(N),
@@ -126,6 +148,49 @@ class ElboTauL:
 
                 change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
                 x = x_new
+                if t <= self.corrector_entry_time:
+                    print("corrector")
+                    for _ in range(self.num_corrector_steps):
+                        # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+                        
+                        t_h_ones = (t) * torch.ones((N,), device=device)
+                        rate = model.rate(t_h_ones)
+
+                        logits = model(x_new, t_h_ones) #
+                        reverse_rates = get_reverse_rates(model, logits, x_new, t_h_ones, self.cfg, N, self.D, self.S)
+                        reverse_rates[
+                            torch.arange(N, device=device).repeat_interleave(self.D),
+                            torch.arange(self.D, device=device).repeat(N),
+                            x.long().flatten(),
+                        ] = 0.0
+
+                        transpose_forward_rates = rate[
+                            torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                            x_new.long().flatten().repeat_interleave(self.S),
+                            torch.arange(self.S, device=device).repeat(N * self.D),
+                        ].view(N, self.D, self.S)
+
+                        reverse_rates = (
+                            transpose_forward_rates + reverse_rates
+                        )  # (N, D, S)
+                        poisson_dist = torch.distributions.poisson.Poisson(reverse_rates * h)  # posterior: p_{t-eps|t}, B, D; S
+                        jump_nums = (
+                            poisson_dist.sample()
+                        )  # how many jumps in interval [t-eps, t]
+
+                        if not self.is_ordinal:
+                            jump_num_sum = torch.sum(jump_nums, dim=2)
+                            jump_num_sum_mask = jump_num_sum <= 1
+                            jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+
+                        adj_diffs = jump_nums * diffs
+                        overall_jump = torch.sum(adj_diffs, dim=2)
+                        xp = x + overall_jump
+
+                        change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+
+                        x_new = torch.clamp(xp, min=0, max=self.S - 1)
+                        x = x_new
 
             p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
@@ -137,7 +202,7 @@ class ElboTauL:
 
 
 @sampling_utils.register_sampler
-class ElboLBJF:
+class LBJF:
     def __init__(self, cfg):
         self.cfg = cfg
         self.t = 1.0
@@ -152,10 +217,6 @@ class ElboLBJF:
         self.eps_ratio = cfg.sampler.eps_ratio
 
     def sample(self, model, N):
-        # in init
-        # x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{i} P_{i} (\tilde{x^{1:D}_{i} - x^{1:D}_{t})
-        #  x^{1:D}_{t - h} = x^{1:D}_{t} + sum_{d} sum_{s\x^{d}_{t}} P_{ds} (s - x^{d}_{t})
-        # Pds changes in in dim d zu während time spanne t-h
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
@@ -172,47 +233,21 @@ class ElboLBJF:
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-
-                qt0 = model.transition(t * torch.ones((N,), device=device))  # (N, S, S)
-                rate = model.rate(t * torch.ones((N,), device=device))  # (N, S, S)
-                # p_theta(x_0|x_t) ?
-
-                p0t = F.softmax(
-                    model(x, t * torch.ones((N,), device=device)), dim=2
-                )  # (N, D, S) (not log_softmax)
-
-                qt0_denom = (
-                    qt0[
-                        torch.arange(N, device=device).repeat_interleave(
-                            self.D * self.S
-                        ),
-                        torch.arange(self.S, device=device).repeat(N * self.D),
-                        x.long().flatten().repeat_interleave(self.S),
-                    ].view(N, self.D, self.S)
-                    + self.eps_ratio
-                )
-
-                qt0_numer = qt0  # (N, S, S)
-                # forward_rates == fwd_rate
-                forward_rates = rate[
-                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
-                    torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
-                ].view(N, self.D, self.S)
-
-                inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) #
+                t_ones = t * torch.ones((N,), device=device)
+                qt0 = model.transition(t_ones)  # (N, S, S)
+                rate = model.rate(t_ones)
+                logits = model(x, t_ones)
+                reverse_rates = get_reverse_rates(model, logits, x, t_ones, self.cfg, N, self.D, self.S)
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-
-                posterior = forward_rates * inner_sum  # (N, D, S)
-                post_0 = posterior * (1 - xt_onehot)
+                post_0 = reverse_rates * (1 - xt_onehot)
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                 diag = torch.clip(1.0 - h * off_diag, min=0, max=1)
-                posterior = posterior * post_0 * h + diag * xt_onehot  # * h  # eq.17
+                reverse_rates = reverse_rates * post_0 * h + diag * xt_onehot  # * h  # eq.17
 
-                posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
-                log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                reverse_rates = reverse_rates / torch.sum(reverse_rates, axis=-1, keepdims=True)
+                log_posterior = torch.log(reverse_rates + 1e-35).view(-1, self.S)
                 x_new = (
                     torch.distributions.categorical.Categorical(logits=log_posterior)
                     .sample()
@@ -223,47 +258,29 @@ class ElboLBJF:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        p0t = F.softmax(
-                            model(x_new, t * torch.ones((N,), device=device)), dim=2
-                        )  #
+                        t_h_ones = (t) * torch.ones((N,), device=device)
+                        logits = model(x_new, t_h_ones) #
+                        reverse_rates = get_reverse_rates(model, logits, x_new, t_h_ones, self.cfg, N, self.D, self.S)
 
-                        qt0_denom = (
-                            qt0[
-                                torch.arange(N, device=device).repeat_interleave(
-                                    self.D * self.S
-                                ),
-                                torch.arange(self.S, device=device).repeat(N * self.D),
-                                x_new.long().flatten().repeat_interleave(self.S),
-                            ].view(N, self.D, self.S)
-                            + self.eps_ratio
-                        )
-
-                        qt0_numer = qt0  # (N, S, S)
-                        # forward_rates == fwd_rate
-                        forward_rates = rate[
-                            torch.arange(N, device=device).repeat_interleave(
-                                self.D * self.S
-                            ),
-                            torch.arange(self.S, device=device).repeat(N * self.D),
+                        transpose_forward_rates = rate[
+                            torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                             x_new.long().flatten().repeat_interleave(self.S),
+                            torch.arange(self.S, device=device).repeat(N * self.D),
                         ].view(N, self.D, self.S)
 
-                        inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S) #
-
-                        xt_onehot = F.one_hot(x_new.long(), self.S)
-
-                        posterior = (
-                            forward_rates + forward_rates * inner_sum
+                        reverse_rates = (
+                            transpose_forward_rates + reverse_rates
                         )  # (N, D, S)
-                        post_0 = posterior * (1 - xt_onehot)
+
+                        post_0 = reverse_rates * (1 - xt_onehot)
 
                         off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                         diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                        posterior = posterior * post_0 * h + diag * xt_onehot
-                        posterior = posterior / torch.sum(
-                            posterior, axis=-1, keepdims=True
+                        reverse_rates = reverse_rates * post_0 * h + diag * xt_onehot
+                        reverse_rates = reverse_rates / torch.sum(
+                            reverse_rates, axis=-1, keepdims=True
                         )
-                        log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
+                        log_posterior = torch.log(reverse_rates + 1e-35).view(-1, self.S)
 
                         x_new = (
                             torch.distributions.categorical.Categorical(
@@ -871,6 +888,7 @@ class CRMLBJF:
                 h = ts[idx] - ts[idx + 1]
                 # p_theta(x_0|x_t) ?
                 t_ones = t * torch.ones((N,), device=device)
+
                 ll_all, ll_xt = self.get_logprob(
                     self.cfg, model, x, t_ones, N, self.D, self.S
                 )
@@ -987,11 +1005,11 @@ class CRMTauL:
                 xt_onehot = F.one_hot(x.long(), self.S)
                 posterior = torch.exp(log_weight) * fwd_rate 
                 posterior = posterior * (1 - xt_onehot) # B, D, S
-                #print("posterior", posterior, posterior.shape)
 
                 flips = torch.distributions.poisson.Poisson(
                     posterior * h
                 ).sample()  # B, D most 0
+
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
                     axis=list(range(x.ndim)),
@@ -1032,18 +1050,20 @@ class CRMMidPointTau:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.is_ordinal = cfg.sampler.is_ordinal
+        self.device = cfg.device
 
         if cfg.data.name == 'DiscreteMNIST':
             self.state_change = torch.load('SavedModels/MNIST/state_change_matrix_mnist.pth')
-            self.state_change = self.state_change.to('cuda')
+            self.state_change = self.state_change.to(device=self.device)
         elif cfg.data.name == 'Maze3S':
             if self.is_ordinal:
                 self.state_change = torch.load('SavedModels/MAZE/state_change_matrix_maze_ordinal.pth')
-                self.state_change = self.state_change.to('cuda')
+                self.state_change = self.state_change.to(device=self.device)
             else:
                 self.state_change = torch.load('SavedModels/MAZE/state_change_matrix_maze.pth')
-                self.state_change = self.state_change.to('cuda')
-
+                self.state_change = self.state_change.to(device=self.device)
+        elif cfg.data.name == "BinMNIST":
+            self.state_change = torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
         if cfg.model.log_prob == "bin_ebm":
             self.get_logprob = partial(bin_ebm_logits)
@@ -1110,6 +1130,7 @@ class CRMMidPointTau:
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
                 diff = choices - x.unsqueeze(-1)
+
                 avg_offset = torch.sum(
                     flips * diff, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
@@ -1197,3 +1218,205 @@ class CRMBinary:
 
         return h
 """
+
+
+@sampling_utils.register_sampler
+class MidPointTauL:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.is_ordinal = cfg.sampler.is_ordinal
+        self.device = cfg.device
+        self.eps_ratio = cfg.sampler.eps_ratio
+
+        if cfg.data.name == 'DiscreteMNIST':
+            self.state_change = - torch.load('SavedModels/MNIST/state_change_matrix_mnist.pth')
+            self.state_change = self.state_change.to(device=self.device)
+        elif cfg.data.name == 'Maze3S':
+            if self.is_ordinal:
+                self.state_change = - torch.load('SavedModels/MAZE/state_change_matrix_maze_ordinal.pth')
+                self.state_change = self.state_change.to(device=self.device)
+            else:
+                self.state_change = - torch.load('SavedModels/MAZE/state_change_matrix_maze.pth')
+                self.state_change = self.state_change.to(device=self.device)
+        elif cfg.data.name == "BinMNIST":
+            self.state_change = - torch.tensor([[0, 1], [-1, 0]], device=self.device)
+        """
+        if cfg.model.log_prob == "bin_ebm":
+            self.get_logprob = partial(bin_ebm_logits)
+        elif cfg.model.log_prob == "ebm":
+            self.get_logprob = partial(ebm_logits)
+        else:  # cfg.model.log_prob == 'cat':
+            self.get_logprob = partial(cat_logits)
+        """
+    def sample(self, model, N):
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+        self.state_change = torch.tile(self.state_change, (N, 1, 1))
+        with torch.no_grad():
+            x = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+            ts[0] = 0.99999
+            change_jump = []
+            change_clamp = []
+            # Fragen:
+            # 1. Prediction zum  Zeitpunkt 0.5 * h +t_ones?
+            # Wie summe über states? => meistens R * changes = 0
+            # 
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+                t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
+                t_05 = 0.5 * h + t_ones
+                logits = model(x, t_05)
+                reverse_rates, _ = get_reverse_rates(model, logits, x, t_05, self.cfg, N, self.D, self.S)
+
+                reverse_rates[
+                    torch.arange(N, device=device).repeat_interleave(self.D),
+                    torch.arange(self.D, device=device).repeat(N),
+                    x.long().flatten(),
+                ] = 0.0
+
+                state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                    torch.arange(self.S, device=device).repeat(N * self.D),
+                    x.long().flatten().repeat_interleave(self.S),
+                ].view(N, self.D, self.S)
+
+                change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
+                print("change", (change == torch.zeros((N, self.D), device=device)).all())
+                x_prime = x + change#, dim=-1)
+                x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
+
+                logits = model(x_prime, t_ones)
+                reverse_rates, _ = get_reverse_rates(model, logits, x_prime, t_ones, self.cfg, N, self.D, self.S)
+
+                reverse_rates[
+                    torch.arange(N, device=device).repeat_interleave(self.D),
+                    torch.arange(self.D, device=device).repeat(N),
+                    x_prime.long().flatten(),
+                ] = 0.0
+
+                state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                    torch.arange(self.S, device=device).repeat(N * self.D),
+                    x_prime.long().flatten().repeat_interleave(self.S),
+                ].view(N, self.D, self.S)
+
+                diff = state_change
+                
+                flips = torch.distributions.poisson.Poisson(
+                    reverse_rates * h
+                ).sample()  # B, D most 0
+                choices = utils.expand_dims(
+                    torch.arange(self.S, device=device, dtype=torch.int32),
+                    axis=list(range(x.ndim)),
+                )  # 1,1, S
+
+                if not self.is_ordinal:
+                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                    flip_mask = (tot_flips <= 1) * 1
+                    flips = flips * flip_mask
+                #diff = choices - x.unsqueeze(-1)
+                diff = state_change
+
+                avg_offset = torch.sum(
+                    flips * diff, axis=-1
+                )  # B, D, S with entries -(S - 1) to S-1
+                xp = x_prime + avg_offset
+
+                change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+                x_new = torch.clip(xp, min=0, max=self.S - 1)
+                change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
+                x = x_new
+
+            return x.detach().cpu().numpy().astype(int), change_jump
+
+@sampling_utils.register_sampler
+class ExactELBO:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        eps_ratio = cfg.sampler.eps_ratio
+        self.initial_dist = cfg.sampler.initial_dist
+
+    def sample(self, model, N):
+        t = 1.0
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+
+        with torch.no_grad():
+            xt = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+            )
+            ts[0] = 0.99999
+            # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
+            change_jump = []
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+
+                # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
+                logits = model(xt, t * torch.ones((N,), device=device))
+                log_p0t = F.log_softmax(logits, dim=2)  # (N, D, S)
+
+                t_eps = t - h  # tau
+
+                q_teps_0 = model.transition(
+                    t_eps * torch.ones((N,), device=device)
+                )  # (N, S, S)
+                qt0_denom = (
+                    q_teps_0[
+                        torch.arange(N, device=device).repeat_interleave(
+                            self.D * self.S
+                        ),
+                        torch.arange(self.S, device=device).repeat(N * self.D),
+                        xt.long().flatten().repeat_interleave(self.S),
+                    ].view(N,self.D, self.S)
+                    + self.cfg.sampler.eps_ratio
+                )
+
+                # First S is x0 second S is x tilde
+
+                q_teps_0 = q_teps_0 / qt0_denom
+                q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
+
+                q_t_teps = model.transit_between(
+                    t_eps * torch.ones((N,), device=device),
+                    t * torch.ones((N,), device=device),
+                )  # (N, S, S
+                q_t_teps = q_t_teps.permute(0, 2, 1)
+
+                b = utils.expand_dims(
+                    torch.arange(xt.shape[0], device=device),
+                    axis=list(range(1, xt.ndim)),
+                )
+                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
+
+                qt0 = q_teps_0 * q_t_teps
+                log_qt0 = torch.log(qt0)
+                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+
+                log_p0t = log_p0t.unsqueeze(-1)
+                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
+                cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
+                x_new = cat_dist.sample().view(N, self.D)
+                change_jump.append((torch.sum(x_new != xt) / (N * self.D)).item())
+                xt = x_new
+
+            return xt.detach().cpu().numpy().astype(int), change_jump

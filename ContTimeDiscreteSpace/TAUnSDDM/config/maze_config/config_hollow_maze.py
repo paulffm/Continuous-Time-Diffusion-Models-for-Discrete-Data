@@ -25,7 +25,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 300000 # 2000 #2000000
+    training.n_iters = 400000 # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1
@@ -75,7 +75,7 @@ def get_config():
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 1024  # d_model in TAU => embed_dim?
+    model.mlp_dim = 512 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = None
     # ConcatReadout
@@ -98,7 +98,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 5000
+    saving.checkpoint_freq = 50000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping

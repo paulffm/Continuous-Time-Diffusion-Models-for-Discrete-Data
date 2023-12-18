@@ -23,7 +23,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 5000000  # 2000 #2000000
+    training.n_iters = 300000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
@@ -49,7 +49,7 @@ def get_config():
 
     model.ch = 64  # 128 => 4mal so viele Params
     model.num_res_blocks = 2
-    model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
+    model.ch_mult = [1, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  
     model.scale_count_to_put_attn = 1
     model.data_min_max = [0, 1]

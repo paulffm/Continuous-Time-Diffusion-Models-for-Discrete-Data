@@ -560,7 +560,176 @@ class ScoreElbo:
         nll = 0
 
         return neg_elbo #+ self.nll_weight * nll
+    
+@losses_utils.register_loss
+class RElbo:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.nll_weight = cfg.loss.nll_weight
+        self.min_time = cfg.loss.min_time
+        self.one_forward_pass = cfg.loss.one_forward_pass   
+        self.cross_ent = nn.CrossEntropyLoss()
 
+    def calc_loss(self, minibatch, state):
+        model = state["model"]
+        S = self.cfg.data.S
+        # if 4 Dim => like images: True
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+
+        B, D = minibatch.shape
+        device = model.device
+
+        # get random timestep between 1.0 and self.min_time
+        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=0.99999)
+
+        qt0 = model.transition(
+            ts
+        )  # (B, S, S) # transition q_{t | s=0} eq.15 => here randomness because of ts => for every ts another q_{t|0}
+
+        # R_t = beta_t * R_b
+        rate = model.rate(
+            ts
+        )  # (B, S, S) # no proability in here (diagonal = - sum of rows)
+
+        # --------------- Sampling x_t, x_tilde --------------------
+
+        qt0_rows_reg = qt0[
+            torch.arange(B, device=device).repeat_interleave(
+                D
+            ),  # repeats every element 0 to B-1 D-times
+            minibatch.flatten().long(),  # minibatch.flatten() => (B, D) => (B*D) (1D-Tensor)
+            :,
+        ]  # (B*D, S)
+
+        # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
+        x_t_cat = torch.distributions.categorical.Categorical(qt0_rows_reg)
+        x_t = x_t_cat.sample().view(  # sampling B * D times => from every row of qt0_rows_reg once => then transform it to shape B, D
+            B, D
+        )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
+
+        # --------------- x_t = noisy data => x_tilde one transition in every batch of x_t --------------------
+        # puts diagonals (- values) (in a B*D, S) in this column where x_t has its entry => x_t[0,0] = 1
+        # => in rate_vals_square[0, 1] = - values
+        rate_vals_square = rate[
+            torch.arange(B, device=device).repeat_interleave(D), x_t.long().flatten(), :
+        ]  # (B*D, S)
+
+        rate_vals_square[
+            torch.arange(B * D, device=device), x_t.long().flatten()
+        ] = 0.0  # - values = 0 => in rate_vals_square[0, 1] = 0
+
+        rate_vals_square = rate_vals_square.view(B, D, S)  # (B*D, S) => (B, D, S)
+
+        #  Summe der Werte entlang der Dimension S
+        rate_vals_square_dimsum = torch.sum(rate_vals_square, dim=2).view(
+            B, D
+        )  # B, D with every entry = S-1? => for entries of x_t same prob to transition?
+        square_dimcat = torch.distributions.categorical.Categorical(
+            rate_vals_square_dimsum
+        )
+
+        # Samples where transitions takes place in every row of B
+        square_dims = square_dimcat.sample()  # (B,) taking values in [0, D)
+
+        rate_new_val_probs = rate_vals_square[
+            torch.arange(B, device=device), square_dims, :
+        ]  # (B, S) => every row has only one entry = 0, everywhere else 1; chooses the row square_dim of rate_vals_square
+        # => now rate_new_val_probs: (B, S) with every row (1, 1, 0)
+
+        # samples from rate_new_val_probs and chooses state to transition to => more likely where entry is 1 instead of 0?
+        square_newvalcat = torch.distributions.categorical.Categorical(
+            rate_new_val_probs
+        )
+
+        # Samples state, where we going
+        # if x_t = (0, 1, 2, X, 3) and square_newval_samples = 1
+        # x_tilde = (0, 1, 2, 1, 3)
+        square_newval_samples = (
+            square_newvalcat.sample()
+        )  # (B, ) taking values in [0, S)
+
+        x_tilde = x_t.clone()
+        x_tilde[torch.arange(B, device=device), square_dims] = square_newval_samples
+
+        # Now, when we minimize LCT, we are sampling (x, x ̃) from the forward process and then maximizing
+        # the assigned model probability for the pairing in the reverse direction, just as in LDT
+
+        # ---------- First term of ELBO (regularization) ---------------
+        # use forward from UNet, MLP, Sequencetransformer
+
+        if self.one_forward_pass:
+            logits_reg = model(x_tilde, ts)  # (B, D, S)
+            # ensures that positive
+            reg_x = x_tilde
+        else:
+            # x_t = x from Paper
+            logits_reg = model(x_t, ts)  # (B, D, S)
+            reg_x = x_t
+
+        # same as 1-one_hot => diagonals to 0
+        mask_reg = torch.ones((B, D, S), device=device)
+        mask_reg[
+            torch.arange(B, device=device).repeat_interleave(D),
+            torch.arange(D, device=device).repeat(B),
+            reg_x.long().flatten(),
+        ] = 0.0  # (B, D, S)
+        
+        # q_{t|0} (x ̃|x_0)
+
+        rate_vals_reg = rate[
+            torch.arange(B, device=device).repeat_interleave(D),
+            :,
+            reg_x.long().flatten(),
+        ].view(B, D, S)
+
+        reg_tmp = (mask_reg * rate_vals_reg)  # (B, D, S)
+        ll_all, ll_xt = get_logprob_with_logits(
+            self.cfg, model, x_tilde, ts, logits_reg
+        )
+        ll_xt = ll_xt.unsqueeze(-1)
+        backwd = torch.exp(ll_all - ll_xt)
+        # first term; exactly as in formula
+        reg_term = torch.sum(backwd * reg_tmp, dim=-1)
+
+        # ----- second term of continuous ELBO (signal term) ------------
+
+        inner_log_sig = ll_xt - ll_all
+
+        # Masking of dimension d
+        x_tilde_mask = torch.ones((B, D, S), device=device)
+        x_tilde_mask[
+            torch.arange(B, device=device).repeat_interleave(D),
+            torch.arange(D, device=device).repeat(B),
+            x_tilde.long().flatten(),
+        ] = 0.0
+
+        # same forward rate: going from any State to state S, specifie by x_tilde
+        outer_rate_sig = rate[
+            torch.arange(B, device=device).repeat_interleave(D * S),
+            torch.arange(S, device=device).repeat(B * D),
+            x_tilde.long().flatten().repeat_interleave(S),
+        ].view(B, D, S)
+        
+
+        outer_sum_sig = torch.sum(
+            x_tilde_mask
+            * outer_rate_sig * inner_log_sig, dim=-1
+        )
+
+        neg_elbo = reg_term  - outer_sum_sig
+        neg_elbo = torch.sum(neg_elbo)
+        #if 
+        #perm_x_logits = torch.permute(x_logits, (0, 2, 1))
+        #nll = self.cross_ent(perm_x_logits, minibatch.long())
+        #else:
+        nll = 0
+
+        return neg_elbo / B #+ self.nll_weight * nll
+    
 @losses_utils.register_loss
 class CondCTElbo:
     def __init__(self, cfg):

@@ -18,12 +18,12 @@ from lib.datasets.metrics import eval_mmd
 def main():
     
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
 
     # creating paths
-    date = '2023-11-16' # 2023-10-30 'Hollow-2023-10-29'
-    config_name = 'config_001_tauMLP.yaml' # 'config_001_maze.yaml' 'config_001_rate001.yaml'
-    model_name = 'model_199999_tauMLP.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
+    date = '2023-12-16' # 2023-10-30 'Hollow-2023-10-29'
+    config_name = 'config_001_masked.yaml' # 'config_001_maze.yaml' 'config_001_rate001.yaml'
+    model_name = 'model_199999_masked.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
 
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
@@ -32,12 +32,11 @@ def main():
 
     # creating models
     cfg = bookkeeping.load_config(config_path)
-    cfg.sampler.name = 'ElboLBJF' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
-    cfg.logit_type = 'direct'
-    cfg.sampler.num_corrector_steps = 10
+    cfg.sampler.name = 'CRMTauL' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
+    cfg.sampler.num_corrector_steps = 0
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
-    cfg.sampler.num_steps = 500 #750
-    cfg.sampler.is_ordinal = True
+    cfg.sampler.num_steps = 100 #750
+    cfg.sampler.is_ordinal = False
 
     #print(cfg)
     device = torch.device(cfg.device)
@@ -60,10 +59,59 @@ def main():
 
     dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
     dataloader = DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
-
+    print("Sampler:", cfg.sampler.name)
     n_samples = 1024
     n_rounds = 10
     mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
     print("MMD", mmd)
 if __name__ == "__main__":
     main()
+
+# 500 Steps:
+# Bert LBJF: 0.0008 10/10
+# Bert TauL: 0.0002 0.0002 7/10
+    
+# 100 Steps
+# Bert LBJF: 0.0008 10/10
+# Bert TauL: 0.0002  7/10
+    
+# 50 Steps
+# Bert LBJF: 0.0009 10/10
+# Bert TauL: 0.0001  5/10
+
+# 500 
+# Hollow Direct LBJF: 5/10 0.0002 0.0001
+# Hollow Direct TauL: 5/10 9.0557e-05 7/10 0.0002
+
+# 50 Steps
+# Hollow Direct LBJF: 0.0001 5/10 0.0001 4/10
+# Hollow Direct TauL: 0.0002 8/10
+
+# 20 Steps
+# Hollow Direct LBJF: 0.0002 6/10 0.0002 6/10
+# Hollow Direct TauL: 0.0001 4/10 0.0002 4/10
+
+# 500 Steps
+# Hollow p0t LBJF: 9.3952e-05 4/10 0.0002 6/10
+# Hollow p0t TauL: 0.0002 5/10 0.0002 5/10
+# Hollow p0t Exact: 0.0002 5/10 0.0002 4/10
+
+# 20 Steps
+# Hollow p0t LBJF: 0.0001 7/10 0.0001 7/10
+# Hollow p0t TauL: 0.0002 9/10 0.0002 5/10
+# Hollow p0t Exact: 0.0001 5/10 0.0001 6/10
+
+# 100 steps
+# Masked p0t LBJF: 
+# Masked p0t TauL: 0.0001 6/10
+# Masked p0t Exact: 
+
+# 20 steps
+# Masked p0t LBJF: 0.0001 4/10 0.0001 2/10
+# Masked p0t TauL: 4.5056e-05 6/10 0.0001 8/10
+# Masked p0t Exact: 5.5522e-05 2/10 9.5707e-05 5/10
+    
+# Very similiar: p0t and direct => therefore we will use for the following experiments 
+# the p0t as objective, as we can utilize another sampling procedure
+    
+# TauL and Euler Sampling very similiar. We hypothetise since we are in a binary setting, multiple jumps are not meaningful 

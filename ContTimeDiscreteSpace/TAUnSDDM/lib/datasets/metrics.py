@@ -21,11 +21,11 @@ def binary_mmd(x, y, sim_fn):
     x = x.to(torch.float32)
     y = y.to(torch.float32)
     kxx = sim_fn(x, x)
-    kxx = kxx * (1 - torch.eye(x.shape[0]))
+    kxx = kxx * (1 - torch.eye(x.shape[0], device='cuda'))
     kxx = torch.sum(kxx) / x.shape[0] / (x.shape[0] - 1)
 
     kyy = sim_fn(y, y)
-    kyy = kyy * (1 - torch.eye(y.shape[0]))
+    kyy = kyy * (1 - torch.eye(y.shape[0], device='cuda'))
     kyy = torch.sum(kyy) / y.shape[0] / (y.shape[0] - 1)
     kxy = torch.sum(sim_fn(x, y))
     kxy = kxy / x.shape[0] / y.shape[0]
@@ -62,12 +62,15 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
                 break
         gt_data = torch.stack(gt_data, axis=0)
         gt_data = gt_data.view(-1, config.model.concat_dim)
-        print("gt_data", gt_data.shape)
-        x0 = sampler.sample(model, n_samples)
-        x0 = torch.from_numpy(x0)
-        # x0 = x0.view(gt_data.shape)
-        print(x0.shape)
+        x0, _ = sampler.sample(model, n_samples)
+        x0 = torch.from_numpy(x0).to(device='cuda')
+
         mmd = binary_exp_hamming_mmd(x0, gt_data)
+        if mmd < 0:
+            mmd = 0 
+            n_rounds = n_rounds - 1
+        
         avg_mmd += mmd
     mmd = avg_mmd / n_rounds
+    print("n_rounds", n_rounds)
     return mmd
