@@ -485,7 +485,7 @@ class ScoreElbo:
         outer_sum_sig = torch.sum(
             x_tilde_mask
             * outer_rate_sig # forward rate B, D, S
-            * (outer_qt0_numer_sig / outer_qt0_denom_sig.view(B, D, 1)) 
+            #* (outer_qt0_numer_sig / outer_qt0_denom_sig.view(B, D, 1)) 
             * inner_log_sig, # nur ratio der reverse rate 
             dim=(1, 2),
         )
@@ -542,8 +542,8 @@ class ScoreElbo:
         # if I sum later => same result?
     
         sig_norm = torch.sum(
-            (rate_sig_norm * x_tilde_mask * qt0_sig_norm_numer)
-            / (Z_sig_norm * qt0_sig_norm_denom.view(B, D, 1)),
+            (rate_sig_norm * x_tilde_mask)# * qt0_sig_norm_numer)
+            / (Z_sig_norm), # * qt0_sig_norm_denom.view(B, D, 1)),
             dim=(1, 2),
         )
 

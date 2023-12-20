@@ -19,12 +19,12 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.min_time = 0.007
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 400000  # 2000 #2000000
+    training.n_iters = 500000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 3
     training.warmup = 0  # 5000
@@ -50,7 +50,7 @@ def get_config():
     model.padding = True
     model.ch = 64 # data.image_size + 1 if model.padding else data.image_size  # 128
     model.num_res_blocks = 3
-    model.ch_mult = [1, 2, 2, 2]  # [1, 2, 2, 2]
+    model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  # 3
     model.scale_count_to_put_attn = 1
     model.data_min_max = [0, 2]
@@ -59,7 +59,7 @@ def get_config():
     model.time_embed_dim = model.ch
     model.time_scale_factor = 1000
     model.fix_logistic = False
-    model.model_output = 'logistic_pars'
+    model.model_output = 'logits'
     model.num_heads = 8
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
@@ -73,13 +73,13 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
 
-    saving.checkpoint_freq = 2000
+    saving.checkpoint_freq = 10000
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 1000
-    sampler.min_t = 0.01
+    sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "uniform"
     sampler.num_corrector_steps = 10

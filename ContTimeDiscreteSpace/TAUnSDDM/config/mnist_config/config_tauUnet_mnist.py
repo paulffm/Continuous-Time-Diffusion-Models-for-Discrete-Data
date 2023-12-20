@@ -24,7 +24,7 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 5000000  # 2000 #2000000
+    training.n_iters = 400000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
@@ -58,7 +58,7 @@ def get_config():
     model.time_embed_dim = model.ch
     model.time_scale_factor = 1000
     model.fix_logistic = False
-    model.model_output = 'logistic_pars'
+    model.model_output = 'logits' #logistic_pars'
     model.num_heads = 8
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
@@ -79,7 +79,7 @@ def get_config():
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping
+    sampler.name = "TauL"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 1000
     sampler.min_t = 0.01
     sampler.eps_ratio = 1e-9

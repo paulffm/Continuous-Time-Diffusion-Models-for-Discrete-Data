@@ -18,12 +18,22 @@ from lib.datasets.metrics import eval_mmd
 def main():
     
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
+
 
     # creating paths
-    date = '2023-12-16' # 2023-10-30 'Hollow-2023-10-29'
-    config_name = 'config_001_masked.yaml' # 'config_001_maze.yaml' 'config_001_rate001.yaml'
-    model_name = 'model_199999_masked.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
+    """
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticRMDirect/")
+    date = '2023-12-20' # 2023-10-30 'Hollow-2023-10-29'
+    config_name = 'config_001_hollowCEDirect500K.yaml' # 'config_001_maze.yaml' 'config_001_rate001.yaml'
+    model_name = 'model_9999_hollowCEDirect500K.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
+    """
+
+    #"""
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2023-12-20' # 2
+    config_name = 'config_001_hollowCEProb500K.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_9999_hollowCEProb500K.pt'
+    #"""
 
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
@@ -32,7 +42,7 @@ def main():
 
     # creating models
     cfg = bookkeeping.load_config(config_path)
-    cfg.sampler.name = 'CRMTauL' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
+    cfg.sampler.name = 'ExactSampling' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
     cfg.sampler.num_corrector_steps = 0
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
     cfg.sampler.num_steps = 100 #750
@@ -61,7 +71,7 @@ def main():
     dataloader = DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
     print("Sampler:", cfg.sampler.name)
     n_samples = 1024
-    n_rounds = 10
+    n_rounds = 25
     mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
     print("MMD", mmd)
 if __name__ == "__main__":
@@ -115,3 +125,16 @@ if __name__ == "__main__":
 # the p0t as objective, as we can utilize another sampling procedure
     
 # TauL and Euler Sampling very similiar. We hypothetise since we are in a binary setting, multiple jumps are not meaningful 
+    
+
+# Direct: 100 Steps 9999
+# TauL: 4: 0.0001 
+# LBJF: 0.0001
+    
+# RevProb: 100 Steps 9999
+# TauL 3: 0.0002; 2 0.00006
+    
+# 0.0002; 4: 0.000008
+# TauL: 18/25: 0.0002
+# LBJF: 32/50 0.0002 
+# Exact: 

@@ -465,7 +465,95 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
+    
+class HollowTransformerLogistics(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
+        self.S = cfg.data.S
+        self.data_shape = cfg.data.shape
+        self.fix_logistic = cfg.model.fix_logistic
+        self.device = cfg.device
+        if cfg.model.nets == "bidir_transformer2":
+            tmp_net = hollow_networks.BidirectionalTransformer2(
+                cfg, readout_dim=2
+            ).to(device)
+        #elif cfg.model.nets == "visual":
+        #    tmp_net = hollow_networks.BiVisualTransformer(
+        #        cfg, readout_dim=None
+        #    ).to(device)
+        else:
+            tmp_net = hollow_networks.BidirectionalTransformer(
+                cfg, readout_dim=2
+            ).to(device)
 
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+        print("SHAPE", x.shape)
+        B, D = x.shape
+        C, H, W = self.data_shape
+        x = x.view(B, C, H, W)
+
+        net_out = self.net(x, times)  # (B, D, 2)
+        net_out = net_out.view(B, 2 * C, H, W)
+        print(net_out.shape)
+        mu = net_out[0].unsqueeze(-1)
+        log_scale = net_out[1].unsqueeze(-1)
+
+        #if self.padding: 
+        #    mu = mu[:, :, :-1, :-1, :]
+        #    log_scale = log_scale[:, :, :-1, :-1, :]
+        
+        # The probability for a state is then the integral of this continuous distribution between
+        # this state and the next when mapped onto the real line. To impart a residual inductive bias
+        # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
+        # is the normalized input into the model and μ′ is mean outputted from the network.
+        # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
+        inv_scale = torch.exp(-(log_scale - 2))
+
+        bin_width = 2.0 / self.S
+        bin_centers = torch.linspace(
+            start=-1.0 + bin_width / 2,
+            end=1.0 - bin_width / 2,
+            steps=self.S,
+            device=self.device,
+        ).view(1, 1, 1, 1, self.S)
+
+        sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
+        bin_left_logcdf = F.logsigmoid(sig_in_left)
+        sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
+        bin_right_logcdf = F.logsigmoid(sig_in_right)
+
+        logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
+        logits_2 = self._log_minus_exp(
+            -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
+        )
+        if self.fix_logistic:
+            logits = torch.min(logits_1, logits_2)
+        else:
+            logits = logits_1
+
+        logits = logits.view(B, D, self.S)
+
+        return logits
+
+    def _log_minus_exp(self, a, b, eps=1e-6):
+        """
+        Compute log (exp(a) - exp(b)) for (b<a)
+        From https://arxiv.org/pdf/2107.03006.pdf
+        """
+        return a + torch.log1p(-torch.exp(b - a) + eps)
+
+
+        return logits
 
 class MaskedModel(nn.Module):
     def __init__(self, cfg, device, rank=None):
@@ -695,6 +783,14 @@ class UniVarHollowEMA(EMA, HollowTransformer, UniformVariantRate):
 
         self.init_ema()
 
+@model_utils.register_model
+class UniVarHollowEMALogistics(EMA, HollowTransformerLogistics, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        HollowTransformerLogistics.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
 
 # hollow
 @model_utils.register_model

@@ -59,23 +59,24 @@ def get_config():
     model.net_arch = "bidir_transformer"
     model.nets = "bidir_transformer2"
     model.use_cat = False
+    model.fix_logistic = False
 
     # BiDir
-    model.embed_dim = 64
+    model.embed_dim = 128
     model.bidir_readout = "attention"  # res_concat, attention, concat
     model.use_one_hot_input = False
     # UniDirectional
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
     # config.dtype = torch.float32
-    model.num_layers = 6
+    model.num_layers = 8
     # TransformerBlock
     ## SA
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
     ## FF
-    model.mlp_dim = 512 # d_model in TAU => embed_dim?
+    model.mlp_dim = 1024 # d_model in TAU => embed_dim?
     ### TransformerMLPBlock
     model.out_dim = None
     # ConcatReadout
@@ -98,7 +99,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 50000
+    saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping

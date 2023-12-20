@@ -46,7 +46,10 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
     """Eval mmd."""
     avg_mmd = 0.0
     n_data = n_samples // config.data.batch_size
-    
+    neg_mmd = 0
+    neg_rounds = 0
+    pos_mmd = 0
+    pos_rounds = 0
     exit_flag = False
     for i in range(n_rounds):
         n = 1
@@ -67,10 +70,18 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
 
         mmd = binary_exp_hamming_mmd(x0, gt_data)
         if mmd < 0:
-            mmd = 0 
-            n_rounds = n_rounds - 1
+            neg_mmd += mmd
+            neg_rounds += 1
+            
+        else:
+            pos_mmd += mmd
+            pos_rounds += 1
+
+        
         
         avg_mmd += mmd
+    print("pos MMD", pos_mmd / pos_rounds)
+    print("neg MMD", neg_mmd / neg_rounds)
     mmd = avg_mmd / n_rounds
-    print("n_rounds", n_rounds)
+    print("pos n_rounds", pos_rounds)
     return mmd

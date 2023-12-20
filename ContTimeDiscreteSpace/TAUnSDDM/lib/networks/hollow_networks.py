@@ -91,6 +91,7 @@ class ResidualReadout(nn.Module):
         self.config = config
         self.readout_dim = readout_dim
         self.embed_dim = config.model.embed_dim
+        
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
         self.input_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)
 

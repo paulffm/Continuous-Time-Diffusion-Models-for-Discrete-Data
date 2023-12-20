@@ -13,7 +13,7 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "elbo"  # rm, mle, elbo
+    loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
@@ -23,7 +23,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 200000  # 2000 #2000000
+    training.n_iters = 50000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1
@@ -85,7 +85,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 50000
+    saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
