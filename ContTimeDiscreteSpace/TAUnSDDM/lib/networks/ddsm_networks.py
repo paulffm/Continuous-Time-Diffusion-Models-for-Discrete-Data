@@ -161,6 +161,7 @@ class SudokuScoreNet(nn.Module):
         h = h.reshape(
             x.size())  # * torch.exp(-t[:,None,None,None]* self.softplus(self.scale)) * (1/(x+1e-3)+1/(1-x+1e-3))
         h = h - h.mean(axis=-1, keepdims=True)
+        print("h", h.shape)
         return h
 
 

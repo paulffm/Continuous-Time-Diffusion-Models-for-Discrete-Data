@@ -25,16 +25,26 @@ def main():
     save_location = os.path.join(script_dir, "SavedModels/SyntheticRMDirect/")
     date = '2023-12-20' # 2023-10-30 'Hollow-2023-10-29'
     config_name = 'config_001_hollowCEDirect500K.yaml' # 'config_001_maze.yaml' 'config_001_rate001.yaml'
-    model_name = 'model_9999_hollowCEDirect500K.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
-    """
-
-    #"""
+    model_name = 'model_199999_hollowCEDirect500K.pt' # 'model_55999_rate001.pt' 'model_5999_maze.pt'
+    
+    
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
     date = '2023-12-20' # 2
     config_name = 'config_001_hollowCEProb500K.yaml' # config_001_hollowMLEProb.yaml
-    model_name = 'model_9999_hollowCEProb500K.pt'
-    #"""
+    model_name = 'model_199999_hollowCEProb500K.pt'
 
+    """
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticBert/")
+    date = '2023-12-20' # 2
+    config_name = 'config_001_bert500K.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_bert500K.pt'
+    
+    """
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
+    date = '2023-12-17' # 2
+    config_name = 'config_001_masked.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_masked.pt'
+    """
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
     config_path = os.path.join(save_location, date, config_name)
@@ -42,13 +52,23 @@ def main():
 
     # creating models
     cfg = bookkeeping.load_config(config_path)
-    cfg.sampler.name = 'ExactSampling' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
+    cfg.sampler.name = 'ElboLBJF' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
     cfg.sampler.num_corrector_steps = 0
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
     cfg.sampler.num_steps = 100 #750
     cfg.sampler.is_ordinal = False
 
-    #print(cfg)
+    num_steps = [20, 50, 100, 200, 500]
+    num_sampler = ['CRMTauL', 'CRMLBJF', 'ExactSampling']
+    num_mmd = []
+
+    #for sampler_i in num_sampler:
+    #    cfg.sampler.name = sampler_i
+    #    for i in num_steps:
+        #print(cfg)
+    #        cfg.sampler.num_steps = i
+
+            
     device = torch.device(cfg.device)
 
     model = model_utils.create_model(cfg, device)
@@ -73,7 +93,15 @@ def main():
     n_samples = 1024
     n_rounds = 25
     mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
-    print("MMD", mmd)
+    #num_mmd.append(mmd.item())
+    print("MMD", mmd.item())
+    #    print("Sampler:", sampler_i)
+    #    print("Num steps:", num_steps)
+    #    print("Num mmd", num_mmd)
+
+    #print("Sampler ges:", num_sampler)
+    #print("Num steps ges :", num_steps)
+    #print("Num mmd ges", num_mmd)
 if __name__ == "__main__":
     main()
 
@@ -128,13 +156,77 @@ if __name__ == "__main__":
     
 
 # Direct: 100 Steps 9999
-# TauL: 4: 0.0001 
-# LBJF: 0.0001
+# TauL: pos MMD: 0.0002686732041183859 neg MMD: -0.00011882558465003967 MMD: 0.0001446735841454938 pos n_rounds: 17/25
+# LBJF: pos MMD: 0.00017342269711662084 neg MMD: -0.00010647327144397423 MMD: 6.146430678199977e-05 pos n_rounds: 30/50
+# Direct 199 999:
+# TauL: pos MMD: 0.00011419731890782714 neg MMD: -0.00013799247972201556 MMD: -2.1985173589200713e-05 pos n_rounds: 23
+# pos MMD: 0.00017084764840546995 neg MMD: -0.00013665799633599818 MMD: 4.794597316504223e-06 pos n_rounds: 23
     
-# RevProb: 100 Steps 9999
-# TauL 3: 0.0002; 2 0.00006
+# LBJF: pos MMD: 0.00013810396194458008 neg MMD: -0.00011365055979695171 MMD: 1.2226700164319482e-05 pos n_rounds: 25
+# pos MMD: 0.00019979715580120683 neg MMD: -0.00013425826909951866 MMD: 3.276943971286528e-05 pos n_rounds: 25
     
-# 0.0002; 4: 0.000008
-# TauL: 18/25: 0.0002
-# LBJF: 32/50 0.0002 
-# Exact: 
+# RevProb: 100 Steps 9999 Train
+# TauL: pos MMD: 0.0001316326088272035 neg MMD: -6.437843694584444e-05 MMD: 4.5387743739411235e-05 pos n_rounds: 14/25
+# pos MMD: 0.0001843631180236116 neg MMD: -0.0001115977720473893 MMD: 3.638267298811115e-05
+# pos MMD: 0.0001400125038344413 neg MMD: -0.00011733770224964246 MMD: 1.1337398973410018e-05 pos n_rounds: 25
+    
+# LBJF:  pos MMD 0.0002092393988277763 neg MMD -0.00011471979087218642 MMD 2.782225601549726e-05 pos n_rounds 11/25
+# pos MMD: 0.0001962311362149194 neg MMD: -0.00011041585094062611 MMD: 9.197116014547646e-05 
+# pos MMD: 0.0001225145097123459 neg MMD: -0.00013166152348276228 MMD: -2.490758924977854e-05 pos n_rounds: 21
+# Exact: pos MMD: 0.00014404380635824054 neg MMD: -0.00011983017611782998 MMD: 1.7384290913469158e-05 pos n_rounds: 26
+    
+# RevProb 199 999
+# TauL: pos MMD: 9.041598968906328e-05 neg MMD: -0.0001231956121046096 MMD: -3.347873644088395e-05
+# LBJF:pos MMD: 0.00013347384032793343 neg MMD: -0.00012228958075866103 MMD: -9.5367431640625e-07 pos n_rounds: 22
+# Analytical: pos MMD: 0.0001468531947163865 neg MMD: -0.00010747519991127774 MMD: 2.90024272544e-05 24
+
+# Bert
+# TauL: pos MMD: 0.00013466611123178154 neg MMD: -8.65033725858666e-05 MMD: 9.433865488972515e-05 pos n_rounds: 18/25
+#pos MMD: 0.00019409770902711898 neg MMD: -9.962445619748905e-05 MMD: 8.248328958870843e-05 pos n_rounds: 31
+# TauL ohne p0t: pos MMD: 0.00013659503019880503 neg MMD: -0.00013623635459225625 MMD: 7.111549348337576e-05 pos n_rounds: 19
+# LBJF: 0.0007480800268240273
+
+# Masked prob 199999
+# Taul:pos MMD: 0.00014541375276166946 neg MMD: -0.00014963462308514863 MMD: 2.149343526980374e-05 pos n_rounds: 29
+# Taul Last: pos MMD: 0.00018206665117759258 neg MMD: -0.0001321311719948426 MMD: -1.6808509428756224e-07 pos n_rounds: 21
+# LBJF: pos MMD: 0.00011410936713218689 neg MMD: -0.000153273344039917 MMD: -2.492964267730713e-05 pos n_rounds: 24
+# Euler Last: pos MMD: 0.00012914887338411063 neg MMD: -0.0001249299239134416 MMD: 2.2435784558183514e-05 pos n_rounds: 29
+# Exact: pos MMD: 0.00011911988258361816neg MMD: -0.00014259065210353583 MMD: -4.314064790378325e-05 pos n_rounds: 19
+
+# Direct
+# TauL: pos MMD: 0.00020308936655055732 neg MMD: -0.00016237089585047215 MMD: 6.42144659650512e-05 pos n_rounds: 31
+# TauL: Last: pos MMD: 0.00016415714344475418 neg MMD: -0.00014098762767389417 MMD: 1.158475879492471e-05 pos n_rounds: 25
+# Euler last: pos MMD: 0.0001515140465926379 neg MMD: -0.00013864981883671135 MMD: 4.1251776565331966e-05 pos n_rounds: 31
+# Elbo: pos MMD: 0.00020035043417010456 neg MMD: -0.00012555404100567102 MMD: 7.65067306929268e-05 pos n_rounds: 31
+    
+# Hollow implicit Elbo:
+# TauL: pos MMD: 0.00012698621139861643 neg MMD: -0.00015479724970646203 MMD: -4.208385871606879e-05 pos n_rounds: 20
+# LBJF: pos MMD: 0.00021080255100969225 neg MMD: -0.0001658046239754185 MMD: 2.2498965336126275e-05 pos n_rounds: 25
+# Exact: pos MMD: 0.00017154050874523818 neg MMD: -0.0001279190182685852 MMD: -2.0113586288061924e-05 pos n_rounds: 18
+    
+# LBJF besser bei Hollow prob
+# Tau besser bei Hollow dirct
+# insgesamt hollow prob besser:
+#----------------------------------
+# RevProb: 
+# LBJF: 0.002525
+# TauL: 0.002634
+# ExactSampling: 0.00274
+
+
+# 0.005364969838410616
+# 0.0029045911505818367
+
+# Direct:
+# LBJF: 0.0026941706892102957
+# TauL: pos MMD: 0.002701888093724847
+    
+# 10, 20
+# 0.
+    
+
+
+# Masked:
+# LBJF: pos MMD: 0.0027752763126045465
+# TauL: pos MMD: 0.0026900090742856264
+# 0.002598656341433525

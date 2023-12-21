@@ -109,18 +109,18 @@ def gen_sudoku(num):
 class SudokuDataset(Dataset):
     def __init__(self, cfg, device, root=None):
         self.batch_size = cfg.data.batch_size
-
+        self.device = device
     def __len__(self):
         return int(self.batch_size * 1000)
 
     def __getitem__(self, idx):
         sudoku = gen_sudoku(1)
         dataset = np.eye(9)[sudoku.reshape(sudoku.shape[0], -1) - 1]
-        return dataset
+        return torch.tensor(dataset, device=self.device)
 
 
 def sudoku_acc(sample, return_array=False):
-    sample = sample.detach().cpu().numpy()
+    #sample = sample.detach().cpu().numpy()
     correct = 0
     total = sample.shape[0]
     ans = sample.argmax(-1) + 1

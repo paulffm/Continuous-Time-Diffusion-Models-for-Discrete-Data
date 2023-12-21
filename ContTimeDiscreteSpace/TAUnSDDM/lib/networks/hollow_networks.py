@@ -399,9 +399,7 @@ class FeedForwardBlock(nn.Module):
         self.norm = nn.LayerNorm(config.model.embed_dim)
 
     def forward(self, x: TensorType["B", "K", "E"]) -> TensorType["B", "K", "O"]:
-        # if conditioner None: K=D else K=D+1; O=E since out_dim =None
-        # Bert: x + Norm -> Sublayer -> Dropout
-        # Sublayer: Lin, Lin Dropout, GeLu
+
         if self.config.model.transformer_norm_type == "prenorm":
             z = self.norm(x)
             z = self.mlp(z)

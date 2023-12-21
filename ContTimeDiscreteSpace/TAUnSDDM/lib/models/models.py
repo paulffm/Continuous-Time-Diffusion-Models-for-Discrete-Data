@@ -14,6 +14,8 @@ from lib.models.forward_model import (
     BirthDeathForwardBase,
 )
 
+from lib.datasets.sudoku import define_relative_encoding
+
 
 class MaskedUNet(nn.Module):
     """
@@ -600,9 +602,9 @@ class BertMLPRes(nn.Module):
 
 
 class SudokuScoreNet(nn.Module):
-    def __init__(self, cfg, device, encoding, rank=None):
+    def __init__(self, cfg, device, rank=None):
         super().__init__()
-
+        encoding = define_relative_encoding()
         tmp_net = ddsm_networks.SudokuScoreNet(cfg, encoding).to(device)
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
@@ -615,9 +617,10 @@ class SudokuScoreNet(nn.Module):
         """
         Returns logits over state space
         """
-
+        B, D = x.shape
+        x = x.view(-1, 9, 9 ,9)
         logits = self.net(x, times)  # (B, D, S)
-
+        logits = logits.view(B, D, 9)
         return logits
 
 
@@ -822,11 +825,11 @@ class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
 
 
 @model_utils.register_model
-class UniformScoreNetEMA(EMA, SudokuScoreNet, UniformRate):
-    def __init__(self, cfg, device, encoding, rank=None):
+class UniVarScoreNetEMA(EMA, SudokuScoreNet, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        SudokuScoreNet.__init__(self, cfg, device, encoding, rank)
-        UniformRate.__init__(self, cfg, device)
+        SudokuScoreNet.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
 

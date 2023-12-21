@@ -350,7 +350,7 @@ class MidPointTauL:
                 self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
                 #self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
                 self.state_change = self.state_change.to(device=self.device)
-        elif cfg.data.name == "BinMNIST":
+        elif cfg.data.name == "BinMNIST" or cfg.data.name == 'SyntheticData':
             self.state_change = -torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
     def sample(self, model, N):
@@ -1423,6 +1423,7 @@ class CTMidPointTauL:
         elif cfg.data.name == "BinMNIST":
             self.state_change = -torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
+    # SxS
     def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -1488,8 +1489,10 @@ class CTMidPointTauL:
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
-
-                change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
+                # B, D, S
+                # B, D 
+                # x' = x + sum
+                change = torch.round(0.5 * h * torch.sum((reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
 
                 x_prime = x + change#, dim=-1)
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
@@ -1757,11 +1760,9 @@ class ElboTauL:
                 change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
                 x = x_new
 
-            p_0gt = F.softmax(
-                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
-            )  # (N, D, S)
+            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            # x_0max = x
+            x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
@@ -1907,11 +1908,9 @@ class ElboLBJF:
                 change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 # print(torch.sum(x_new != x, dim=1))
                 x = x_new
-            p_0gt = F.softmax(
-                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
-            )  # (N, D, S)
+            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-
+            #x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
