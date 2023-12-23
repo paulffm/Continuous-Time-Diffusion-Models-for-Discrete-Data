@@ -16,6 +16,7 @@ class CTElbo:
         self.nll_weight = cfg.loss.nll_weight
         self.min_time = cfg.loss.min_time
         self.one_forward_pass = cfg.loss.one_forward_pass   
+        self.max_t = cfg.training.max_t
         self.cross_ent = nn.CrossEntropyLoss()
 
     def calc_loss(self, minibatch, state):
@@ -30,8 +31,7 @@ class CTElbo:
         device = model.device
 
         # get random timestep between 1.0 and self.min_time
-        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
-        ts = torch.clamp(ts, max=0.99999)
+        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time # 0.99999
 
         qt0 = model.transition(
             ts
@@ -67,7 +67,7 @@ class CTElbo:
 
         rate_vals_square[
             torch.arange(B * D, device=device), x_t.long().flatten()
-        ] = 0.0  # - values = 0 => in rate_vals_square[0, 1] = 0
+        ] = 0.0  #0 the diagonals
 
         rate_vals_square = rate_vals_square.view(B, D, S)  # (B*D, S) => (B, D, S)
 

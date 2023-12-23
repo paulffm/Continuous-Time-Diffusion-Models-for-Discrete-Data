@@ -781,9 +781,13 @@ def find_path(maze, random_entry=False):
     # BFS-Algorithmus, um den kürzesten Pfad zu finden
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     if random_entry:
+        
         entries = find_entries(maze)
+        if len(entries) != 2:
+            return None
         start = entries[0]
         end = entries[1]
+        
     else:
         start = (0, 1)
         end = (14, 13)
@@ -852,6 +856,32 @@ def maze_gen(
     image_list = torch.stack(image_list, 0).to(device)
 
     return image_list
+
+def maze_acc(samples):
+    samples = samples.reshape(-1, 15, 15)
+    B = samples.shape[0]
+    samples_clean = samples.copy()
+    samples_clean[samples_clean == 1] = 2
+    acc = []
+    mazes_stack = []
+    for i in range(B):
+        solved_maze = find_path(samples_clean[i, :, :], True)
+
+        if solved_maze is not None:
+            #if np.array_equal(solved_maze, samples[i, :, :]):
+            if (solved_maze == samples[i, :, :]).all():
+                acc.append(1)
+                mazes_stack.append(solved_maze)
+            else: 
+                acc.append(0)
+                print(i)
+        else:
+            acc.append(0)
+            print(i)
+        
+    print(f"Accuracy: From {B} are {np.mean(acc) * 100}% solvable.")
+    return np.stack(mazes_stack, 0)
+
 
 
 # Examples:

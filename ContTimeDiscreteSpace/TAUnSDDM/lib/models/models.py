@@ -193,9 +193,9 @@ class ImageX0PredBasePaul(nn.Module):
             mu = net_out[0].unsqueeze(-1)
             log_scale = net_out[1].unsqueeze(-1)
 
-            #if self.padding: 
-            #    mu = mu[:, :, :-1, :-1, :]
-            #    log_scale = log_scale[:, :, :-1, :-1, :]
+            if self.padding: 
+                mu = mu[:, :, :-1, :-1, :]
+                log_scale = log_scale[:, :, :-1, :-1, :]
             
             # The probability for a state is then the integral of this continuous distribution between
             # this state and the next when mapped onto the real line. To impart a residual inductive bias
@@ -227,7 +227,7 @@ class ImageX0PredBasePaul(nn.Module):
                 logits = logits_1
 
         if self.padding:
-            logits = logits[:, :, :-1, :-1, :]
+            #logits = logits[:, :, :-1, :-1, :]
             logits = logits.reshape(B, D, self.S)
             #logits = logits.view(B, D, self.S)
         else:
@@ -625,10 +625,10 @@ class SudokuScoreNet(nn.Module):
 
 
 class ProteinScoreNet(nn.Module):
-    def __init__(self, cfg, device, encoding, rank=None):
+    def __init__(self, cfg, device, rank=None):
         super().__init__()
 
-        tmp_net = ddsm_networks.ProteinScoreNet(cfg, encoding).to(device)
+        tmp_net = ddsm_networks.ProteinScoreNet(cfg).to(device)
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
         else:
@@ -835,11 +835,11 @@ class UniVarScoreNetEMA(EMA, SudokuScoreNet, UniformVariantRate):
 
 
 @model_utils.register_model
-class UniformProteinScoreNetEMA(EMA, ProteinScoreNet, UniformRate):
-    def __init__(self, cfg, device, encoding, rank=None):
+class UniVarProteinScoreNetEMA(EMA, ProteinScoreNet, UniformVariantRate):
+    def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        ProteinScoreNet.__init__(self, cfg, device, encoding, rank)
-        UniformRate.__init__(self, cfg, device)
+        ProteinScoreNet.__init__(self, cfg, device, rank)
+        UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
 
@@ -969,5 +969,14 @@ class UniVarMaskUNetEMA(EMA, MaskedUNet, UniformVariantRate):
         EMA.__init__(self, cfg)
         MaskedUNet.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
+class UniformBDTEMA(EMA, hollow_networks.BidirectionalTransformer, UniformRate):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        hollow_networks.BidirectionalTransformer.__init__(self, cfg, readout_dim=None)# .to(device)
+        UniformRate.__init__(self, cfg, device)
 
         self.init_ema()

@@ -8,6 +8,7 @@ import os
 #from config.maze_config.config_maskedUnet_maze import get_config
 from config.maze_config.config_tauUnet_maze import get_config
 #from config.maze_config.config_hollow_maze import get_config
+#from config.maze_config.config_protein_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -40,9 +41,9 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_199999_hollowMLEProbRand.pt"
-        date = "2023-12-14"
-        config_name = "config_001_hollowMLEProbRand.yaml"
+        model_name = "model_34999_score.pt"
+        date = "2023-12-22"
+        config_name = "config_001_score.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
         #cfg.loss.name = "CatRMTest"

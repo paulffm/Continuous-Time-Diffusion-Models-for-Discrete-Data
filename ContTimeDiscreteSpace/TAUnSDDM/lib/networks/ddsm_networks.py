@@ -185,7 +185,7 @@ class ProteinScoreNet(nn.Module):
         self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim, device=cfg.device),
                                    nn.Linear(embed_dim, embed_dim))
         n = embed_dim
-        # n => bei uns anstatt 5; 48?
+
         self.linear = nn.Conv1d(self.S, n, kernel_size=9, padding=4)
         self.blocks = nn.ModuleList([nn.Conv1d(n, n, kernel_size=9, padding=4),
                                      nn.Conv1d(n, n, kernel_size=9, padding=4),
