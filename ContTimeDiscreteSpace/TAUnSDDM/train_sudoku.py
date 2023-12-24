@@ -4,7 +4,8 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.mnist_config.config_hollow_mnist import get_config
-from config.mnist_config.config_tauUnet_mnist import get_config
+#from config.mnist_config.config_tauUnet_mnist import get_config
+from config.sudoku_config.config_sudoku_unet import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os

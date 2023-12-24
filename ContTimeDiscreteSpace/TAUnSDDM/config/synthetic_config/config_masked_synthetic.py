@@ -12,8 +12,8 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
-    loss.loss_type = "rm"  # rm, mle, elbo
-    loss.logit_type = "direct"
+    loss.loss_type = "elbo"  # rm, mle, elbo
+    loss.logit_type = "reverse_prob"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
     loss.min_time = 0.007

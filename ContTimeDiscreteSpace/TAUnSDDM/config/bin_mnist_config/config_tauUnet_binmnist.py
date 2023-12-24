@@ -18,22 +18,23 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.007
+    loss.min_time = 0.005
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 300000  # 2000 #2000000
+    training.n_iters = 500000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
+    training.max_t = 0.99
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "BinMNIST"
     data.train = True
     data.download = True
     data.S = 2
-    data.batch_size = 64  # use 128 if you have enough memory or use distributed
+    data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.image_size = 28
     data.shape = [1, data.image_size, data.image_size]
@@ -47,9 +48,9 @@ def get_config():
     model.padding = False
     model.ema_decay = 0.9999  # 0.9999
 
-    model.ch = 64  # 128 => 4mal so viele Params
+    model.ch = 96  # 128 => 4mal so viele Params
     model.num_res_blocks = 2
-    model.ch_mult = [1, 2]  # [1, 2, 2, 2]
+    model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  
     model.scale_count_to_put_attn = 1
     model.data_min_max = [0, 1]
@@ -64,7 +65,7 @@ def get_config():
     model.concat_dim = data.image_size * data.image_size * 1
     model.padding = False
 
-    model.rate_const = 2.3
+    model.rate_const = 1.88
     #model.rate_sigma = 6.0
     model.Q_sigma = 512.0
     #model.time_exp = 5  # b

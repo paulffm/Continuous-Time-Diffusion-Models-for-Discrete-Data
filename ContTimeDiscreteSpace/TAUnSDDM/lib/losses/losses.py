@@ -26,7 +26,7 @@ class CTElbo:
         if len(minibatch.shape) == 4:
             B, C, H, W = minibatch.shape
             minibatch = minibatch.view(B, C * H * W)
-
+        
         B, D = minibatch.shape
         device = model.device
 
@@ -53,7 +53,8 @@ class CTElbo:
         ]  # (B*D, S)
 
         # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
-        x_t_cat = torch.distributions.categorical.Categorical(qt0_rows_reg)
+        log_qt0 = torch.where(qt0_rows_reg <= 0.0, -1e9, torch.log(qt0_rows_reg))
+        x_t_cat = torch.distributions.categorical.Categorical(logits=log_qt0)
         x_t = x_t_cat.sample().view(  # sampling B * D times => from every row of qt0_rows_reg once => then transform it to shape B, D
             B, D
         )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
@@ -75,6 +76,7 @@ class CTElbo:
         rate_vals_square_dimsum = torch.sum(rate_vals_square, dim=2).view(
             B, D
         )  # B, D with every entry = S-1? => for entries of x_t same prob to transition?
+
         square_dimcat = torch.distributions.categorical.Categorical(
             rate_vals_square_dimsum
         )
@@ -88,21 +90,16 @@ class CTElbo:
         # => now rate_new_val_probs: (B, S) with every row (1, 1, 0)
 
         # samples from rate_new_val_probs and chooses state to transition to => more likely where entry is 1 instead of 0?
+        log_rate_new_val_probs = torch.where(rate_new_val_probs <= 0.0, -1e9, torch.log(rate_new_val_probs))
         square_newvalcat = torch.distributions.categorical.Categorical(
-            rate_new_val_probs
+            logits=log_rate_new_val_probs
         )
 
         # Samples state, where we going
-        # if x_t = (0, 1, 2, X, 3) and square_newval_samples = 1
-        # x_tilde = (0, 1, 2, 1, 3)
         square_newval_samples = (
             square_newvalcat.sample()
         )  # (B, ) taking values in [0, S)
 
-        # x_noisy => in every Batch exactly one transition
-        # so in every row: one difference between x_t and x_tilde
-        # x_t =     (0, 1, 2, 4, 3)
-        # x_tilde = (0, 1, 2, 1, 3)
         x_tilde = x_t.clone()
         x_tilde[torch.arange(B, device=device), square_dims] = square_newval_samples
 
@@ -145,7 +142,6 @@ class CTElbo:
             ].view(B, D, S)
             + self.ratio_eps
         )
-
 
         # rates of going from any state S in dim d to the target state in d, specified by x_tilde (or other way around)
         # rates of going from state in d, specified by x_tilde (or other way around), to any other state S in dim d 

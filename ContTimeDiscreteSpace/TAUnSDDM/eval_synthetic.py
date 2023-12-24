@@ -52,7 +52,7 @@ def main():
 
     # creating models
     cfg = bookkeeping.load_config(config_path)
-    cfg.sampler.name = 'ElboLBJF' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
+    cfg.sampler.name = 'MidPointTauL' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
     cfg.sampler.num_corrector_steps = 0
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
     cfg.sampler.num_steps = 100 #750
@@ -90,8 +90,8 @@ def main():
     dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
     dataloader = DataLoader(dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle)
     print("Sampler:", cfg.sampler.name)
-    n_samples = 1024
-    n_rounds = 25
+    n_samples = 1024 #1024
+    n_rounds = 3
     mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
     #num_mmd.append(mmd.item())
     print("MMD", mmd.item())

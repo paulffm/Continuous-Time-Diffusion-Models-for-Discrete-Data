@@ -107,7 +107,7 @@ def gen_sudoku(num):
 
 @dataset_utils.register_dataset
 class SudokuDataset(Dataset):
-    def __init__(self, cfg, device, root=None):
+    def __init__(self, cfg, device, _):
         self.batch_size = cfg.data.batch_size
         self.device = device
     def __len__(self):

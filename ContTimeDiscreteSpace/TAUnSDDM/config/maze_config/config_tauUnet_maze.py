@@ -19,14 +19,14 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.min_time = 0.0001
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
     training.n_iters = 500000  # 2000 #2000000
     training.clip_grad = True
-    training.grad_norm = 3
+    training.grad_norm = 2
     training.warmup = 0  # 5000
     training.max_t = 0.99
 
@@ -42,7 +42,7 @@ def get_config():
     data.use_augm = False
     data.crop_wall = False
     data.limit = 1
-    data.random_transform = False
+    data.random_transform = True
 
     config.model = model = ml_collections.ConfigDict()
     model.name = "UniVarUnetEMA"
@@ -51,7 +51,7 @@ def get_config():
     model.padding = True
     model.ch = 64 # data.image_size + 1 if model.padding else data.image_size  # 128
     model.num_res_blocks = 3
-    model.ch_mult = [1, 2, 2, 2]  # [1, 2, 2, 2]
+    model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
     model.input_channels = 1  # 3
     model.scale_count_to_put_attn = 1
     model.data_min_max = [0, 2]
@@ -65,8 +65,8 @@ def get_config():
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
 
-    model.rate_const = 2.25
-    model.t_func = "log_sqr"
+    model.rate_const = 1.55
+    model.t_func = "sqrt_cos"
     model.Q_sigma = 512.0
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"

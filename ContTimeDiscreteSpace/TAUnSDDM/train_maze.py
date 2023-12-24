@@ -6,8 +6,8 @@ import ssl
 import os
 #from config.maze_config.config_bert_maze import get_config
 #from config.maze_config.config_maskedUnet_maze import get_config
-from config.maze_config.config_tauUnet_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
+#from config.maze_config.config_tauUnet_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
 #from config.maze_config.config_protein_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -30,7 +30,7 @@ def main():
     data_name = 'MAZE'
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, f"SavedModels/MAZEunet/")
+    save_location = os.path.join(script_dir, f"SavedModels/MAZE/")
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
@@ -41,8 +41,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_34999_score.pt"
-        date = "2023-12-22"
+        model_name = "model_199999_score.pt"
+        date = "2023-12-23"
         config_name = "config_001_score.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
@@ -62,7 +62,7 @@ def main():
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 500000
         cfg.sampler.sample_freq = 500000000000
-        cfg.saving.checkpoint_freq = 5000
+        cfg.saving.checkpoint_freq = 10000
         cfg.sampler.num_steps = 1000
         cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
         #bookkeeping.save_config(cfg, save_location)

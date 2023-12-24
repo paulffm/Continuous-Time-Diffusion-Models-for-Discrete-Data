@@ -3,7 +3,7 @@ import os
 
 # config_bert_001: Param: 7 226 883
 def get_config():
-    save_directory = "SavedModels/MAZE"
+    save_directory = "SavedModels/MAZEprotein"
     config = ml_collections.ConfigDict()
 
     config.device = "cuda"
@@ -13,20 +13,20 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.nll_weight = 0.0001
+    loss.min_time = 0.005
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 400000 #0  # 2000 #2000000
+    training.n_iters = 300000 #0  # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 3  # 1
+    training.grad_norm = 35  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
-    training.max_t = 0.99
+    training.max_t = 1
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
@@ -50,8 +50,8 @@ def get_config():
     model.name = "UniVarProteinScoreNetEMA"
     model.is_ebm = False
     # Forward model
-    model.rate_const = 1.7
-    model.t_func = "sqrt_cos"
+    model.rate_const = 2.0
+    model.t_func = "log_sqr"
 
     model.embed_dim = 200
     # UniDirectional
@@ -68,7 +68,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 5000
+    saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "ElboTauL"  # TauLeaping or PCTauLeaping

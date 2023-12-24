@@ -3,8 +3,8 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-#from config.mnist_config.config_hollow_mnist import get_config
-from config.mnist_config.config_tauUnet_mnist import get_config
+from config.bin_mnist_config.config_tauUnet_binmnist import get_config
+#from config.mnist_config.config_tauUnet_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -32,7 +32,7 @@ torch.cuda.empty_cache()
 def main():
     train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/MNIST/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/BIN-MNIST/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 

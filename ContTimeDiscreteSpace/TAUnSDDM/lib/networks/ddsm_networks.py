@@ -135,15 +135,15 @@ class SudokuScoreNet(nn.Module):
         super().__init__()
         embed_dim = cfg.model.embed_dim
         # Gaussian random feature embedding layer for time
-        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim),
+        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim, device=cfg.device),
                                    nn.Linear(embed_dim, embed_dim))
 
-        self.linear = Dense(9, 128)
+        self.linear = nn.Linear(9, 128)
         self.blocks = nn.ModuleList(Block(128, 8, bias=allenc_relative) for _ in range(20))
         self.denses = nn.ModuleList(Dense(embed_dim, 128) for _ in range(20))
         self.act = NewGELU()
         self.softplus = nn.Softplus()
-        self.output = Dense(128, 9)
+        self.output = nn.Linear(128, 9)
         self.scale = nn.Parameter(torch.ones(1))
 
     def forward(self, x, t):
@@ -152,6 +152,7 @@ class SudokuScoreNet(nn.Module):
 
         # Encoding path
         h = self.linear(x.view(-1, 81, 9))
+        print("h", h.shape)
         for le, ld in zip(self.blocks, self.denses):
             h = le(h + ld(embed)[:, None, :])
 

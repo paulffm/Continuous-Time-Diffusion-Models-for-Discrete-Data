@@ -94,6 +94,7 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
     pos_mmd = 0
     pos_rounds = 0
     exit_flag = False
+    print("eval")
     for i in range(n_rounds):
         n = 1
         gt_data = []
@@ -104,6 +105,7 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
                     exit_flag = True
                     break
                 n += 1
+            print("in"," while")
             if exit_flag:
                 break
         gt_data = torch.stack(gt_data, axis=0)

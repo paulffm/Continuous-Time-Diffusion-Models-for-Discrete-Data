@@ -19,7 +19,7 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.min_time = 0.001
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
@@ -28,12 +28,13 @@ def get_config():
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
+    training.max_t = 0.99
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "SudokuDataset"
     data.train = True
     data.download = True
-    data.S = 256
+    data.S = 9
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     
@@ -45,14 +46,15 @@ def get_config():
 
     model.embed_dim = 256
 
-    model.rate_const = 2.0
+    model.rate_const = 0.35
     model.t_func = "sqrt_cos"  
     model.Q_sigma = 512.0
+    model.concat_dim = 81 * 9 
 
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1e-4  # 2e-4
+    optimizer.lr = 1.5e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
 
@@ -70,5 +72,6 @@ def get_config():
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
     sampler.sample_freq = 220000000
+
 
     return config

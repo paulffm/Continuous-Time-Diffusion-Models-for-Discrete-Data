@@ -23,12 +23,13 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 50000  # 2000 #2000000
+    training.n_iters = 200000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
+    training.max_t = 1.0
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "SyntheticData"
@@ -45,10 +46,10 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniVarBertEMA"
+    model.name = "UniformBertEMA"
     # Forward model
-    model.rate_const = 2.0
-    model.t_func = "sqrt_cos"  # log_sqr
+    model.rate_const = 1.2
+    #model.t_func = "sqrt_cos"  # log_sqr
     # hollow:
 
     # BiDir
@@ -60,7 +61,7 @@ def get_config():
     model.log_prob = 'cat'
 
     # UniDirectional
-    model.dropout_rate = 0.01
+    model.dropout_rate = 0.1
     model.concat_dim = data.shape[0]
     # config.dtype = torch.float32
     model.num_layers = 3
@@ -108,5 +109,6 @@ def get_config():
     sampler.corrector_entry_time = float(0.0)
     sampler.sample_freq = 200000000
     sampler.is_ordinal = False
+    
 
     return config
