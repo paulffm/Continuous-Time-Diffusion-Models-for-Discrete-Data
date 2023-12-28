@@ -409,7 +409,7 @@ class MidPointTauL:
                 #diag = - off_diag # torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
                 #reverse_rates = (post_0 + diag * xt_onehot)  # * h  # eq.17
 
-                change = torch.round(0.5 * h * torch.sum((reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
+                change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
                 x_prime = x + change#, dim=-1)
                 print((change == torch.zeros((N, self.D), device=self.device)).all())
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
@@ -428,7 +428,7 @@ class MidPointTauL:
                 state_change_prime = self.state_change[
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
+                    x_prime.long().flatten().repeat_interleave(self.S), # wenn hier x_prime
                 ].view(N, self.D, self.S)
 
 
@@ -448,7 +448,7 @@ class MidPointTauL:
                 avg_offset = torch.sum(
                     flips * diff_prime, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
-                xp = x + avg_offset
+                xp = x_prime + avg_offset # wenn hier x_prime
 
                 #change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
@@ -575,7 +575,7 @@ class MidPointSampler:
                 state_change_prime = self.state_change[
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
-                    x_prime.long().flatten().repeat_interleave(self.S),
+                    x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
 
@@ -595,7 +595,7 @@ class MidPointSampler:
                 avg_offset = torch.sum(
                     flips * diff_prime, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
-                xp = x_prime + avg_offset
+                xp = x + avg_offset
 
                 #change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
@@ -1988,6 +1988,7 @@ class ElboTauL:
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.eps_ratio = cfg.sampler.eps_ratio
         self.is_ordinal = cfg.sampler.is_ordinal
+        self.max_t = cfg.training.max_t
 
     def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
@@ -2000,9 +2001,9 @@ class ElboTauL:
 
             # tau = 1 / num_steps
             ts = np.concatenate(
-                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+                (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
-            ts[0] = 0.99999
+            #ts[0] = 0.99999
             change_jump = []
             change_clamp = []
 
@@ -2062,6 +2063,7 @@ class ElboTauL:
 
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
+                    print(torch.mean(jump_num_sum * 1))
                     jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
 
                 adj_diffs = jump_nums * diffs
@@ -2074,11 +2076,12 @@ class ElboTauL:
 
                 change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
                 x = x_new
+                #if t < 0.01:
+                #    break
 
             p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            p_0gt = F.softmax(model(x_0max, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            x_0max = torch.max(p_0gt, dim=2)[1]
+        
             #x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),

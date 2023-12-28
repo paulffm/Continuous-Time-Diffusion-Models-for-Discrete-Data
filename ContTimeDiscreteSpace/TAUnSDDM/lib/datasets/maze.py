@@ -857,6 +857,12 @@ def maze_gen(
 
     return image_list
 
+def path_length(maze):
+    path_len = np.count_nonzero(maze == 1)
+    wall_len = np.count_nonzero(maze == 0)
+    way_len = np.count_nonzero(maze == 2)
+    return path_len, wall_len, way_len
+
 def maze_acc(samples):
     samples = samples.reshape(-1, 15, 15)
     B = samples.shape[0]
@@ -864,6 +870,9 @@ def maze_acc(samples):
     samples_clean[samples_clean == 1] = 2
     acc = []
     mazes_stack = []
+    path_len = []
+    wall_len = []
+    way_len = []
     for i in range(B):
         solved_maze = find_path(samples_clean[i, :, :], True)
 
@@ -872,14 +881,20 @@ def maze_acc(samples):
             if (solved_maze == samples[i, :, :]).all():
                 acc.append(1)
                 mazes_stack.append(solved_maze)
+                path_l, wall_l, way_l = path_length(solved_maze)
+                path_len.append(path_l)
+                wall_len.append(wall_l)
+                way_len.append(way_l)
             else: 
                 acc.append(0)
-                print(i)
         else:
             acc.append(0)
-            print(i)
         
     print(f"Accuracy: From {B} are {np.mean(acc) * 100}% solvable.")
+    print(f"Average path length: {np.mean(path_len)} and prob {np.mean(path_len) * 100 / 225}%")
+    print(f"Average wall length: {np.mean(wall_len)} and prob {np.mean(wall_len) * 100/ 225}%")
+    print(f"Average way length: {np.mean(way_len)} and prob {np.mean(way_len) * 100/ 225}%")
+
     return np.stack(mazes_stack, 0)
 
 

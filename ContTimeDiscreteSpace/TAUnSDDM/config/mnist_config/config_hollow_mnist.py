@@ -3,7 +3,7 @@ import os
 
 
 def get_config():
-    save_directory = "SavedModels/MNIST"
+    save_directory = "SavedModels/MNISTHollow"
     config = ml_collections.ConfigDict()
 
     config.device = "cuda"
@@ -13,7 +13,7 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CatRM"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
-    loss.loss_type = "elbo"  # rm, mle, elbo
+    loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
     loss.eps_ratio = 1e-9
@@ -55,7 +55,7 @@ def get_config():
     model.use_one_hot_input = False
     model.dropout_rate = 0.1
     model.concat_dim = data.image_size * data.image_size * 1
-    model.num_layers = 4
+    model.num_layers = 9
     model.num_heads = 8
     model.attention_dropout_rate = 0.1
     model.transformer_norm_type = "prenorm"  # prenorm
@@ -82,7 +82,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 2000
+    saving.checkpoint_freq = 5000
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping

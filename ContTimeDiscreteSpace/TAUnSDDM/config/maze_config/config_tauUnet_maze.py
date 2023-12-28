@@ -19,16 +19,16 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.0001
+    loss.min_time = 0.001
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
     training.n_iters = 500000  # 2000 #2000000
     training.clip_grad = True
-    training.grad_norm = 2
+    training.grad_norm = 1
     training.warmup = 0  # 5000
-    training.max_t = 0.99
+    training.max_t = 1
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
@@ -60,13 +60,13 @@ def get_config():
     model.time_embed_dim = model.ch
     model.time_scale_factor = 1000
     model.fix_logistic = False
-    model.model_output = 'logistic_pars'
+    model.model_output = 'logits'
     model.num_heads = 8
     model.attn_resolutions = [int(model.ch / 2)]
     model.concat_dim = data.image_size * data.image_size * 1
 
-    model.rate_const = 1.55
-    model.t_func = "sqrt_cos"
+    model.rate_const = 2.0
+    model.t_func = "log_sqr"
     model.Q_sigma = 512.0
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"

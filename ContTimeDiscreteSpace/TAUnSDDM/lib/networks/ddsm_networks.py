@@ -151,6 +151,7 @@ class SudokuScoreNet(nn.Module):
         embed = self.act(self.embed(t))
 
         # Encoding path
+        x = x.to(torch.float32)
         h = self.linear(x.view(-1, 81, 9))
         print("h", h.shape)
         for le, ld in zip(self.blocks, self.denses):

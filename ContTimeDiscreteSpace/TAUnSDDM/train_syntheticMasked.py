@@ -1,17 +1,14 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
+#from config.synthetic_config.config_tauMLP_synthetic import get_config
+#from config.synthetic_config.config_hollow_synthetic import get_config
+from config.synthetic_config.config_masked_synthetic import get_config
 import matplotlib.pyplot as plt
-import ssl
+import lib.datasets.synthetic as synthetic
 import os
-#from config.maze_config.config_bert_maze import get_config
-#from config.maze_config.config_maskedUnet_maze import get_config
-from config.maze_config.config_tauUnet_maze import get_config
-from config.maze_config.config_hollow_maze import get_config
-#from config.maze_config.config_protein_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
-import lib.datasets.maze as maze
 import lib.datasets.dataset_utils as dataset_utils
 import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
@@ -21,66 +18,64 @@ import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
-import numpy as np
-from ruamel.yaml.scalarfloat import ScalarFloat
 import time
-# MLE: Iter: 300000 168214.7792992592
+from torch.utils.data import DataLoader
+import lib.sampling.sampling_utils as sampling_utils
+import numpy as np
+
 
 def main():
-    data_name = 'MAZE'
-
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, f"SavedModels/MAZEunet/")
-    save_location_png = os.path.join(save_location, "PNGs/")
-    # dataset_location = os.path.join(script_dir, 'lib/datasets')
-
     train_resume = True
-    print(save_location)
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
+    save_location_png = os.path.join(save_location, "PNGs/")
+
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_289999_lastunet.pt"
-        date = "2023-12-24"
-        config_name = "config_001_lastunet.yaml"
+        date = "2023-12-17"
+        config_name = "config_001_masked.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
-        #cfg.loss.name = "CatRMTest"
 
+    dataset_location = os.path.join(script_dir, cfg.data.location)
+    
     device = torch.device(cfg.device)
 
     model = model_utils.create_model(cfg, device)
-
-    optimizer = optimizers_utils.get_optimizer(model.parameters(), cfg)
-
-
-    state = {"model": model, "optimizer": optimizer, "n_iter": 0}
-
-    if train_resume:
-        checkpoint_path = os.path.join(save_location, date, model_name)
-        state = bookkeeping.load_state(state, checkpoint_path)
-        cfg.training.n_iters = 600000
-        cfg.sampler.sample_freq = 500000000000
-        cfg.saving.checkpoint_freq = 10000
-        cfg.sampler.num_steps = 1000
-        cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
-        #bookkeeping.save_config(cfg, save_location)
-    
-    sampler = sampling_utils.get_sampler(cfg)
 
     loss = losses_utils.get_loss(cfg)
 
     training_step = training_utils.get_train_step(cfg)
 
-    if cfg.data.name == 'Maze3SComplete':
-        limit = (cfg.training.n_iters - state["n_iter"] + 1) * cfg.data.batch_size
-        cfg.data.limit = limit 
+    optimizer = optimizers_utils.get_optimizer(model.parameters(), cfg)
 
-    dataset = dataset_utils.get_dataset(cfg, device)
-    dataloader = torch.utils.data.DataLoader(dataset,
-        batch_size=cfg.data.batch_size,
-        shuffle=cfg.data.shuffle)
+    sampler = sampling_utils.get_sampler(cfg)
+
+    state = {"model": model, "optimizer": optimizer, "n_iter": 0}
+
+    dataset = dataset_utils.get_dataset(cfg, device, dataset_location)
+    dataloader = DataLoader(
+        dataset, batch_size=cfg.data.batch_size, shuffle=cfg.data.shuffle
+    )
+
+    bm, inv_bm = synthetic.get_binmap(cfg.model.concat_dim, cfg.data.binmode)
+
+    # train_set, _, _ = get_binmnist_datasets('/Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/TAUnSDDM/lib/datasets/', device="cpu")
+    # dataloader = DataLoader(train_set, batch_size=cfg.data.batch_size, shuffle=True, num_workers=4)
+
+    if train_resume:
+        model_name = "model_199999_masked.pt"
+        checkpoint_path = os.path.join(save_location, date, model_name)
+        state = bookkeeping.load_state(state, checkpoint_path)
+        cfg.training.n_iters = 210000
+        cfg.sampler.name = "ElboTauL"
+        cfg.sampler.sample_freq = 20000000
+        cfg.saving.checkpoint_freq = 10000
+        cfg.sampler.num_steps = 500
+        bookkeeping.save_config(cfg, save_location)
 
     print("Info:")
     print("--------------------------------")
@@ -89,7 +84,7 @@ def main():
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
     #print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
-    #print("Logit Type:", cfg.loss.logit_type)
+    print("Logit Type:", cfg.loss.logit_type)
     #print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
@@ -98,21 +93,17 @@ def main():
     #print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
-    n_samples = 16
+    n_samples = 500
 
     print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
-    n = 1
-    start = time.time()
     while True:
-        for minibatch in dataloader: #tqdm(dataloader): #
+        for minibatch in tqdm(dataloader):
+            minibatch = minibatch.to(device)
             l = training_step.step(state, minibatch, loss)
-            training_loss.append(l.item())
 
-            if n % 100 == 0:
-                print("Iter:", n, time.time() - start)
-            n += 1
+            training_loss.append(l.item())
 
             if (state["n_iter"] + 1) % cfg.saving.checkpoint_freq == 0 or state[
                 "n_iter"
@@ -122,41 +113,34 @@ def main():
                 saving_train_path = os.path.join(
                     save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
                 )
-                saving_train_loss = os.path.join(
-                    save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.npy"
-                )
                 plt.plot(training_loss)
-                np.save(saving_train_loss, training_loss)
                 plt.xlabel('Iterations')
                 plt.ylabel('Loss')
-                plt.title("Training Loss")
+                plt.title("Training loss")
                 plt.savefig(saving_train_path)
                 plt.close()
+                print("Model saved in Iteration:", state["n_iter"] + 1)
+
 
             if (state["n_iter"] + 1) % cfg.sampler.sample_freq == 0 or state[
                 "n_iter"
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
-                samples,_ = sampler.sample(state["model"], n_samples)
-                samples = samples.reshape(
-                    n_samples, 1, cfg.data.image_size, cfg.data.image_size
-                )
+                samples, _ = sampler.sample(state["model"], n_samples)
 
                 state["model"].train()
-                samples = samples * 255
-                fig = plt.figure(figsize=(9, 9))
-                for i in range(n_samples):
-                    plt.subplot(4, 4, 1 + i)
-                    plt.axis("off")
-                    plt.imshow(np.transpose(samples[i, ...], (1, 2, 0)), cmap="gray")
 
+                samples = synthetic.bin2float(
+                    samples.astype(np.int32), inv_bm, cfg.model.concat_dim, cfg.data.int_scale
+                )
+                
                 saving_plot_path = os.path.join(
                     save_location_png,
                     f"{cfg.loss.name}{state['n_iter']}_{cfg.sampler.name}{cfg.sampler.num_steps}.png",
                 )
-
-                plt.savefig(saving_plot_path)
-                plt.close()
+                synthetic.plot_samples(
+                    samples, saving_plot_path, im_size=4.1, im_fmt="png"
+                )
 
             state["n_iter"] += 1
             if state["n_iter"] > cfg.training.n_iters - 1:
@@ -167,11 +151,10 @@ def main():
             break
 
     saving_train_path = os.path.join(
-    save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png")
+        save_location_png, f"loss_{cfg.loss.name}{state['n_iter']}.png"
+    )
     plt.plot(training_loss)
-    plt.xlabel('Iterations')
-    plt.ylabel('Loss')
-    plt.title("Training Loss")
+    plt.title("Training loss")
     plt.savefig(saving_train_path)
     plt.close()
 

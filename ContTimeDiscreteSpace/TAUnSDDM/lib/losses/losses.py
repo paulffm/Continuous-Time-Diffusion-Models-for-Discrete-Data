@@ -1226,3 +1226,63 @@ class BinEBMAux:
         loss = -ll_xt
         loss = loss.sum() / B
         return loss
+
+
+@losses_utils.register_loss
+class CTEval:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.nll_weight = cfg.loss.nll_weight
+        self.min_time = cfg.loss.min_time
+        self.one_forward_pass = cfg.loss.one_forward_pass   
+        self.max_t = cfg.training.max_t
+        self.cross_ent = nn.CrossEntropyLoss()
+
+    def calc_loss(self, minibatch, state):
+        model = state["model"]
+        S = self.cfg.data.S
+        # if 4 Dim => like images: True
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+        
+        B, D = minibatch.shape
+        device = model.device
+
+        # get random timestep between 1.0 and self.min_time
+        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time # 0.99999
+
+        qt0 = model.transition(
+            ts
+        )  # (B, S, S) # transition q_{t | s=0} eq.15 => here randomness because of ts => for every ts another q_{t|0}
+
+        # R_t = beta_t * R_b
+        rate = model.rate(
+            ts
+        )  # (B, S, S) # no proability in here (diagonal = - sum of rows)
+
+        # --------------- Sampling x_t, x_tilde --------------------
+
+        qt0_rows_reg = qt0[
+            torch.arange(B, device=device).repeat_interleave(
+                D
+            ),  # repeats every element 0 to B-1 D-times
+            minibatch.flatten().long(),  # minibatch.flatten() => (B, D) => (B*D) (1D-Tensor)
+            :,
+        ]  # (B*D, S)
+
+        # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
+        log_qt0 = torch.where(qt0_rows_reg <= 0.0, -1e9, torch.log(qt0_rows_reg))
+        x_t_cat = torch.distributions.categorical.Categorical(logits=log_qt0)
+        x_t = x_t_cat.sample().view(  # sampling B * D times => from every row of qt0_rows_reg once => then transform it to shape B, D
+            B, D
+        )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
+
+        x_logits = model(x_t, ts)  # (B, D, S)
+        # ensures that positive
+        log_probs = F.log_softmax(x_logits, dim=2)  # (B, D, S)
+        x_onehot = F.one_hot(x_t, x_logits.shape[-1])
+        nll = torch.sum(log_probs * x_onehot, axis=-1)
+
+        metric = nll.mean(axis=tuple(range(1, len(nll.shape))))

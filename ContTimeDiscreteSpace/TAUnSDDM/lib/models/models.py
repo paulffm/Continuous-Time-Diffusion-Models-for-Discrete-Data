@@ -193,9 +193,9 @@ class ImageX0PredBasePaul(nn.Module):
             mu = net_out[0].unsqueeze(-1)
             log_scale = net_out[1].unsqueeze(-1)
 
-            if self.padding: 
-                mu = mu[:, :, :-1, :-1, :]
-                log_scale = log_scale[:, :, :-1, :-1, :]
+            #if self.padding: 
+            #    mu = mu[:, :, :-1, :-1, :]
+            #    log_scale = log_scale[:, :, :-1, :-1, :]
             
             # The probability for a state is then the integral of this continuous distribution between
             # this state and the next when mapped onto the real line. To impart a residual inductive bias
@@ -227,7 +227,7 @@ class ImageX0PredBasePaul(nn.Module):
                 logits = logits_1
 
         if self.padding:
-            #logits = logits[:, :, :-1, :-1, :]
+            logits = logits[:, :, :-1, :-1, :]
             logits = logits.reshape(B, D, self.S)
             #logits = logits.view(B, D, self.S)
         else:
@@ -620,7 +620,7 @@ class SudokuScoreNet(nn.Module):
         B, D = x.shape
         x = x.view(-1, 9, 9 ,9)
         logits = self.net(x, times)  # (B, D, S)
-        logits = logits.view(B, D, 9)
+        logits = logits.view(B, 81, 9)
         return logits
 
 
