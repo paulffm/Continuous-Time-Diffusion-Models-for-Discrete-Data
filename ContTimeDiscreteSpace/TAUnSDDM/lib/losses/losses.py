@@ -35,12 +35,12 @@ class CTElbo:
 
         qt0 = model.transition(
             ts
-        )  # (B, S, S) # transition q_{t | s=0} eq.15 => here randomness because of ts => for every ts another q_{t|0}
+        )  
 
         # R_t = beta_t * R_b
         rate = model.rate(
             ts
-        )  # (B, S, S) # no proability in here (diagonal = - sum of rows)
+        )  #(diagonal = - sum of rows)
 
         # --------------- Sampling x_t, x_tilde --------------------
 
@@ -107,7 +107,6 @@ class CTElbo:
         # the assigned model probability for the pairing in the reverse direction, just as in LDT
 
         # ---------- First term of ELBO (regularization) ---------------
-        # use forward from UNet, MLP, Sequencetransformer
 
         if self.one_forward_pass:
             x_logits = model(x_tilde, ts)  # (B, D, S)

@@ -42,8 +42,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2023-12-26"
-        config_name = "config_001.yaml"
+        date = "2023-12-31"
+        config_name = "config_001_hollow.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -56,7 +56,7 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_9999.pt"
+        model_name = "model_369999_hollow.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path)
         cfg.training.n_iters = 600000 

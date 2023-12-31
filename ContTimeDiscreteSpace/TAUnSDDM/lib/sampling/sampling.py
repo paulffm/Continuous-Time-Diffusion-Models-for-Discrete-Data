@@ -92,6 +92,7 @@ class TauL:
         self.eps_ratio = cfg.sampler.eps_ratio
         self.is_ordinal = cfg.sampler.is_ordinal
         self.loss_name = cfg.loss.name
+
     def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
@@ -144,7 +145,7 @@ class TauL:
 
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
-                change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
+                change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
                 x = x_new
                 if t <= self.corrector_entry_time:
                     print("corrector")
@@ -161,7 +162,7 @@ class TauL:
                         reverse_rates[
                             torch.arange(N, device=device).repeat_interleave(self.D),
                             torch.arange(self.D, device=device).repeat(N),
-                            x.long().flatten(),
+                            x_new.long().flatten(),
                         ] = 0.0
 
                         transpose_forward_rates = rate[
@@ -172,12 +173,18 @@ class TauL:
                             torch.arange(self.S, device=device).repeat(N * self.D),
                         ].view(N, self.D, self.S)
 
-                        reverse_rates = (
+                        corrector_rates = (
                             transpose_forward_rates + reverse_rates
                         )  # (N, D, S)
+                        corrector_rates[
+                            torch.arange(N, device=device).repeat_interleave(self.D),
+                            torch.arange(self.D, device=device).repeat(N),
+                            x_new.long().flatten(),
+                        ] = 0.0
                         poisson_dist = torch.distributions.poisson.Poisson(
-                            reverse_rates * h
+                            corrector_rates * h
                         )  # posterior: p_{t-eps|t}, B, D; S
+
                         jump_nums = (
                             poisson_dist.sample()
                         )  # how many jumps in interval [t-eps, t]
@@ -200,14 +207,16 @@ class TauL:
                         x_new = torch.clamp(xp, min=0, max=self.S - 1)
                         x = x_new
             if self.loss_name == "CTElbo":
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
                 x_0max = torch.max(p_0gt, dim=2)[1]
             else:
                 x_0max = x
 
             return (
                 x_0max.detach().cpu().numpy().astype(int),
-                change_jump,
+                change_clamp,
             )  # , x_hist, x0_hist
 
 
@@ -255,9 +264,7 @@ class LBJF:
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                 diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                reverse_rates = (
-                    post_0 * h + diag * xt_onehot
-                )  # * h  # eq.17
+                reverse_rates = post_0 * h + diag * xt_onehot  # * h  # eq.17
 
                 reverse_rates = reverse_rates / torch.sum(
                     reverse_rates, axis=-1, keepdims=True
@@ -268,38 +275,42 @@ class LBJF:
                     .sample()
                     .view(N, self.D)
                 )
-                x = x_new
                 if t <= self.corrector_entry_time:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        t_h_ones = (t) * torch.ones((N,), device=device)
-                        logits = model(x, t_h_ones)  #
+                        t_h_ones = t * torch.ones((N,), device=device)
+                        logits = model(x_new, t_h_ones)  #
                         reverse_rates, _ = get_reverse_rates(
-                            model, logits, x, t_h_ones, self.cfg, N, self.D, self.S
+                            model, logits, x_new, t_h_ones, self.cfg, N, self.D, self.S
                         )
 
                         transpose_forward_rates = rate[
                             torch.arange(N, device=device).repeat_interleave(
                                 self.D * self.S
                             ),
-                            x.long().flatten().repeat_interleave(self.S),
+                            x_new.long().flatten().repeat_interleave(self.S),
                             torch.arange(self.S, device=device).repeat(N * self.D),
                         ].view(N, self.D, self.S)
 
-                        reverse_rates = (
+                        corrector_rates = (
                             transpose_forward_rates + reverse_rates
                         )  # (N, D, S)
-
-                        post_0 = reverse_rates * (1 - xt_onehot)
+                        corrector_rates[
+                            torch.arange(N, device=device).repeat_interleave(self.D),
+                            torch.arange(self.D, device=device).repeat(N),
+                            x_new.long().flatten(),
+                        ] = 0.0
+                        xt_new_onehot = F.one_hot(x_new.long(), self.S)
+                        post_0 = corrector_rates * (1 - xt_new_onehot)
 
                         off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                         diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                        reverse_rates = reverse_rates * post_0 * h + diag * xt_onehot
-                        reverse_rates = reverse_rates / torch.sum(
-                            reverse_rates, axis=-1, keepdims=True
+                        corrector_rates = post_0 * h + diag * xt_new_onehot
+                        corrector_rates = corrector_rates / torch.sum(
+                            corrector_rates, axis=-1, keepdims=True
                         )
-                        log_posterior = torch.log(reverse_rates + 1e-35).view(
+                        log_posterior = torch.log(corrector_rates + 1e-35).view(
                             -1, self.S
                         )
 
@@ -314,7 +325,9 @@ class LBJF:
                 # print(torch.sum(x_new != x, dim=1))
                 x = x_new
             if self.loss_name == "CTElbo":
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
                 x_0max = torch.max(p_0gt, dim=2)[1]
             else:
                 x_0max = x
@@ -322,6 +335,7 @@ class LBJF:
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
             )  # , x_hist, x0_hist
+
 
 @sampling_utils.register_sampler
 class MidPointTauL:
@@ -346,23 +360,19 @@ class MidPointTauL:
             )
             self.state_change = self.state_change.to(device=self.device)
         elif cfg.data.name == "Maze3S":
-            if self.is_ordinal:
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = self.state_change.to(device=self.device)
-            else:
-                self.state_change = -torch.load(
-                    "SavedModels/MAZE/state_change_matrix_maze.pth"
-                )
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
-                self.state_change = self.state_change.to(device=self.device)
-        elif cfg.data.name == "BinMNIST" or cfg.data.name == 'SyntheticData':
+
+            self.state_change = -torch.tensor(
+                [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device
+            )
+            # self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
+            self.state_change = self.state_change.to(device=self.device)
+        elif cfg.data.name == "BinMNIST" or cfg.data.name == "SyntheticData":
             self.state_change = -torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
     def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
-        
+
         self.state_change = torch.tile(self.state_change, (N, 1, 1))
         with torch.no_grad():
             x = get_initial_samples(
@@ -378,14 +388,15 @@ class MidPointTauL:
             # Wie summe über states? => meistens R * changes = 0
             #
             i = 1
-            while (t - 0.5 * h > self.min_t):
-                
+            while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
-                t_05 = t_ones - 0.5 * h 
+                t_05 = t_ones - 0.5 * h
 
                 logits = model(x, t_ones)
 
-                reverse_rates, _ = get_reverse_rates(model, logits, x, t_ones, self.cfg, N, self.D, self.S)
+                reverse_rates, _ = get_reverse_rates(
+                    model, logits, x, t_ones, self.cfg, N, self.D, self.S
+                )
 
                 """
                 reverse_rates[
@@ -394,30 +405,37 @@ class MidPointTauL:
                     x.long().flatten(),
                 ] = 0.0
                 """
-                #print(t, reverse_rates)
+                # print(t, reverse_rates)
                 # achtung ein verfahren definieren mit:
-                # x_prime und eins mit echtem 
+                # x_prime und eins mit echtem
 
-                state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                state_change = self.state_change[
+                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                reverse_rates= reverse_rates * (1 - xt_onehot) # was bedeutet das genau?
-                #off_diag = torch.sum(post_0, axis=-1, keepdims=True)
-                #diag = - off_diag # torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
-                #reverse_rates = (post_0 + diag * xt_onehot)  # * h  # eq.17
+                reverse_rates = reverse_rates * (
+                    1 - xt_onehot
+                )  # was bedeutet das genau?
+                # off_diag = torch.sum(post_0, axis=-1, keepdims=True)
+                # diag = - off_diag # torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
+                # reverse_rates = (post_0 + diag * xt_onehot)  # * h  # eq.17
 
-                change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
-                x_prime = x + change#, dim=-1)
+                change = torch.round(0.5 * h *
+                    torch.sum((reverse_rates * state_change), dim=-1)
+                ).to(dtype=torch.int)
+                x_prime = x + change  # , dim=-1)
                 print((change == torch.zeros((N, self.D), device=self.device)).all())
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
-                #------------second-------------------
+                # ------------second-------------------
                 logits_prime = model(x_prime, t_05)
-                
-                reverse_rates_prime, _ = get_reverse_rates(model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S)
+
+                reverse_rates_prime, _ = get_reverse_rates(
+                    model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S
+                )
 
                 reverse_rates_prime[
                     torch.arange(N, device=device).repeat_interleave(self.D),
@@ -428,17 +446,17 @@ class MidPointTauL:
                 state_change_prime = self.state_change[
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
-                    x_prime.long().flatten().repeat_interleave(self.S), # wenn hier x_prime
+                    x.long()
+                    .flatten()
+                    .repeat_interleave(self.S),  # wenn hier x_prime
                 ].view(N, self.D, self.S)
 
-
                 diff_prime = state_change_prime
- 
 
                 flips = torch.distributions.poisson.Poisson(
                     reverse_rates_prime * h
                 ).sample()  # B, D most 0
-   
+
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
@@ -448,9 +466,9 @@ class MidPointTauL:
                 avg_offset = torch.sum(
                     flips * diff_prime, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
-                xp = x_prime + avg_offset # wenn hier x_prime
+                xp = x + avg_offset  # wenn hier x_prime
 
-                #change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
+                # change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
                 change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
 
@@ -458,12 +476,15 @@ class MidPointTauL:
                 t = t - h
                 i += 1
             if self.loss_name == "CTElbo":
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
                 x_0max = torch.max(p_0gt, dim=2)[1]
             else:
                 x_0max = x
 
             return x_0max.detach().cpu().numpy().astype(int), change_jump
+
 
 @sampling_utils.register_sampler
 class MidPointSampler:
@@ -480,7 +501,7 @@ class MidPointSampler:
         self.is_ordinal = cfg.sampler.is_ordinal
         self.device = cfg.device
         self.eps_ratio = cfg.sampler.eps_ratio
-        self.sample_prime = True # False # True
+        self.sample_prime = True  # False # True
         self.loss_name = cfg.loss.name
 
         if cfg.data.name == "DiscreteMNIST":
@@ -490,22 +511,26 @@ class MidPointSampler:
             self.state_change = self.state_change.to(device=self.device)
         elif cfg.data.name == "Maze3S":
             if self.is_ordinal:
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = self.state_change.to(device=self.device)
+                self.state_change = -torch.tensor(
+                    [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device
+                )
+                # self.state_change = self.state_change.to(device=self.device)
             else:
                 self.state_change = -torch.load(
                     "SavedModels/MAZE/state_change_matrix_maze.pth"
                 )
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
+                self.state_change = -torch.tensor(
+                    [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device
+                )
+                # self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
                 self.state_change = self.state_change.to(device=self.device)
-        elif cfg.data.name == "BinMNIST" or cfg.data.name == 'SyntheticData':
+        elif cfg.data.name == "BinMNIST" or cfg.data.name == "SyntheticData":
             self.state_change = -torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
     def sample(self, model, N):
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
-        
+
         self.state_change = torch.tile(self.state_change, (N, 1, 1))
         with torch.no_grad():
             x = get_initial_samples(
@@ -521,13 +546,15 @@ class MidPointSampler:
             # Wie summe über states? => meistens R * changes = 0
             #
             i = 1
-            while (t - 0.5 * h > self.min_t):
+            while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
-                t_05 = t_ones - 0.5 * h 
+                t_05 = t_ones - 0.5 * h
 
                 logits = model(x, t_ones)
 
-                reverse_rates, _ = get_reverse_rates(model, logits, x, t_ones, self.cfg, N, self.D, self.S)
+                reverse_rates, _ = get_reverse_rates(
+                    model, logits, x, t_ones, self.cfg, N, self.D, self.S
+                )
 
                 """
                 reverse_rates[
@@ -536,18 +563,16 @@ class MidPointSampler:
                     x.long().flatten(),
                 ] = 0.0
                 """
-                #print(t, reverse_rates)
+                # print(t, reverse_rates)
                 # achtung ein verfahren definieren mit:
-                # x_prime und eins mit echtem 
+                # x_prime und eins mit echtem
 
                 xt_onehot = F.one_hot(x.long(), self.S)
                 post_0 = reverse_rates * (1 - xt_onehot)
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                 diag = torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
-                reverse_rates = (
-                    post_0 * 0.5 * h + diag * xt_onehot
-                )  # * h  # eq.17
+                reverse_rates = post_0 * 0.5 * h + diag * xt_onehot  # * h  # eq.17
 
                 reverse_rates = reverse_rates / torch.sum(
                     reverse_rates, axis=-1, keepdims=True
@@ -561,10 +586,12 @@ class MidPointSampler:
 
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
-                #------------second-------------------
+                # ------------second-------------------
                 logits_prime = model(x_prime, t_05)
-                
-                reverse_rates_prime, _ = get_reverse_rates(model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S)
+
+                reverse_rates_prime, _ = get_reverse_rates(
+                    model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S
+                )
 
                 reverse_rates_prime[
                     torch.arange(N, device=device).repeat_interleave(self.D),
@@ -575,17 +602,15 @@ class MidPointSampler:
                 state_change_prime = self.state_change[
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long().flatten().repeat_interleave(self.S),
+                    x_prime.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
-
                 diff_prime = state_change_prime
- 
 
                 flips = torch.distributions.poisson.Poisson(
                     reverse_rates_prime * h
                 ).sample()  # B, D most 0
-   
+
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
@@ -595,9 +620,9 @@ class MidPointSampler:
                 avg_offset = torch.sum(
                     flips * diff_prime, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
-                xp = x + avg_offset
+                xp = x_prime + avg_offset
 
-                #change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
+                # change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
                 change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
 
@@ -605,12 +630,139 @@ class MidPointSampler:
                 t = t - h
                 i += 1
             if self.loss_name == "CTElbo":
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
                 x_0max = torch.max(p_0gt, dim=2)[1]
             else:
                 x_0max = x
 
             return x_0max.detach().cpu().numpy().astype(int), change_jump
+
+
+@sampling_utils.register_sampler
+class PCLT:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.max_t = cfg.training.max_t
+        # C, H, W = self.cfg.data.shape
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.eps_ratio = cfg.sampler.eps_ratio
+        self.loss_name = cfg.loss.name
+        self.is_ordinal = cfg.sampler.is_ordinal
+        if self.num_corrector_steps == 0:
+            self.num_corrector_steps = 1
+
+    def sample(self, model, N):
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+
+        with torch.no_grad():
+            x = get_initial_samples(
+                N, self.D, device, self.S, self.initial_dist, initial_dist_std
+            )
+            # tau = 1 / num_steps
+            ts = np.concatenate(
+                (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
+            )
+            change_jump = []
+            for idx, t in tqdm(enumerate(ts[0:-1])):
+                h = ts[idx] - ts[idx + 1]
+                t_ones = t * torch.ones((N,), device=device)
+                qt0 = model.transition(t_ones)  # (N, S, S)
+                rate = model.rate(t_ones)
+                logits = model(x, t_ones)
+                reverse_rates, _ = get_reverse_rates(
+                    model, logits, x, t_ones, self.cfg, N, self.D, self.S
+                )
+
+                xt_onehot = F.one_hot(x.long(), self.S)
+                post_0 = reverse_rates * (1 - xt_onehot)
+
+                off_diag = torch.sum(post_0, axis=-1, keepdims=True)
+                diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
+                reverse_rates = post_0 * h + diag * xt_onehot  # * h  # eq.17
+
+                reverse_rates = reverse_rates / torch.sum(
+                    reverse_rates, axis=-1, keepdims=True
+                )
+                log_posterior = torch.log(reverse_rates + 1e-35).view(-1, self.S)
+                x_new = (
+                    torch.distributions.categorical.Categorical(logits=log_posterior)
+                    .sample()
+                    .view(N, self.D)
+                )
+                if t <= self.corrector_entry_time:
+                    print("corrector")
+                    for _ in range(self.num_corrector_steps):
+                        # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+                        t_h_ones = t * torch.ones((N,), device=device)
+                        logits = model(x_new, t_h_ones)  #
+                        reverse_rates, _ = get_reverse_rates(
+                            model, logits, x_new, t_h_ones, self.cfg, N, self.D, self.S
+                        )
+
+                        transpose_forward_rates = rate[
+                            torch.arange(N, device=device).repeat_interleave(
+                                self.D * self.S
+                            ),
+                            x_new.long().flatten().repeat_interleave(self.S),
+                            torch.arange(self.S, device=device).repeat(N * self.D),
+                        ].view(N, self.D, self.S)
+
+                        corrector_rates = (
+                            reverse_rates  # + transpose_forward_rates  # (N, D, S)
+                        )
+                        corrector_rates[
+                            torch.arange(N, device=device).repeat_interleave(self.D),
+                            torch.arange(self.D, device=device).repeat(N),
+                            x_new.long().flatten(),
+                        ] = 0.0
+                        poisson_dist = torch.distributions.poisson.Poisson(
+                            corrector_rates * h
+                        )  # posterior: p_{t-eps|t}, B, D; S
+
+                        jump_nums = (
+                            poisson_dist.sample()
+                        )  # how many jumps in interval [t-eps, t]
+
+                        if not self.is_ordinal:
+                            jump_num_sum = torch.sum(jump_nums, dim=2)
+                            jump_num_sum_mask = jump_num_sum <= 1
+                            jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                        choices = utils.expand_dims(
+                            torch.arange(self.S, device=device, dtype=torch.int32),
+                            axis=list(range(x_new.ndim)),
+                        )
+                        diff = choices - x_new.unsqueeze(-1)
+                        adj_diffs = jump_nums * diff
+                        overall_jump = torch.sum(adj_diffs, dim=2)
+                        xp = x + overall_jump
+
+                        change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+
+                        x_new = torch.clamp(xp, min=0, max=self.S - 1)
+                change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
+
+                x = x_new
+            if self.loss_name == "CTElbo":
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
+                x_0max = torch.max(p_0gt, dim=2)[1]
+            else:
+                x_0max = x
+            return (
+                x_0max.detach().cpu().numpy().astype(int),
+                change_jump,
+            )  # , x_hist, x0_hist
+
 
 class RK4:
     def __init__(self, cfg):
@@ -636,16 +788,20 @@ class RK4:
             self.state_change = self.state_change.to(device=self.device)
         elif cfg.data.name == "Maze3S":
             if self.is_ordinal:
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = self.state_change.to(device=self.device)
+                self.state_change = -torch.tensor(
+                    [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device
+                )
+                # self.state_change = self.state_change.to(device=self.device)
             else:
                 self.state_change = -torch.load(
                     "SavedModels/MAZE/state_change_matrix_maze.pth"
                 )
-                self.state_change = - torch.tensor([[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device)
-                #self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
+                self.state_change = -torch.tensor(
+                    [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]], device=self.device
+                )
+                # self.state_change = torch.tensor([[0, 1, -1], [-1, 0, 1], [1, -1, 0]], device=self.device)
                 self.state_change = self.state_change.to(device=self.device)
-        elif cfg.data.name == "BinMNIST" or cfg.data.name == 'SyntheticData':
+        elif cfg.data.name == "BinMNIST" or cfg.data.name == "SyntheticData":
             self.state_change = -torch.tensor([[0, 1], [-1, 0]], device=self.device)
 
     def sample(self, model, N):
@@ -666,14 +822,15 @@ class RK4:
             # Wie summe über states? => meistens R * changes = 0
             #
             i = 1
-            while (t - 0.5 * h > self.min_t):
-  
+            while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
-                t_05 = t_ones - 0.5 * h 
+                t_05 = t_ones - 0.5 * h
 
                 logits = model(x, t_ones)
 
-                reverse_rates, _ = get_reverse_rates(model, logits, x, t_ones, self.cfg, N, self.D, self.S)
+                reverse_rates, _ = get_reverse_rates(
+                    model, logits, x, t_ones, self.cfg, N, self.D, self.S
+                )
 
                 """
                 reverse_rates[
@@ -689,33 +846,42 @@ class RK4:
 
                     off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                     diag = torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
-                    reverse_rates = (
-                        post_0 * 0.5 * h + diag * xt_onehot
-                    )  # * h  # eq.17
+                    reverse_rates = post_0 * 0.5 * h + diag * xt_onehot  # * h  # eq.17
 
                     reverse_rates = reverse_rates / torch.sum(
                         reverse_rates, axis=-1, keepdims=True
                     )
                     log_posterior = torch.log(reverse_rates + 1e-35).view(-1, self.S)
                     x_prime = (
-                        torch.distributions.categorical.Categorical(logits=log_posterior)
+                        torch.distributions.categorical.Categorical(
+                            logits=log_posterior
+                        )
                         .sample()
                         .view(N, self.D)
                     )
                 else:
-                    state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                    state_change = self.state_change[
+                        torch.arange(N, device=device).repeat_interleave(
+                            self.D * self.S
+                        ),
                         torch.arange(self.S, device=device).repeat(N * self.D),
                         x.long().flatten().repeat_interleave(self.S),
                     ].view(N, self.D, self.S)
-                    change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
-                    x_prime = x + change#, dim=-1)
-                    print((change == torch.zeros((N, self.D), device=self.device)).all())
+                    change = torch.round(
+                        torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)
+                    ).to(dtype=torch.int)
+                    x_prime = x + change  # , dim=-1)
+                    print(
+                        (change == torch.zeros((N, self.D), device=self.device)).all()
+                    )
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
-                #------------second-------------------
+                # ------------second-------------------
                 logits_prime = model(x_prime, t_05)
-                
-                reverse_rates_prime, _ = get_reverse_rates(model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S)
+
+                reverse_rates_prime, _ = get_reverse_rates(
+                    model, logits_prime, x_prime, t_05, self.cfg, N, self.D, self.S
+                )
 
                 reverse_rates_prime[
                     torch.arange(N, device=device).repeat_interleave(self.D),
@@ -729,14 +895,12 @@ class RK4:
                     x_prime.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
-
                 diff_prime = state_change_prime
- 
 
                 flips = torch.distributions.poisson.Poisson(
                     reverse_rates_prime * h
                 ).sample()  # B, D most 0
-   
+
                 if not self.is_ordinal:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
@@ -748,7 +912,7 @@ class RK4:
                 )  # B, D, S with entries -(S - 1) to S-1
                 xp = x_prime + avg_offset
 
-                #change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
+                # change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
                 change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
 
@@ -757,7 +921,9 @@ class RK4:
                 print(i)
                 i += 1
             if self.loss_name == "CTElbo":
-                p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+                p_0gt = F.softmax(
+                    model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+                )  # (N, D, S)
                 x_0max = torch.max(p_0gt, dim=2)[1]
             else:
                 x_0max = x
@@ -1291,8 +1457,8 @@ class ExactSampling:
                 change_jump.append((torch.sum(x_new != xt) / (N * self.D)).item())
                 xt = x_new
 
-            #p_0gt = F.softmax(model(xt, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            #x_0max = torch.max(p_0gt, dim=2)[1]
+            # p_0gt = F.softmax(model(xt, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = xt
             return x_0max.detach().cpu().numpy().astype(int), change_jump
 
@@ -1388,7 +1554,9 @@ class CRMLBJF:
                     print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
-                        ll_all, ll_xt = self.get_logprob(self.cfg, model, x_new, t_ones)
+                        ll_all, ll_xt = self.get_logprob(
+                            self.cfg, model, x_new, t_ones, N, self.D, self.S
+                        )
 
                         log_weight = ll_all - ll_xt.unsqueeze(-1)
                         fwd_rate = model.rate_mat(x_new, t_ones)
@@ -1414,8 +1582,8 @@ class CRMLBJF:
                         )
                 change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 x = x_new
-            #p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            #x_0max = torch.max(p_0gt, dim=2)[1]
+            # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = x
             return x_0max.detach().cpu().numpy().astype(int), change_jump
 
@@ -1502,14 +1670,14 @@ class CRMTauL:
 
                 change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
-                
-                #if t > self.min_t:
+
+                # if t > self.min_t:
                 #    change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
                 #    change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
                 #    #print(t)
                 x = x_new
-            #p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            #x_0max = torch.max(p_0gt, dim=2)[1]
+            # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = x
             return x_0max.detach().cpu().numpy().astype(int), change_jump
 
@@ -1583,8 +1751,10 @@ class CRMMidPointTau:
                     cfg=self.cfg,
                     model=model,
                     xt=x,
-                    t=t_05, device=device,
-                    logits=logits)
+                    t=t_05,
+                    device=device,
+                    logits=logits,
+                )
 
                 log_weight = ll_all - ll_xt.unsqueeze(-1)  # B, D, S - B, D, 1
                 fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S?
@@ -1597,14 +1767,13 @@ class CRMMidPointTau:
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
-                change = torch.round(torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
+                change = torch.round(
+                    torch.sum((0.5 * h * reverse_rates * state_change), dim=-1)
+                ).to(dtype=torch.int)
                 x_prime = x + change
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
-
-                flips = torch.distributions.poisson.Poisson(
-                     * h
-                ).sample()  # B, D most 0
+                flips = torch.distributions.poisson.Poisson(*h).sample()  # B, D most 0
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
                     axis=list(range(x.ndim)),
@@ -1793,33 +1962,36 @@ class CTMidPointTauL:
                 inner_sum = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
 
                 reverse_rates = forward_rates * inner_sum
-                
+
                 reverse_rates[
                     torch.arange(N, device=device).repeat_interleave(self.D),
                     torch.arange(self.D, device=device).repeat(N),
                     x.long().flatten(),
                 ] = 0.0
-                
-                state_change = self.state_change[torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+
+                state_change = self.state_change[
+                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
                 # B, D, S
-                # B, D 
+                # B, D
                 # x' = x + sum
-                change = torch.round(0.5 * h * torch.sum((reverse_rates * state_change), dim=-1)).to(dtype=torch.int)
+                change = torch.round(
+                    0.5 * h * torch.sum((reverse_rates * state_change), dim=-1)
+                ).to(dtype=torch.int)
 
-                x_prime = x + change#, dim=-1)
+                x_prime = x + change  # , dim=-1)
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
-                #------------second-------------------
+                # ------------second-------------------
                 logits_prime = model(x_prime, t_ones)
                 p0t_prime = F.softmax(logits_prime, dim=2)
 
-                qt0_prime = model.transition(t_ones) 
+                qt0_prime = model.transition(t_ones)
                 rate_prime = model.rate(t_ones)
                 qt0_numer_prime = qt0_prime  #
-                #reverse_rates, _ = get_reverse_rates(model, logits, x, t_05, self.cfg, N, self.D, self.S)
+                # reverse_rates, _ = get_reverse_rates(model, logits, x, t_05, self.cfg, N, self.D, self.S)
                 qt0_denom_prime = (
                     qt0_prime[
                         torch.arange(N, device=device).repeat_interleave(
@@ -1834,14 +2006,16 @@ class CTMidPointTauL:
                 # First S is x0 second S is x tilde (N, S, S)
 
                 forward_rates_prime = rate_prime[
-                       torch.arange(N, device=device).repeat_interleave(self.D * self.S),
+                    torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x_prime.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
-                inner_sum_prime = (p0t_prime / qt0_denom_prime) @ qt0_numer_prime  # (N, D, S)
+                inner_sum_prime = (
+                    p0t_prime / qt0_denom_prime
+                ) @ qt0_numer_prime  # (N, D, S)
 
-                reverse_rates_prime = forward_rates_prime * inner_sum_prime 
+                reverse_rates_prime = forward_rates_prime * inner_sum_prime
 
                 reverse_rates_prime[
                     torch.arange(N, device=device).repeat_interleave(self.D),
@@ -1856,11 +2030,10 @@ class CTMidPointTauL:
                     x_prime.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
 
-                diffs = torch.arange(self.S, device=device).view(1, 1, self.S) - x_prime.view(
-                    N, self.D, 1
-                )
+                diffs = torch.arange(self.S, device=device).view(
+                    1, 1, self.S
+                ) - x_prime.view(N, self.D, 1)
                 diff_prime = state_change_prime
- 
 
                 flips = torch.distributions.poisson.Poisson(
                     reverse_rates_prime * h
@@ -1903,7 +2076,7 @@ class ExactELBO:
         self.initial_dist = cfg.sampler.initial_dist
 
     def sample(self, model, N):
-        #t = 1.0
+        # t = 1.0
         initial_dist_std = self.cfg.model.Q_sigma
         device = model.device
 
@@ -1986,7 +2159,7 @@ class ElboTauL:
         self.initial_dist = cfg.sampler.initial_dist
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
-        self.eps_ratio = cfg.sampler.eps_ratio
+        self.eps_ratio = 0  # cfg.sampler.eps_ratio
         self.is_ordinal = cfg.sampler.is_ordinal
         self.max_t = cfg.training.max_t
 
@@ -2003,7 +2176,7 @@ class ElboTauL:
             ts = np.concatenate(
                 (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
-            #ts[0] = 0.99999
+            # ts[0] = 0.99999
             change_jump = []
             change_clamp = []
 
@@ -2060,11 +2233,24 @@ class ElboTauL:
                 )  # how many jumps in interval [t-eps, t]
 
                 if not self.is_ordinal:
-
+                    """
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
                     print(torch.mean(jump_num_sum * 1))
                     jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                    """
+                    jump_num_sum = torch.sum(jump_nums, axis=-1, keepdims=True)
+                    flip_mask = (jump_num_sum <= 1) * 1
+                    jump_nums = jump_nums * flip_mask
+                    """
+
+                    jump_nums = torch.clamp(jump_nums, max=1)
+                    jump_num_sum = torch.sum(jump_nums, dim=2)
+                    jump_num_sum_mask = jump_num_sum <= 1
+                    print(torch.mean(jump_num_sum * 1).item())
+                    #print(jump_nums)
+                    jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                    """
 
                 adj_diffs = jump_nums * diffs
                 overall_jump = torch.sum(adj_diffs, dim=2)
@@ -2074,18 +2260,20 @@ class ElboTauL:
 
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
 
-                change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
+                change_clamp.append(torch.mean(jump_num_sum * 1).item())
                 x = x_new
-                #if t < 0.01:
+                # if t < 0.01:
                 #    break
 
-            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            p_0gt = F.softmax(
+                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+            )  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-        
-            #x_0max = x
+
+            # x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
-                change_jump,
+                change_clamp,
             )  # , x_hist, x0_hist
 
 
@@ -2124,7 +2312,7 @@ class ElboLBJF:
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
-                #print(t)
+                # print(t)
                 qt0 = model.transition(t * torch.ones((N,), device=device))  # (N, S, S)
                 rate = model.rate(t * torch.ones((N,), device=device))  # (N, S, S)
                 # p_theta(x_0|x_t) ?
@@ -2157,14 +2345,18 @@ class ElboLBJF:
                 xt_onehot = F.one_hot(x.long(), self.S)
 
                 posterior = forward_rates * inner_sum  # (N, D, S)
-                #post_0 = posterior * (1 - xt_onehot)
+                # post_0 = posterior * (1 - xt_onehot)
 
-                off_diag = torch.sum(posterior * (1 - xt_onehot), axis=-1, keepdims=True)
+                off_diag = torch.sum(
+                    posterior * (1 - xt_onehot), axis=-1, keepdims=True
+                )
                 diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                posterior = posterior * (1 - xt_onehot) * h + diag * xt_onehot  # * h  # eq.17
+                posterior = (
+                    posterior * (1 - xt_onehot) * h + diag * xt_onehot
+                )  # * h  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
-                log_posterior = torch.log(posterior+1e-35).view(-1, self.S)
+                log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
                 x_new = (
                     torch.distributions.categorical.Categorical(logits=log_posterior)
                     .sample()
@@ -2215,7 +2407,7 @@ class ElboLBJF:
                         posterior = posterior / torch.sum(
                             posterior, axis=-1, keepdims=True
                         )
-                        log_posterior = torch.log(posterior+1e-35).view(-1, self.S)
+                        log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
 
                         x_new = (
                             torch.distributions.categorical.Categorical(
@@ -2227,12 +2419,14 @@ class ElboLBJF:
                 change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 # print(torch.sum(x_new != x, dim=1))
                 x = x_new
-            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            p_0gt = F.softmax(
+                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+            )  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            #x_0max = x
-            #p_0gt = F.softmax(model(x_0max, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
-            #x_0max = torch.max(p_0gt, dim=2)[1]
-            #x_0max = x
+            # x_0max = x
+            # p_0gt = F.softmax(model(x_0max, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            # x_0max = torch.max(p_0gt, dim=2)[1]
+            # x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
@@ -2310,7 +2504,7 @@ class ElboLBJF2:
 
                 off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                 diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                posterior = post_0 * h + diag * xt_onehot  #h  # eq.17
+                posterior = post_0 * h + diag * xt_onehot  # h  # eq.17
 
                 posterior = posterior / torch.sum(posterior, axis=-1, keepdims=True)
                 log_posterior = torch.log(posterior + 1e-35).view(-1, self.S)
@@ -2360,7 +2554,7 @@ class ElboLBJF2:
 
                         off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                         diag = torch.clip(1.0 - h * off_diag, min=0, max=float("inf"))
-                        posterior = post_0 * h ** 2 + diag * xt_onehot
+                        posterior = post_0 * h**2 + diag * xt_onehot
                         posterior = posterior / torch.sum(
                             posterior, axis=-1, keepdims=True
                         )
@@ -2376,9 +2570,11 @@ class ElboLBJF2:
                 change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 # print(torch.sum(x_new != x, dim=1))
                 x = x_new
-            p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            p_0gt = F.softmax(
+                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+            )  # (N, D, S)
             x_0max = torch.max(p_0gt, dim=2)[1]
-            #x_0max = x
+            # x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,

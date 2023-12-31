@@ -7,8 +7,6 @@ from urllib.request import urlretrieve
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from lib.sei.selene_utils import MemmapGenome
-from lib.utils.dna import GenomicSignalFeatures
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -79,103 +77,6 @@ def get_binmnist_datasets(root, device="cpu"):
     )
 
 
-class TSSDatasetS(Dataset):
-    def __init__(
-        self, config, seqlength=1024, split="train", n_tsses=100000, rand_offset=0
-    ):
-        self.shuffle = False
-
-        self.genome = MemmapGenome(
-            input_path=config.data.ref_file,
-            memmapfile=config.data.ref_file_mmap,
-            blacklist_regions="hg38",
-        )
-        self.tfeature = GenomicSignalFeatures(
-            config.data.fantom_files,
-            ["cage_plus", "cage_minus"],
-            (2000,),
-            config.fantom_blacklist_files,
-        )
-
-        self.tsses = pd.read_table(config.data.tsses_file, sep="\t")
-        self.tsses = self.tsses.iloc[:n_tsses, :]
-
-        self.chr_lens = self.genome.get_chr_lens()
-        self.split = split
-        if split == "train":
-            self.tsses = self.tsses.iloc[
-                ~np.isin(self.tsses["chr"].values, ["chr8", "chr9", "chr10"])
-            ]
-        elif split == "valid":
-            self.tsses = self.tsses.iloc[np.isin(self.tsses["chr"].values, ["chr10"])]
-        elif split == "test":
-            self.tsses = self.tsses.iloc[
-                np.isin(self.tsses["chr"].values, ["chr8", "chr9"])
-            ]
-        else:
-            raise ValueError
-        self.rand_offset = rand_offset
-        self.seqlength = seqlength
-
-    def __len__(self):
-        return self.tsses.shape[0]
-
-    def __getitem__(self, tssi):
-        chrm, pos, strand = (
-            self.tsses["chr"].values[tssi],
-            self.tsses["TSS"].values[tssi],
-            self.tsses["strand"].values[tssi],
-        )
-        offset = 1 if strand == "-" else 0
-
-        offset = offset + np.random.randint(-self.rand_offset, self.rand_offset + 1)
-        seq = self.genome.get_encoding_from_coords(
-            chrm,
-            pos - int(self.seqlength / 2) + offset,
-            pos + int(self.seqlength / 2) + offset,
-            strand,
-        )
-
-        signal = self.tfeature.get_feature_data(
-            chrm,
-            pos - int(self.seqlength / 2) + offset,
-            pos + int(self.seqlength / 2) + offset,
-        )
-        if strand == "-":
-            signal = signal[::-1, ::-1]
-        return np.concatenate([seq, signal.T], axis=-1).astype(np.float32)
-
-    def reset(self):
-        np.random.seed(0)
-
-def prepare_dna_valid_dataset(config, sei, sei_features):
-    valid_set = TSSDatasetS(config, split='valid', n_tsses=40000, rand_offset=0)
-    valid_data_loader = DataLoader(valid_set, batch_size=config.data.batch_size, shuffle=False, num_workers=0)
-    valid_datasets = []
-
-    for x in valid_data_loader:
-        valid_datasets.append(x)
-
-    validseqs = []
-    for seq in valid_datasets:
-        validseqs.append(seq[:, :, :4])
-    validseqs = np.concatenate(validseqs, axis=0)
-
-    with torch.no_grad():
-        validseqs_pred = np.zeros((2915, 21907))
-        for i in range(int(validseqs.shape[0] / 128)):
-            validseq = validseqs[i * 128:(i + 1) * 128]
-            validseqs_pred[i * 128:(i + 1) * 128] = sei(
-                torch.cat([torch.ones((validseq.shape[0], 4, 1536)) * 0.25, torch.FloatTensor(validseq).transpose(1, 2),
-                           torch.ones((validseq.shape[0], 4, 1536)) * 0.25], 2).cuda()).cpu().detach().numpy()
-        validseq = validseqs[-128:]
-        validseqs_pred[-128:] = sei(
-            torch.cat([torch.ones((validseq.shape[0], 4, 1536)) * 0.25, torch.FloatTensor(validseq).transpose(1, 2),
-                       torch.ones((validseq.shape[0], 4, 1536)) * 0.25], 2).cuda()).cpu().detach().numpy()
-    validseqs_predh3k4me3 = validseqs_pred[:, sei_features[1].str.strip().values == 'H3K4me3'].mean(axis=1)
-
-    print("Validation dataset prepared")
-    return valid_datasets, validseqs_predh3k4me3
 
 def denormalize_image(image):
     return image * 255

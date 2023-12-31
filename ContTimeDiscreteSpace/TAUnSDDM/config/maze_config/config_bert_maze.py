@@ -14,7 +14,7 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.001
-    loss.min_time = 0.01
+    loss.min_time = 0.007
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
@@ -23,9 +23,10 @@ def get_config():
     training.n_iters = 400000 #0  # 2000 #2000000
 
     training.clip_grad = True
-    training.grad_norm = 3  # 1
+    training.grad_norm = 1  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
+    training.max_t = 0.995
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
@@ -49,7 +50,7 @@ def get_config():
     model.name = "UniVarBertEMA"
     model.is_ebm = False
     # Forward model
-    model.rate_const = 1.7
+    model.rate_const = 1.55
     model.t_func = "sqrt_cos"
     # hollow:
 
