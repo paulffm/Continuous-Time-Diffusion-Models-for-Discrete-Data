@@ -131,6 +131,7 @@ class TauL:
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
                     jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                    change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
@@ -144,8 +145,6 @@ class TauL:
                 change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
 
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
-
-                change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
                 x = x_new
                 if t <= self.corrector_entry_time:
                     print("corrector")
@@ -387,7 +386,8 @@ class MidPointTauL:
             # 1. Prediction zum  Zeitpunkt 0.5 * h +t_ones?
             # Wie summe über states? => meistens R * changes = 0
             #
-            i = 1
+            i = 0
+            count = 0
             while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
                 t_05 = t_ones - 0.5 * h
@@ -405,6 +405,7 @@ class MidPointTauL:
                     x.long().flatten(),
                 ] = 0.0
                 """
+
                 # print(t, reverse_rates)
                 # achtung ein verfahren definieren mit:
                 # x_prime und eins mit echtem
@@ -416,9 +417,8 @@ class MidPointTauL:
                 ].view(N, self.D, self.S)
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-                reverse_rates = reverse_rates * (
-                    1 - xt_onehot
-                )  # was bedeutet das genau?
+
+                # was bedeutet das genau?
                 # off_diag = torch.sum(post_0, axis=-1, keepdims=True)
                 # diag = - off_diag # torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
                 # reverse_rates = (post_0 + diag * xt_onehot)  # * h  # eq.17
@@ -427,7 +427,11 @@ class MidPointTauL:
                     torch.sum((reverse_rates * state_change), dim=-1)
                 ).to(dtype=torch.int)
                 x_prime = x + change  # , dim=-1)
-                print((change == torch.zeros((N, self.D), device=self.device)).all())
+                if (change == torch.zeros((N, self.D), device=self.device)).all():
+                    print("True")
+                else:
+                    count = count + 1
+                    print("False")
                 x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
 
                 # ------------second-------------------
@@ -446,7 +450,7 @@ class MidPointTauL:
                 state_change_prime = self.state_change[
                     torch.arange(N, device=device).repeat_interleave(self.D * self.S),
                     torch.arange(self.S, device=device).repeat(N * self.D),
-                    x.long()
+                    x_prime.long()
                     .flatten()
                     .repeat_interleave(self.S),  # wenn hier x_prime
                 ].view(N, self.D, self.S)
@@ -483,7 +487,7 @@ class MidPointTauL:
             else:
                 x_0max = x
 
-            return x_0max.detach().cpu().numpy().astype(int), change_jump
+            return x_0max.detach().cpu().numpy().astype(int), count / i  #change_jump
 
 
 @sampling_utils.register_sampler
@@ -546,6 +550,7 @@ class MidPointSampler:
             # Wie summe über states? => meistens R * changes = 0
             #
             i = 1
+            count = 0
             while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
                 t_05 = t_ones - 0.5 * h

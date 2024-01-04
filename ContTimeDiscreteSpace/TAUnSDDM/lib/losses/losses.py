@@ -565,6 +565,7 @@ class RElbo:
         self.min_time = cfg.loss.min_time
         self.one_forward_pass = cfg.loss.one_forward_pass   
         self.cross_ent = nn.CrossEntropyLoss()
+        self.max_t = cfg.training.max_t
 
     def calc_loss(self, minibatch, state):
         model = state["model"]
@@ -578,8 +579,8 @@ class RElbo:
         device = model.device
 
         # get random timestep between 1.0 and self.min_time
-        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
-        ts = torch.clamp(ts, max=0.99999)
+        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time
+        ts = torch.clamp(ts, max=self.max_t)
 
         qt0 = model.transition(
             ts

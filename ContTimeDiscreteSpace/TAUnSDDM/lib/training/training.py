@@ -12,6 +12,7 @@ class Standard:
         self.grad_norm = cfg.training.grad_norm
         self.warmup = cfg.training.warmup
         self.lr = cfg.optimizer.lr
+        self.device = cfg.device
 
     def step(self, state, minibatch, loss):
         state["optimizer"].zero_grad()
@@ -19,8 +20,8 @@ class Standard:
 
         # print("Loss in train", l)
         if l.isnan().any() or l.isinf().any():
-            print("Loss is nan")
-            return 0 
+            print("Loss is nan or inf")
+            return torch.tensor(1e9, device=self.device)
             #return l.detach()
             #assert False
         l.backward()
