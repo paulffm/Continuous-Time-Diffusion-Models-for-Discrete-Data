@@ -107,8 +107,12 @@ class TauL:
             )
             change_jump = []
             change_clamp = []
+            change_clip = []
+            #new_tensor = torch.empty((self.num_steps, N, self.D), device=device)
+            
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
+                #new_tensor[idx] = x
                 h = ts[idx] - ts[idx + 1]
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
 
@@ -131,6 +135,9 @@ class TauL:
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
                     jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                else:
+                    # proportion of jumps 
+                    jump_num_sum = torch.sum(jump_nums, dim=2)
                     change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
 
                 choices = utils.expand_dims(
@@ -145,6 +152,8 @@ class TauL:
                 change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
 
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
+                change_clip.append((torch.sum(x_new != x) / (N * self.D)).item())
+
                 x = x_new
                 if t <= self.corrector_entry_time:
                     print("corrector")
@@ -214,8 +223,8 @@ class TauL:
                 x_0max = x
 
             return (
-                x_0max.detach().cpu().numpy().astype(int),
-                change_clamp,
+                x_0max.detach().cpu().numpy().astype(int), #change_jump,
+                change_jump
             )  # , x_hist, x0_hist
 
 
@@ -248,7 +257,9 @@ class LBJF:
                 (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
             change_jump = []
+            new_tensor = torch.empty((self.num_steps, N, self.D), device=device)
             for idx, t in tqdm(enumerate(ts[0:-1])):
+                new_tensor[idx] = x
                 h = ts[idx] - ts[idx + 1]
                 t_ones = t * torch.ones((N,), device=device)
                 qt0 = model.transition(t_ones)  # (N, S, S)
@@ -320,8 +331,8 @@ class LBJF:
                             .sample()
                             .view(N, self.D)
                         )
-                change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 # print(torch.sum(x_new != x, dim=1))
+                change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 x = x_new
             if self.loss_name == "CTElbo":
                 p_0gt = F.softmax(
@@ -332,7 +343,8 @@ class LBJF:
                 x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
-                change_jump,
+                change_jump
+                #new_tensor.detach().cpu().numpy().astype(int),
             )  # , x_hist, x0_hist
 
 
@@ -2424,11 +2436,9 @@ class ElboLBJF:
                 change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
                 # print(torch.sum(x_new != x, dim=1))
                 x = x_new
-            p_0gt = F.softmax(
-                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
-            )  # (N, D, S)
-            x_0max = torch.max(p_0gt, dim=2)[1]
-            # x_0max = x
+            #p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
+            #x_0max = torch.max(p_0gt, dim=2)[1]
+            x_0max = x
             # p_0gt = F.softmax(model(x_0max, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             # x_0max = torch.max(p_0gt, dim=2)[1]
             # x_0max = x
@@ -2584,3 +2594,192 @@ class ElboLBJF2:
                 x_0max.detach().cpu().numpy().astype(int),
                 change_jump,
             )  # , x_hist, x0_hist
+
+
+@sampling_utils.register_sampler
+class TAULStepSize:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.max_t = cfg.training.max_t
+        # C, H, W = self.cfg.data.shape
+        self.D = cfg.model.concat_dim
+        self.S = self.cfg.data.S
+        self.num_steps = cfg.sampler.num_steps
+        self.min_t = cfg.sampler.min_t
+        self.initial_dist = cfg.sampler.initial_dist
+        self.corrector_entry_time = cfg.sampler.corrector_entry_time
+        self.num_corrector_steps = cfg.sampler.num_corrector_steps
+        self.eps_ratio = cfg.sampler.eps_ratio
+        self.is_ordinal = cfg.sampler.is_ordinal
+        self.loss_name = cfg.loss.name
+
+    def sample(self, model, N):
+        initial_dist_std = self.cfg.model.Q_sigma
+        device = model.device
+
+
+        x = get_initial_samples(
+            N, self.D, device, self.S, self.initial_dist, initial_dist_std
+        )
+        # tau = 1 / num_steps
+        ts = np.concatenate(
+            (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
+        )
+        change_jump = []
+        change_clamp = []
+        change_clip = []
+        #new_tensor = torch.empty((self.num_steps, N, self.D), device=device)
+        
+
+        for idx, t in tqdm(enumerate(ts[0:-1])):
+            #new_tensor[idx] = x
+            h = ts[idx] - ts[idx + 1]
+            x = x.requires_grad_(True)
+            t_ones = t * torch.ones((N,), device=device, dtype=x.dtype)
+            logits = model(x, t_ones)
+            logits = logits.requires_grad_(True)
+            logits= logits.flatten()
+            
+            print([torch.autograd.grad(outputs=out, inputs=x, retain_graph=True)[0][i] for i, out in enumerate(logits)])
+            
+            x = x.to(dtype=float).requires_grad_(True)
+            reverse_rates, _ = get_reverse_rates(
+                model, logits, x, t_ones, self.cfg, N, self.D, self.S
+            )
+
+            xt_onehot = F.one_hot(x.long(), self.S)
+            reverse_rates = reverse_rates * (1 - xt_onehot)
+            grads = torch.empty((N, self.D, self.S), device=device)
+            grad2 = torch.empty((N, self.D, self.S), device=device)
+            torch.sum(reverse_rates).backward()
+            grad_x = x.grad
+            print(grad_x)
+
+            """
+            for i in range(N):
+                for j in range(self.D):
+                    for k in range(self.S):
+                        #q = torch.tensor(reverse_rates[i, j, k], device=device, requires_grad=True)
+                        reverse_rates[i, j, k].backward()
+                        grad_r_x = x.grad
+                        print(grad_r_x)
+
+                        if grad_r_x is not None:
+                            print("shaoe", grad_r_x.shape)
+                            grad2[:, :, k] = grad_r_x
+            """
+            """
+            rev_sum = torch.sum(reverse_rates, dim=-1)
+            for i in range(N):
+                for j in range(self.D):
+                        q = torch.tensor(rev_sum[i, j], device=device, requires_grad=True)
+                        q.backward()
+                        grad_r_x = x.grad
+                        print(grad_r_x)
+            """
+            x = x.to(dtype=int).requires_grad_(False)
+            #print("grad", grads)
+
+
+            poisson_dist = torch.distributions.poisson.Poisson(
+                reverse_rates * h
+            )  # posterior: p_{t-eps|t}, B, D; S
+            jump_nums = (
+                poisson_dist.sample()
+            )  # how many jumps in interval [t-eps, t]
+
+            if not self.is_ordinal:
+                jump_num_sum = torch.sum(jump_nums, dim=2)
+                jump_num_sum_mask = jump_num_sum <= 1
+                jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+            else:
+                # proportion of jumps 
+                jump_num_sum = torch.sum(jump_nums, dim=2)
+                change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+
+            choices = utils.expand_dims(
+                torch.arange(self.S, device=device, dtype=torch.int32),
+                axis=list(range(x.ndim)),
+            )
+            diff = choices - x.unsqueeze(-1)
+            adj_diffs = jump_nums * diff
+            overall_jump = torch.sum(adj_diffs, dim=2)
+            xp = x + overall_jump
+
+            change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+
+            x_new = torch.clamp(xp, min=0, max=self.S - 1)
+            change_clip.append((torch.sum(x_new != x) / (N * self.D)).item())
+
+            x = x_new
+            if t <= self.corrector_entry_time:
+                print("corrector")
+                for _ in range(self.num_corrector_steps):
+                    # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
+
+                    t_h_ones = (t) * torch.ones((N,), device=device)
+                    rate = model.rate(t_h_ones)
+
+                    logits = model(x_new, t_h_ones)  #
+                    reverse_rates, _ = get_reverse_rates(
+                        model, logits, x_new, t_h_ones, self.cfg, N, self.D, self.S
+                    )
+                    reverse_rates[
+                        torch.arange(N, device=device).repeat_interleave(self.D),
+                        torch.arange(self.D, device=device).repeat(N),
+                        x_new.long().flatten(),
+                    ] = 0.0
+
+                    transpose_forward_rates = rate[
+                        torch.arange(N, device=device).repeat_interleave(
+                            self.D * self.S
+                        ),
+                        x_new.long().flatten().repeat_interleave(self.S),
+                        torch.arange(self.S, device=device).repeat(N * self.D),
+                    ].view(N, self.D, self.S)
+
+                    corrector_rates = (
+                        transpose_forward_rates + reverse_rates
+                    )  # (N, D, S)
+                    corrector_rates[
+                        torch.arange(N, device=device).repeat_interleave(self.D),
+                        torch.arange(self.D, device=device).repeat(N),
+                        x_new.long().flatten(),
+                    ] = 0.0
+                    poisson_dist = torch.distributions.poisson.Poisson(
+                        corrector_rates * h
+                    )  # posterior: p_{t-eps|t}, B, D; S
+
+                    jump_nums = (
+                        poisson_dist.sample()
+                    )  # how many jumps in interval [t-eps, t]
+
+                    if not self.is_ordinal:
+                        jump_num_sum = torch.sum(jump_nums, dim=2)
+                        jump_num_sum_mask = jump_num_sum <= 1
+                        jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
+                    choices = utils.expand_dims(
+                        torch.arange(self.S, device=device, dtype=torch.int32),
+                        axis=list(range(x_new.ndim)),
+                    )
+                    diff = choices - x_new.unsqueeze(-1)
+                    adj_diffs = jump_nums * diff
+                    overall_jump = torch.sum(adj_diffs, dim=2)
+                    xp = x + overall_jump
+
+                    change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+
+                    x_new = torch.clamp(xp, min=0, max=self.S - 1)
+                    x = x_new
+        if self.loss_name == "CTElbo":
+            p_0gt = F.softmax(
+                model(x, self.min_t * torch.ones((N,), device=device)), dim=2
+            )  # (N, D, S)
+            x_0max = torch.max(p_0gt, dim=2)[1]
+        else:
+            x_0max = x
+
+        return (
+            x_0max.detach().cpu().numpy().astype(int), #change_jump,
+            change_jump
+        )  # , x_hist, x0_hist

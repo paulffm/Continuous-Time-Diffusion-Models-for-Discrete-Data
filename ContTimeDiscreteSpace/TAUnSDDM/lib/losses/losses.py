@@ -972,6 +972,7 @@ class CatRM:
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
         self.D = self.cfg.model.concat_dim
+        print("D", self.D)
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         device = model.device
