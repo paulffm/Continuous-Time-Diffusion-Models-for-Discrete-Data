@@ -1228,9 +1228,8 @@ class BinEBMAux:
         loss = loss.sum() / B
         return loss
 
-
 @losses_utils.register_loss
-class CTEval:
+class TauLDRNLL:
     def __init__(self, cfg):
         self.cfg = cfg
         self.ratio_eps = cfg.loss.eps_ratio
@@ -1239,51 +1238,179 @@ class CTEval:
         self.one_forward_pass = cfg.loss.one_forward_pass   
         self.max_t = cfg.training.max_t
         self.cross_ent = nn.CrossEntropyLoss()
+        self.S = cfg.data.S
 
-    def calc_loss(self, minibatch, state):
-        model = state["model"]
-        S = self.cfg.data.S
-        # if 4 Dim => like images: True
-        if len(minibatch.shape) == 4:
-            B, C, H, W = minibatch.shape
-            minibatch = minibatch.view(B, C * H * W)
-        
-        B, D = minibatch.shape
-        device = model.device
+    def get_xt(self, minibatch, state):
 
-        # get random timestep between 1.0 and self.min_time
-        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time # 0.99999
+        with torch.no_grad():
+            model = state["model"]
+            S = self.cfg.data.S
+            # if 4 Dim => like images: True
+            if len(minibatch.shape) == 4:
+                B, C, H, W = minibatch.shape
+                minibatch = minibatch.view(B, C * H * W)
+            
+            B, D = minibatch.shape
+            device = model.device
 
-        qt0 = model.transition(
-            ts
-        )  # (B, S, S) # transition q_{t | s=0} eq.15 => here randomness because of ts => for every ts another q_{t|0}
+            # get random timestep between 1.0 and self.min_time
+            ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time # 0.99999
 
-        # R_t = beta_t * R_b
-        rate = model.rate(
-            ts
-        )  # (B, S, S) # no proability in here (diagonal = - sum of rows)
+            qt0 = model.transition(
+                ts
+            )  
 
-        # --------------- Sampling x_t, x_tilde --------------------
+            # R_t = beta_t * R_b
+            rate = model.rate(
+                ts
+            )  #(diagonal = - sum of rows)
 
-        qt0_rows_reg = qt0[
-            torch.arange(B, device=device).repeat_interleave(
-                D
-            ),  # repeats every element 0 to B-1 D-times
-            minibatch.flatten().long(),  # minibatch.flatten() => (B, D) => (B*D) (1D-Tensor)
-            :,
-        ]  # (B*D, S)
+            # --------------- Sampling x_t, x_tilde --------------------
 
-        # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
-        log_qt0 = torch.where(qt0_rows_reg <= 0.0, -1e9, torch.log(qt0_rows_reg))
-        x_t_cat = torch.distributions.categorical.Categorical(logits=log_qt0)
-        x_t = x_t_cat.sample().view(  # sampling B * D times => from every row of qt0_rows_reg once => then transform it to shape B, D
-            B, D
-        )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
+            qt0_rows_reg = qt0[
+                torch.arange(B, device=device).repeat_interleave(
+                    D
+                ),  # repeats every element 0 to B-1 D-times
+                minibatch.flatten().long(),  # minibatch.flatten() => (B, D) => (B*D) (1D-Tensor)
+                :,
+            ]  # (B*D, S)
 
-        x_logits = model(x_t, ts)  # (B, D, S)
-        # ensures that positive
-        log_probs = F.log_softmax(x_logits, dim=2)  # (B, D, S)
-        x_onehot = F.one_hot(x_t, x_logits.shape[-1])
-        nll = torch.sum(log_probs * x_onehot, axis=-1)
+            # set of (B*D) categorical distributions with probabilities from qt0_rows_reg
+            log_qt0 = torch.where(qt0_rows_reg <= 0.0, -1e9, torch.log(qt0_rows_reg))
+            x_t_cat = torch.distributions.categorical.Categorical(logits=log_qt0)
+            x_t = x_t_cat.sample().view(  # sampling B * D times => from every row of qt0_rows_reg once => then transform it to shape B, D
+                B, D
+            )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
 
-        metric = nll.mean(axis=tuple(range(1, len(nll.shape))))
+            # --------------- x_t = noisy data => x_tilde one transition in every batch of x_t --------------------
+            # puts diagonals (- values) (in a B*D, S) in this column where x_t has its entry => x_t[0,0] = 1
+            # => in rate_vals_square[0, 1] = - values
+            rate_vals_square = rate[
+                torch.arange(B, device=device).repeat_interleave(D), x_t.long().flatten(), :
+            ]  # (B*D, S)
+
+            rate_vals_square[
+                torch.arange(B * D, device=device), x_t.long().flatten()
+            ] = 0.0  #0 the diagonals
+
+            rate_vals_square = rate_vals_square.view(B, D, S)  # (B*D, S) => (B, D, S)
+
+            #  Summe der Werte entlang der Dimension S
+            rate_vals_square_dimsum = torch.sum(rate_vals_square, dim=2).view(
+                B, D
+            )  # B, D with every entry = S-1? => for entries of x_t same prob to transition?
+
+            square_dimcat = torch.distributions.categorical.Categorical(
+                rate_vals_square_dimsum
+            )
+
+            # Samples where transitions takes place in every row of B
+            square_dims = square_dimcat.sample()  # (B,) taking values in [0, D)
+
+            rate_new_val_probs = rate_vals_square[
+                torch.arange(B, device=device), square_dims, :
+            ]  # (B, S) => every row has only one entry = 0, everywhere else 1; chooses the row square_dim of rate_vals_square
+            # => now rate_new_val_probs: (B, S) with every row (1, 1, 0)
+
+            # samples from rate_new_val_probs and chooses state to transition to => more likely where entry is 1 instead of 0?
+            log_rate_new_val_probs = torch.where(rate_new_val_probs <= 0.0, -1e9, torch.log(rate_new_val_probs))
+            square_newvalcat = torch.distributions.categorical.Categorical(
+                logits=log_rate_new_val_probs
+            )
+
+            # Samples state, where we going
+            square_newval_samples = (
+                square_newvalcat.sample()
+            )  # (B, ) taking values in [0, S)
+
+            x_tilde = x_t.clone()
+            x_tilde[torch.arange(B, device=device), square_dims] = square_newval_samples
+
+            x_logits = model(x_tilde, ts)  # (B, D, S)
+            #p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
+            qt0_numer_reg = qt0.view(B, S, S)
+
+            # q_{t|0} (x|x_0)
+            # probability of going from state in d, specified by x_tilde (or other way around), to any other state S in dim d 
+            # qt0_y2x
+            qt0_denom_reg = (
+                qt0[
+                    torch.arange(B, device=device).repeat_interleave(D),
+                    :,
+                    x_tilde.long().flatten(),
+                ].view(B, D, S)
+                + self.ratio_eps
+            )
+            logits = x_logits @ qt0_numer_reg #.transpose(1, 2)
+            log_prob = F.log_softmax(logits, dim=-1)
+            xt_onehot = F.one_hot(x_tilde, self.S)
+            log_xt = torch.sum(log_prob * xt_onehot, dim=-1) 
+            #print("log_xt", log_xt)
+        return torch.mean(log_xt)
+
+
+@losses_utils.register_loss
+class SDDMNLL:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.min_time = cfg.loss.min_time
+        self.S = self.cfg.data.S
+        self.D = self.cfg.model.concat_dim
+
+    def get_xt(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+        with torch.no_grad():
+            model = state["model"]
+
+            if len(minibatch.shape) == 4:
+                B, C, H, W = minibatch.shape
+                minibatch = minibatch.view(B, C * H * W)
+
+            B = minibatch.shape[0]
+            device = self.cfg.device
+            ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+            ts = torch.clamp(ts, max=0.99999)
+
+            qt0 = model.transition(ts)  # (B, S, S)
+
+            b = utils.expand_dims(
+                torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
+            )
+            qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
+
+            log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+            xt = (
+                torch.distributions.categorical.Categorical(logits=log_qt0)
+                .sample()
+                .view(B, self.D)
+            )  # B, D
+            
+            # get logits from CondFactorizedBackwardModel
+            logits = model(
+                xt, ts
+            )  # B, D, S: logits for every class in every dimension in x_t
+            xt_target = xt
+            xt_onehot = F.one_hot(xt_target.long(), self.S)
+            if self.cfg.loss.logit_type == "direct":
+                log_prob = F.log_softmax(logits, dim=-1)
+            else:
+                qt0 = model.transition(ts)
+                if self.cfg.loss.logit_type == "reverse_prob":
+                    p0t = F.softmax(logits, dim=-1)
+                    qt0 = utils.expand_dims(qt0, axis=list(range(1, xt.dim() - 1)))
+                    prob_all = p0t @ qt0
+                    log_prob = torch.log(prob_all + 1e-35)
+
+            log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
+        return torch.mean(log_xt)

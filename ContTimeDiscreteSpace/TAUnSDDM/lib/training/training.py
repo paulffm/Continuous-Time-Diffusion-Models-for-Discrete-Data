@@ -38,3 +38,18 @@ class Standard:
             state["model"].update_ema()
 
         return l.detach()
+
+@training_utils.register_train_step
+class EvalMNIST:
+    def __init__(self, cfg):
+        self.do_ema = "ema_decay" in cfg.model
+        self.clip_grad = cfg.training.clip_grad
+        self.grad_norm = cfg.training.grad_norm
+        self.warmup = cfg.training.warmup
+        self.lr = cfg.optimizer.lr
+        self.device = cfg.device
+
+    def step(self, state, minibatch, loss):
+        state["optimizer"].zero_grad()
+        l = - loss.get_xt(minibatch, state)
+        return l

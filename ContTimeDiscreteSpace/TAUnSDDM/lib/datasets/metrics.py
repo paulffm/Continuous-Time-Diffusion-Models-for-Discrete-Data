@@ -13,7 +13,7 @@ def binary_hamming_sim(x, y):
 def binary_exp_hamming_sim(x, y, bd):
     x = x.unsqueeze(1) # B, D, 1
     y = y.unsqueeze(0)
-    #print("x, y", x.shape, y.shape)
+
     d = torch.sum(torch.abs(x - y), axis=-1)
     #d = torch.sum(x != y, dim=-1)
 
@@ -33,6 +33,7 @@ def binary_mmd(x, y, cfg, sim_fn):
     x = x.to(torch.float32)
     y = y.to(torch.float32)
     kxx = sim_fn(x, x)
+
     kxx = kxx * (1 - torch.eye(x.shape[0], device=device))
     kxx = torch.sum(kxx) / x.shape[0] / (x.shape[0] - 1)
 
@@ -200,7 +201,6 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
             if mmd < 0:
                 neg_mmd += mmd
                 neg_rounds += 1
-                mmd = mmd * (-1)
             else:
                 pos_mmd += mmd
                 pos_rounds += 1
@@ -213,8 +213,9 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
             pos_rounds = 1
 
     print("neg MMD:", (neg_mmd / neg_rounds))#.item())
-    print("pos MMD:", (pos_mmd / pos_rounds))#.item())
-    print("minus", (neg_mmd / neg_rounds)+ (pos_mmd / pos_rounds))# .item())
+    print("pos MMD:", (pos_mmd / pos_rounds).item())
+    print("Pos Rounds", pos_rounds)
+    #print("minus", (neg_mmd / neg_rounds)+ (pos_mmd / pos_rounds))# .item())
     mmd = avg_mmd / n_rounds
-    print("MMD:", mmd.item())
+    #print("MMD:", mmd.item())
     return mmd

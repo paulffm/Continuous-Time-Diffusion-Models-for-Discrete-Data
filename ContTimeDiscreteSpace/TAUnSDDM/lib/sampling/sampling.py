@@ -2634,18 +2634,24 @@ class TAULStepSize:
         for idx, t in tqdm(enumerate(ts[0:-1])):
             #new_tensor[idx] = x
             h = ts[idx] - ts[idx + 1]
-            x = x.requires_grad_(True)
+
+            x = x.to(dtype=torch.float32).requires_grad_(True)
             t_ones = t * torch.ones((N,), device=device, dtype=x.dtype)
             logits = model(x, t_ones)
-            logits = logits.requires_grad_(True)
-            logits= logits.flatten()
-            
-            print([torch.autograd.grad(outputs=out, inputs=x, retain_graph=True)[0][i] for i, out in enumerate(logits)])
+            #logits = logits.requires_grad_(True)
+            #logits= logits.flatten()
+            #for i, out in enumerate(logits):
+            #    print(i, torch.autograd.grad(outputs=out, inputs=x, retain_graph=True))
+            #print([torch.autograd.grad(outputs=out, inputs=x, retain_graph=True) for i, out in enumerate(logits)])
+            #print([torch.autograd.grad(outputs=out, inputs=x, retain_graph=True)[0][i] for i, out in enumerate(logits)])
             
             x = x.to(dtype=float).requires_grad_(True)
             reverse_rates, _ = get_reverse_rates(
                 model, logits, x, t_ones, self.cfg, N, self.D, self.S
             )
+            reverse_rates = reverse_rates.flatten()
+            for i, out in enumerate(reverse_rates):
+                print(i, torch.autograd.grad(outputs=out, inputs=x, retain_graph=True))
 
             xt_onehot = F.one_hot(x.long(), self.S)
             reverse_rates = reverse_rates * (1 - xt_onehot)

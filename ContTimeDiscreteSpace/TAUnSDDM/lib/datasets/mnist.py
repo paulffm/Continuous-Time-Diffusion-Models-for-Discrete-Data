@@ -226,3 +226,5 @@ def get_binmnist_datasets(root, device="cpu"):
 
 def denormalize_image(image):
     return image * 255
+
+

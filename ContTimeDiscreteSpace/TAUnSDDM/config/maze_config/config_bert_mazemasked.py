@@ -34,7 +34,7 @@ def get_config():
     data.name = "Maze3S"
     data.S = 3
     data.is_img = True
-    data.batch_size = 128  # use 128 if you have enough memory or use distributed
+    data.batch_size = 16  # use 128 if you have enough memory or use distributed
     data.shuffle = True
     data.image_size = 15
     data.shape = [1, data.image_size, data.image_size]

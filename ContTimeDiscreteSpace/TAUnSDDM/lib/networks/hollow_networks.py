@@ -718,6 +718,7 @@ class BidirectionalTransformer2(nn.Module):
             nn.ReLU(),
             nn.Linear(self.mlp_dim, self.embed_dim),
         )
+        print("self.input_embedding", self.input_embedding.weight.dtype)
 
     # Difference: add one hot in the end; time_step_embedding not learned
     def forward(
