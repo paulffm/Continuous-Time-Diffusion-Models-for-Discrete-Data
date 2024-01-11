@@ -1991,7 +1991,7 @@ class CTMidPointTauL:
                     torch.arange(self.S, device=device).repeat(N * self.D),
                     x.long().flatten().repeat_interleave(self.S),
                 ].view(N, self.D, self.S)
-                # B, D, S
+                # B, D, S * B,D,S 
                 # B, D
                 # x' = x + sum
                 change = torch.round(

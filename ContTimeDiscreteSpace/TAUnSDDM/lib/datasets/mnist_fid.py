@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from scipy import linalg
 from torch.nn.functional import adaptive_avg_pool2d
-from mnist_is import InceptionV3
+from lib.datasets.mnist_is import InceptionV3
 
 
 def get_activations(images, model, batch_size=50, dims=2048, device='cuda'):
@@ -55,13 +55,13 @@ def get_activations(images, model, batch_size=50, dims=2048, device='cuda'):
         batch = batch.to(device)
 
         with torch.no_grad():
-            pred = model(batch)[0]
+            
+            pred = model(batch.float())[0]
 
         # If model output is not scalar, apply global spatial average pooling.
         # This happens if you choose a dimensionality not equal 2048.
         if pred.size(2) != 1 or pred.size(3) != 1:
             pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
-
         pred = pred.squeeze(3).squeeze(2).cpu().numpy()
 
         pred_arr[start_idx:start_idx + pred.shape[0]] = pred
@@ -150,7 +150,9 @@ def calculate_activation_statistics(images, model, batch_size=50, dims=2048, dev
     sigma = np.cov(act, rowvar=False)
     return mu, sigma
 
-
+def normalize_input(x, S):
+    x = x / (S - 1)
+    return x
 def evaluate_fid_score(images1, images2, batch_size=50):
     """Calculation of FID.
     Params:
@@ -162,8 +164,11 @@ def evaluate_fid_score(images1, images2, batch_size=50):
     Returns:
     -- fid_value   : The FID score.
     """
-
-    device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
+    images1 = normalize_input(images1, S=256)
+    images2 = normalize_input(images2, S=256)
+    images1 = np.tile(images1, (1, 3, 1, 1))
+    images2 = np.tile(images2, (1, 3, 1, 1))
+    device = torch.device('cuda') # if (torch.cuda.is_available()) else 'cpu')
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
 
@@ -178,8 +183,8 @@ def evaluate_fid_score(images1, images2, batch_size=50):
         import warnings
         warnings.warn('FID score: the values of images should be in range [0,1].')
     
-    images1 = np.transpose(images1, axes=(0,3,1,2))
-    images2 = np.transpose(images2, axes=(0,3,1,2))
+    #images1 = np.transpose(images1, axes=(0,3,1,2))
+    #images2 = np.transpose(images2, axes=(0,3,1,2))
     
     m1, s1 = calculate_activation_statistics(images1, model, batch_size, 2048, device)
     m2, s2 = calculate_activation_statistics(images2, model, batch_size, 2048, device)

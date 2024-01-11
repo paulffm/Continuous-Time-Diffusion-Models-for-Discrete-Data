@@ -506,7 +506,7 @@ class HollowTransformerLogistics(nn.Module):
 
         net_out = self.net(x, times)  # (B, D, 2)
         net_out = net_out.view(B, 2 * C, H, W)
-        print(net_out.shape)
+
         mu = net_out[0].unsqueeze(-1)
         log_scale = net_out[1].unsqueeze(-1)
 

@@ -59,9 +59,6 @@ class CTElbo:
             B, D
         )  # (B*D,) mit view => (B, D) Bsp: x_t = (0, 1, 2, 4, 3) (for B =1 )
 
-        # --------------- x_t = noisy data => x_tilde one transition in every batch of x_t --------------------
-        # puts diagonals (- values) (in a B*D, S) in this column where x_t has its entry => x_t[0,0] = 1
-        # => in rate_vals_square[0, 1] = - values
         rate_vals_square = rate[
             torch.arange(B, device=device).repeat_interleave(D), x_t.long().flatten(), :
         ]  # (B*D, S)
@@ -87,7 +84,6 @@ class CTElbo:
         rate_new_val_probs = rate_vals_square[
             torch.arange(B, device=device), square_dims, :
         ]  # (B, S) => every row has only one entry = 0, everywhere else 1; chooses the row square_dim of rate_vals_square
-        # => now rate_new_val_probs: (B, S) with every row (1, 1, 0)
 
         # samples from rate_new_val_probs and chooses state to transition to => more likely where entry is 1 instead of 0?
         log_rate_new_val_probs = torch.where(rate_new_val_probs <= 0.0, -1e9, torch.log(rate_new_val_probs))
@@ -131,8 +127,7 @@ class CTElbo:
         qt0_numer_reg = qt0.view(B, S, S)
 
         # q_{t|0} (x|x_0)
-        # probability of going from state in d, specified by x_tilde (or other way around), to any other state S in dim d 
-        # qt0_y2x
+
         qt0_denom_reg = (
             qt0[
                 torch.arange(B, device=device).repeat_interleave(D),
@@ -142,9 +137,6 @@ class CTElbo:
             + self.ratio_eps
         )
 
-        # rates of going from any state S in dim d to the target state in d, specified by x_tilde (or other way around)
-        # rates of going from state in d, specified by x_tilde (or other way around), to any other state S in dim d 
-        # fwd_r_y2x
         rate_vals_reg = rate[
             torch.arange(B, device=device).repeat_interleave(D),
             :,
@@ -532,9 +524,6 @@ class ScoreElbo:
             ].view(B, D)
             + self.ratio_eps
         )
-        # since rate_sig_norm * x_tilde_mask = same rate in outer_sig_norm
-        # since qt0_sig_norm_numer, qt0_sig_norm_denom.view(B, D, 1)) same qt0 as in outer_sig_norm
-        # if I sum later => same result?
     
         sig_norm = torch.sum(
             (rate_sig_norm * x_tilde_mask)# * qt0_sig_norm_numer)
@@ -548,13 +537,11 @@ class ScoreElbo:
         reg_mean = torch.mean(reg_term)
 
         neg_elbo = sig_mean + reg_mean
-        #if 
-        #perm_x_logits = torch.permute(x_logits, (0, 2, 1))
-        #nll = self.cross_ent(perm_x_logits, minibatch.long())
-        #else:
-        nll = 0
 
-        return neg_elbo #+ self.nll_weight * nll
+        perm_x_logits = torch.permute(logits_reg, (0, 2, 1))
+        nll = self.cross_ent(perm_x_logits, minibatch.long())
+
+        return neg_elbo + self.nll_weight * nll
     
 @losses_utils.register_loss
 class RElbo:
@@ -1345,8 +1332,9 @@ class TauLDRNLL:
             log_prob = F.log_softmax(logits, dim=-1)
             xt_onehot = F.one_hot(x_tilde, self.S)
             log_xt = torch.sum(log_prob * xt_onehot, dim=-1) 
-            #print("log_xt", log_xt)
-        return torch.mean(log_xt)
+            perm_x_logits = torch.permute(logits, (0, 2, 1))
+            nll = nn.CrossEntropyLoss(perm_x_logits, minibatch.long())
+        return torch.mean(log_xt), nll
 
 
 @losses_utils.register_loss
@@ -1413,4 +1401,6 @@ class SDDMNLL:
                     log_prob = torch.log(prob_all + 1e-35)
 
             log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
-        return torch.mean(log_xt)
+            perm_x_logits = torch.permute(logits, (0, 2, 1))
+            nll = nn.CrossEntropyLoss(perm_x_logits, minibatch.long())
+        return torch.mean(log_xt), nll
