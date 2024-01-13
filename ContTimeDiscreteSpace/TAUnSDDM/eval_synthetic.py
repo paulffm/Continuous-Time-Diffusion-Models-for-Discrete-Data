@@ -61,12 +61,6 @@ def main():
     model_name = 'model_199999_maskeddirect.pt'
     
 
-
-    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
-    date = '2023-12-17' # 2
-    config_name = 'config_001_maskeddirect.yaml' # config_001_hollowMLEProb.yaml
-    model_name = 'model_199999_maskeddirect.pt'
-
     save_location = os.path.join(script_dir, "SavedModels/SyntheticBert/")
     date = '2023-12-28' # 2
     config_name = 'config_001_bert500K.yaml' # config_001_hollowMLEProb.yaml
@@ -113,10 +107,6 @@ def main():
     config_name = 'config_001_maskeddirect.yaml' # config_001_hollowMLEProb.yaml
     model_name = 'model_199999_maskeddirect.pt'
 
-    save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
-    date = '2023-12-25' # 2
-    config_name = 'config_001_maskedelbo.yaml' # config_001_hollowMLEProb.yaml
-    model_name = 'model_199999_maskedelbo.pt'
 
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 

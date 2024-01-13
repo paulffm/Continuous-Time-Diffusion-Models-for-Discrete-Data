@@ -154,6 +154,7 @@ def plot_samples(samples, out_name, im_size=0, axis=False, im_fmt=None):
         plt.axis("off")
     if isinstance(out_name, str):
         im_fmt = None
+    plt.tight_layout()
     plt.savefig(out_name, bbox_inches="tight", format=im_fmt, transparent=True)
     #plt.title('Spiral Synthetic Dataset')
     plt.show()

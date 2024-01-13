@@ -11,8 +11,8 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "RElbo"
-    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.name = "CatRM"
+    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
 
@@ -24,12 +24,12 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 500000  # 2000 #2000000
+    training.n_iters = 600000  # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 1  # 1
     training.warmup = 0  # 50 # 5000
-    training.max_t = 0.9999
+    training.max_t = 0.99999
 
     training.resume = True
 

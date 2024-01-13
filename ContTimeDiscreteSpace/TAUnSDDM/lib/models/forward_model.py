@@ -277,10 +277,8 @@ class GaussianTargetRate:
         )
         transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
         # Some entries that are supposed to be very close to zero might be negative
-        if torch.min(transitions) < -1e-6:
-            print(
-                f"[Warning] GaussianTargetRate, large negative transition values {torch.min(transitions)}"
-            )
+        #if torch.min(transitions) < -1e-6:
+        #    print(f"[Warning] GaussianTargetRate, large negative transition values {torch.min(transitions)}")
 
         # Clamping at 1e-8 because at float level accuracy anything lower than that
         # is probably inaccurate and should be zero anyway
@@ -300,10 +298,7 @@ class GaussianTargetRate:
             @ self.eigvecs.T.view(1, self.S, self.S)  # Q^-1
         )
         transitions = transitions / torch.sum(transitions, axis=-1, keepdims=True)
-        if torch.min(transitions) < -1e-6:
-            print(
-                f"[Warning] GaussianTargetRate, large negative transition values {torch.min(transitions)}"
-            )
+        #if torch.min(transitions) < -1e-6:print(f"[Warning] GaussianTargetRate, large negative transition values {torch.min(transitions)}")
 
         # Clamping at 1e-8 because at float level accuracy anything lower than that
         # is probably inaccurate and should be zero anyway
