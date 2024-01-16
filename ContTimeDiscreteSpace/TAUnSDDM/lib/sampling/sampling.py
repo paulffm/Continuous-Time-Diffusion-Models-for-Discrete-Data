@@ -429,12 +429,7 @@ class MidPointTauL:
                 ].view(N, self.D, self.S)
 
                 xt_onehot = F.one_hot(x.long(), self.S)
-
-                # was bedeutet das genau?
-                # off_diag = torch.sum(post_0, axis=-1, keepdims=True)
-                # diag = - off_diag # torch.clip(1.0 - 0.5 * h * off_diag, min=0, max=float("inf"))
-                # reverse_rates = (post_0 + diag * xt_onehot)  # * h  # eq.17
-
+                
                 change = torch.round(0.5 * h *
                     torch.sum((reverse_rates * state_change), dim=-1)
                 ).to(dtype=torch.int)
@@ -1404,6 +1399,7 @@ class ExactSampling:
         self.min_t = cfg.sampler.min_t
         eps_ratio = cfg.sampler.eps_ratio
         self.initial_dist = cfg.sampler.initial_dist
+        self.max_t = cfg.training.max_t
 
         if cfg.model.log_prob == "bin_ebm":
             self.get_logits = partial(bin_ebm_logits)
@@ -1423,9 +1419,9 @@ class ExactSampling:
             )
             # tau = 1 / num_steps
             ts = np.concatenate(
-                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+                (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
-            ts[0] = 0.99999
+            #ts[0] = 0.99999
             # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
@@ -1461,7 +1457,7 @@ class ExactSampling:
                     torch.arange(xt.shape[0], device=device),
                     axis=list(range(1, xt.ndim)),
                 )
-                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
+                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2) # N, D, 1, S
 
                 qt0 = q_teps_0 * q_t_teps
                 log_qt0 = torch.log(qt0)
@@ -1617,6 +1613,7 @@ class CRMTauL:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.is_ordinal = cfg.sampler.is_ordinal
+        self.max_t = cfg.training.max_t
 
         if cfg.model.log_prob == "bin_ebm":
             self.get_logprob = partial(bin_ebm_logits)
@@ -1640,6 +1637,7 @@ class CRMTauL:
             ts[0] = 0.99999
             change_jump = []
             change_clamp = []
+            change_clamp2 = []
 
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 h = ts[idx] - ts[idx + 1]
@@ -1672,10 +1670,19 @@ class CRMTauL:
                     axis=list(range(x.ndim)),
                 )  # 1,1, S
                 # print("choices", choices, choices.shape)
-                if not self.is_ordinal:
-                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
-                    flip_mask = (tot_flips <= 1) * 1
-                    flips = flips * flip_mask
+                if t < self.max_t:
+                    if not self.is_ordinal:
+                        jump_num_sum = torch.sum(flips, dim=2)
+                        changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
+                        changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
+                        change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+                        change_clamp2.append((changes_rej / changes).item())
+                        tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                        flip_mask = (tot_flips <= 1) * 1
+                        flips = flips * flip_mask
+
+                    #jump_num_sum = torch.sum(flips, dim=2)
+                    #change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
 
                 diff = choices - x.unsqueeze(-1)
                 # print("x", x.unsqueeze(-1), x.unsqueeze(-1).shape)
@@ -1685,9 +1692,10 @@ class CRMTauL:
                 )  # B, D, S with entries -(S - 1) to S-1
                 xp = x + avg_offset
 
-                change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
+                #change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
-
+                change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
+                #change_clamp.append((torch.sum(x_new != xp) / (N * self.D)).item())
                 # if t > self.min_t:
                 #    change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
                 #    change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
@@ -1696,7 +1704,7 @@ class CRMTauL:
             # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = x
-            return x_0max.detach().cpu().numpy().astype(int), change_jump
+            return x_0max.detach().cpu().numpy().astype(int), change_jump#, change_clamp2#, change_jump2, change_clamp
 
 
 @sampling_utils.register_sampler
@@ -2091,6 +2099,7 @@ class ExactELBO:
         self.min_t = cfg.sampler.min_t
         eps_ratio = cfg.sampler.eps_ratio
         self.initial_dist = cfg.sampler.initial_dist
+        self.max_t = cfg.training.max_t
 
     def sample(self, model, N):
         # t = 1.0
@@ -2103,9 +2112,8 @@ class ExactELBO:
             )
             # tau = 1 / num_steps
             ts = np.concatenate(
-                (np.linspace(1.0, self.min_t, self.num_steps), np.array([0]))
+                (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
-            ts[0] = 0.99999
             # save_ts = ts[np.linspace(0, len(ts)-2, num_intermediates, dtype=int)]
             change_jump = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
@@ -2113,49 +2121,57 @@ class ExactELBO:
 
                 # Entweder in B, D space oder in: hier kann B, D rein, und zwar mit (batch_size, 'ACTG')
                 logits = model(xt, t * torch.ones((N,), device=device))
-                log_p0t = F.log_softmax(logits, dim=2)  # (N, D, S)
+                p0t = F.softmax(logits, dim=2) 
+                #log_p0t = F.log_softmax(logits, dim=2)  # (N, D, S)
 
                 t_eps = t - h  # tau
 
                 q_teps_0 = model.transition(
                     t_eps * torch.ones((N,), device=device)
-                )  # (N, S, S)
-                qt0_denom = (
-                    q_teps_0[
-                        torch.arange(N, device=device).repeat_interleave(
-                            self.D * self.S
-                        ),
-                        torch.arange(self.S, device=device).repeat(N * self.D),
-                        xt.long().flatten().repeat_interleave(self.S),
-                    ].view(N, self.D, self.S)
-                    + self.cfg.sampler.eps_ratio
+                )# (N, S, S)
+                b = utils.expand_dims(
+                    torch.arange(xt.shape[0], device=device),
+                    axis=list(range(1, xt.ndim)),
                 )
+                q_teps_0_denom = q_teps_0[b, xt.long()] # B, D, S
 
-                # First S is x0 second S is x tilde
+                # q_teps_0 (N, 1, S, S)
+                #q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
 
-                # q_teps_0 = q_teps_0 / qt0_denom
-                q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
+
+                q_t0 = model.transition(t * torch.ones((N,), device=device))
+                q_t0_denom = q_t0[b, xt.long()]
+                
+                #q_t_denom = utils.expand_dims(q_t_denom, axis=list(range(1, xt.ndim)))
 
                 q_t_teps = model.transit_between(
                     t_eps * torch.ones((N,), device=device),
                     t * torch.ones((N,), device=device),
-                )  # (N, S, S
+                )  # (N, S, S)
                 q_t_teps = q_t_teps.permute(0, 2, 1)
+                q_t_teps_denom = q_t_teps.clone()
+
 
                 b = utils.expand_dims(
                     torch.arange(xt.shape[0], device=device),
                     axis=list(range(1, xt.ndim)),
                 )
-                q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)
-                print("t teps", q_t_teps.shape)
-                print("teps 0", q_teps_0.shape)
-                qt0_denom = qt0_denom.unsqueeze(-2)
-                qt0 = q_teps_0 * (q_t_teps / qt0_denom)
-                log_qt0 = torch.log(qt0)
-                # log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+                #print("qtteps", q_t_teps.shape)
+                q_t_teps_denom = q_t_teps_denom[b, xt.long()].unsqueeze(-2)
 
-                log_p0t = log_p0t.unsqueeze(-1)
-                log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S)
+                q_new1 = (p0t / q_t_teps_denom / q_teps_0_denom) 
+                q_new = q_new1 @ q_t_teps.transpose(1, 2) @ q_teps_0
+
+                #qt0 = (q_t_denom * q_t_teps_denom)
+
+                #log_qt0 = torch.log(qt0)
+                #log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0)) # N, D, S, S
+
+                #log_p0t = log_p0t.unsqueeze(-1)
+                #log_prob = torch.logsumexp(log_p0t + log_qt0, dim=-2).view(-1, self.S) # B*D, S
+                #print(log_prob.shape)
+                log_prob = torch.log(q_new)
+                #print(log_prob.shape)
                 cat_dist = torch.distributions.categorical.Categorical(logits=log_prob)
                 x_new = cat_dist.sample().view(N, self.D)
                 change_jump.append((torch.sum(x_new != xt) / (N * self.D)).item())
