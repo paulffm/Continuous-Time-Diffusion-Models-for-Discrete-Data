@@ -22,3 +22,4 @@ MNISTDiffusionModel/MNIST
 **/.png
 **/is_mnist
 **/Samples
+**/MNISTstatistics

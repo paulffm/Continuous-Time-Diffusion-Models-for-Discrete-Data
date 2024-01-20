@@ -615,7 +615,6 @@ class BidirectionalTransformer(nn.Module):
                 self.input_embedding = nn.Linear(self.S, self.embed_dim)
             else:
                 self.input_embedding = nn.Embedding(self.S, self.embed_dim)
-                print("EMB")
         else:
             # self.input_embedding = nn.Embedding(self.S, config.embed_dim)
             # if i normalize i cant use embedding

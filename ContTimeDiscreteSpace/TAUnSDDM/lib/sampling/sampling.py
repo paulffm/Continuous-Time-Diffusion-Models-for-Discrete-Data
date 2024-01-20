@@ -138,7 +138,7 @@ class TauL:
                 else:
                     # proportion of jumps 
                     jump_num_sum = torch.sum(jump_nums, dim=2)
-                    change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+                    change_clamp.append(torch.mean(((jump_num_sum > 0) * 1).to(dtype=float)).item())
 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
@@ -208,7 +208,7 @@ class TauL:
                         diff = choices - x_new.unsqueeze(-1)
                         adj_diffs = jump_nums * diff
                         overall_jump = torch.sum(adj_diffs, dim=2)
-                        xp = x + overall_jump
+                        xp = x_new + overall_jump
 
                         change_jump.append((torch.sum(xp != x) / (N * self.D)).item())
 
@@ -286,7 +286,6 @@ class LBJF:
                     .view(N, self.D)
                 )
                 if t <= self.corrector_entry_time:
-                    print("corrector")
                     for _ in range(self.num_corrector_steps):
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         t_h_ones = t * torch.ones((N,), device=device)
@@ -392,8 +391,12 @@ class MidPointTauL:
 
             t = self.max_t
             change_jump = []
-            change_clamp = []
-            h = t / self.num_steps
+            change_clamp1 = []
+            change_clamp2 = []
+            change_dim = []
+            change_dim_first = []
+            change_1to2 = []
+            h = (self.max_t - self.min_t) / self.num_steps
             # Fragen:
             # 1. Prediction zum  Zeitpunkt 0.5 * h +t_ones?
             # Wie summe über states? => meistens R * changes = 0
@@ -403,20 +406,19 @@ class MidPointTauL:
             while t - 0.5 * h > self.min_t:
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
                 t_05 = t_ones - 0.5 * h
-
                 logits = model(x, t_ones)
 
                 reverse_rates, _ = get_reverse_rates(
                     model, logits, x, t_ones, self.cfg, N, self.D, self.S
                 )
 
-                """
+
                 reverse_rates[
                     torch.arange(N, device=device).repeat_interleave(self.D),
                     torch.arange(self.D, device=device).repeat(N),
                     x.long().flatten(),
                 ] = 0.0
-                """
+
 
                 # print(t, reverse_rates)
                 # achtung ein verfahren definieren mit:
@@ -433,13 +435,20 @@ class MidPointTauL:
                 change = torch.round(0.5 * h *
                     torch.sum((reverse_rates * state_change), dim=-1)
                 ).to(dtype=torch.int)
-                x_prime = x + change  # , dim=-1)
+                xp_prime = x + change  # , dim=-1)
+
+
+                """
                 if (change == torch.zeros((N, self.D), device=self.device)).all():
                     print("True")
                 else:
                     count = count + 1
                     print("False")
-                x_prime = torch.clip(x_prime, min=0, max=self.S - 1)
+                """
+                x_prime = torch.clip(xp_prime, min=0, max=self.S - 1)
+
+                change_clamp1.append((torch.sum(xp_prime != x_prime) / (N * self.D)).item())
+                change_dim_first.append((torch.sum(x != x_prime) / (N * self.D)).item())
 
                 # ------------second-------------------
                 logits_prime = model(x_prime, t_05)
@@ -472,6 +481,13 @@ class MidPointTauL:
                     tot_flips = torch.sum(flips, axis=-1, keepdims=True)
                     flip_mask = (tot_flips <= 1) * 1
                     flips = flips * flip_mask
+                else:
+                    jump_num_sum = torch.sum(flips, axis=-1)
+                    changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
+                    #print("1", changes)
+                    changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
+                    # proportion of jumps thate are multiple jumps
+                    change_jump.append((changes_rej / changes).item())
                 # diff = choices - x.unsqueeze(-1)
 
                 avg_offset = torch.sum(
@@ -479,13 +495,15 @@ class MidPointTauL:
                 )  # B, D, S with entries -(S - 1) to S-1
                 xp = x + avg_offset  # wenn hier x_prime
 
-                # change_jump.append((torch.sum(xp != x_prime) / (N * self.D)).item())
                 x_new = torch.clip(xp, min=0, max=self.S - 1)
-                change_clamp.append((torch.sum(xp != x_new) / (N * self.D)).item())
+                change_clamp2.append((torch.sum(xp != x) / (N * self.D)).item())
+                change_dim.append((torch.sum(x != x_new) / (N * self.D)).item())
+                change_1to2.append((torch.sum(x_prime != x_new) / (N * self.D)).item())
 
                 x = x_new
                 t = t - h
                 i += 1
+
             if self.loss_name == "CTElbo":
                 p_0gt = F.softmax(
                     model(x, self.min_t * torch.ones((N,), device=device)), dim=2
@@ -494,7 +512,7 @@ class MidPointTauL:
             else:
                 x_0max = x
 
-            return x_0max.detach().cpu().numpy().astype(int), count / i  #change_jump
+            return x_0max.detach().cpu().numpy().astype(int), change_jump, change_dim, change_dim_first, change_1to2, change_clamp1, change_clamp2
 
 
 @sampling_utils.register_sampler
@@ -1613,7 +1631,7 @@ class CRMTauL:
         self.corrector_entry_time = cfg.sampler.corrector_entry_time
         self.num_corrector_steps = cfg.sampler.num_corrector_steps
         self.is_ordinal = cfg.sampler.is_ordinal
-        self.max_t = cfg.training.max_t
+        #self.max_t = cfg.training.max_t
 
         if cfg.model.log_prob == "bin_ebm":
             self.get_logprob = partial(bin_ebm_logits)
@@ -1660,33 +1678,46 @@ class CRMTauL:
                 xt_onehot = F.one_hot(x.long(), self.S)
                 posterior = torch.exp(log_weight) * fwd_rate
                 posterior = posterior * (1 - xt_onehot)  # B, D, S
-
+                post_h = posterior * h
                 flips = torch.distributions.poisson.Poisson(
-                    posterior * h
-                ).sample()  # B, D most 0
+                    post_h
+                ).sample()  # B, D, S most 0
 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
                     axis=list(range(x.ndim)),
                 )  # 1,1, S
-                # print("choices", choices, choices.shape)
-                if t < self.max_t:
-                    if not self.is_ordinal:
-                        jump_num_sum = torch.sum(flips, dim=2)
-                        changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
-                        changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
-                        change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
-                        change_clamp2.append((changes_rej / changes).item())
-                        tot_flips = torch.sum(flips, axis=-1, keepdims=True)
-                        flip_mask = (tot_flips <= 1) * 1
-                        flips = flips * flip_mask
 
-                    #jump_num_sum = torch.sum(flips, dim=2)
-                    #change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+                #if t < self.max_t:
+                if not self.is_ordinal:
+                    jump_num_sum = torch.sum(flips, dim=2) # B,D 
+                    changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
+                    #print("1", changes)
+                    changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
+                    #change_clamp.
+                    change_clamp.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+                    #change_clamp2.append((changes_rej / changes).item())
+                    tot_flips = torch.sum(flips, axis=-1, keepdims=True)
+                    flip_mask = (tot_flips <= 1) * 1 # B, D, 1
+                    flips = flips * flip_mask
+                else:
 
-                diff = choices - x.unsqueeze(-1)
-                # print("x", x.unsqueeze(-1), x.unsqueeze(-1).shape)
-                # print("diff", diff, diff.shape)
+                    max_values, _ = torch.max(flips, dim=-1, keepdim=True)
+                    min_values, _ = torch.min(flips, dim=-1, keepdim=True)
+                    mask = (flips > 0) & (flips == max_values)
+                    flips[mask] = 1
+                    flips[~mask] = 0
+
+                    # Regel 2: Wenn in einer Spalte ein Wert über 1, dann diesen zu 1 setzen (für jede Spalte separat)
+                    sum_values = torch.sum(flips > 1, dim=-1, keepdim=True)
+                    flips[flips > 1] = 0
+
+                    # Regel 3: Nur den höchsten Wert in tensor beibehalten
+                    #max_values_tensor, _ = torch.max(post_h, dim=-1, keepdim=True)
+                    #flips = torch.where(post_h == max_values_tensor, flips, torch.zeros_like(flips))
+
+                diff = choices - x.unsqueeze(-1) # B, D, S
+
                 avg_offset = torch.sum(
                     flips * diff, axis=-1
                 )  # B, D, S with entries -(S - 1) to S-1
@@ -1704,7 +1735,7 @@ class CRMTauL:
             # p_0gt = F.softmax(model(x, self.min_t * torch.ones((N,), device=device)), dim=2)  # (N, D, S)
             # x_0max = torch.max(p_0gt, dim=2)[1]
             x_0max = x
-            return x_0max.detach().cpu().numpy().astype(int), change_jump#, change_clamp2#, change_jump2, change_clamp
+            return x_0max.detach().cpu().numpy().astype(int), change_clamp#, change_clamp2#, change_jump2, change_clamp
 
 
 @sampling_utils.register_sampler

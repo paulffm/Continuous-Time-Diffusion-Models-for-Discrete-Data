@@ -778,7 +778,7 @@ def find_entries(array):
 
 
 def find_path(maze, random_entry=False):
-    # BFS-Algorithmus, um den kürzesten Pfad zu finden
+    # BFS-Algorithm, to find shortest solution path
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     if random_entry:
         
@@ -895,7 +895,7 @@ def maze_acc(samples):
     print(f"Average wall length: {np.mean(wall_len)} and prob {np.mean(wall_len) * 100/ 225}%")
     print(f"Average way length: {np.mean(way_len)} and prob {np.mean(way_len) * 100/ 225}%")
 
-    return np.stack(mazes_stack, 0)
+    return np.stack(mazes_stack, 0)#, np.array(path) , wall_l, 
 
 
 
