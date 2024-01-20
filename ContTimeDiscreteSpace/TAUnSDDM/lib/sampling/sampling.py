@@ -287,6 +287,7 @@ class LBJF:
                 )
                 if t <= self.corrector_entry_time:
                     for _ in range(self.num_corrector_steps):
+                        print("corrector")
                         # x = lbjf_corrector_step(self.cfg, model, x, t, h, N, device, xt_target=None)
                         t_h_ones = t * torch.ones((N,), device=device)
                         logits = model(x_new, t_h_ones)  #
