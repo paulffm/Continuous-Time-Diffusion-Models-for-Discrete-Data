@@ -284,7 +284,7 @@ class CTElbo:
         
         #print("NLL", nll)
         #print("neg elbo", neg_elbo)
-        return neg_elbo + self.nll_weight * nll
+        #return neg_elbo + self.nll_weight * nll
         return nll
     
 @losses_utils.register_loss
