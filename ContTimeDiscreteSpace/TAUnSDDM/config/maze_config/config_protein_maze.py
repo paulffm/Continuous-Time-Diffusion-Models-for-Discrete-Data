@@ -14,7 +14,7 @@ def get_config():
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0.0001
-    loss.min_time = 0.005
+    loss.min_time = 0.007
     loss.one_forward_pass = True
 
     config.training = training = ml_collections.ConfigDict()
@@ -26,7 +26,7 @@ def get_config():
     training.grad_norm = 35  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
-    training.max_t = 1
+    training.max_t = 0.99999
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
@@ -50,8 +50,8 @@ def get_config():
     model.name = "UniVarProteinScoreNetEMA"
     model.is_ebm = False
     # Forward model
-    model.rate_const = 2.0
-    model.t_func = "log_sqr"
+    model.rate_const = 1.7
+    model.t_func = "sqrt_cos"
 
     model.embed_dim = 200
     # UniDirectional

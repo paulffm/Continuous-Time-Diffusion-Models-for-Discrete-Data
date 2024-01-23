@@ -51,6 +51,5 @@ class EvalMNIST:
 
     def step(self, state, minibatch, loss):
         state["optimizer"].zero_grad()
-        l, nl2 = - loss.get_xt(minibatch, state)
-        print("Nl2", nl2, nl2.shape)
-        return l, nl2
+        l = loss.calc_loss(minibatch, state)
+        return l

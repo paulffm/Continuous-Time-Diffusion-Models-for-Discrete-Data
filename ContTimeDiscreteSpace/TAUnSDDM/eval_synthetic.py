@@ -79,13 +79,6 @@ def main():
 
 
 
-    save_location = os.path.join(script_dir, "SavedModels/SyntheticBert/")
-    date = '2023-12-28' # 2
-    config_name = 'config_001_bert500K.yaml' # config_001_hollowMLEProb.yaml
-    model_name = 'model_199999_bert500K.pt'
-
-
-
     save_location = os.path.join(script_dir, "SavedModels/SyntheticMasked/")
     date = '2023-12-17' # 2
     config_name = 'config_001_masked.yaml' # config_001_hollowMLEProb.yaml
@@ -107,6 +100,25 @@ def main():
     config_name = 'config_001_hollowCEProb500K.yaml' # config_001_hollowMLEProb.yaml
     model_name = 'model_199999_hollowCEProb500K.pt'
 
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2024-01-23' # 2
+    config_name = 'config_001_auxBert.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_auxBert.pt'
+
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2023-12-20' # 2
+    config_name = 'config_001_hollowCEProb500K.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_hollowCEProb500K.pt'
+
+    save_location = os.path.join(script_dir, "SavedModels/SyntheticBert/")
+    date = '2023-12-28' # 2
+    config_name = 'config_001_bert500K.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_bert500K.pt'
+
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2024-01-23' # 2
+    config_name = 'config_001_auxBert.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_auxBert.pt'
 
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
@@ -115,15 +127,13 @@ def main():
 
     # creating models
     cfg = bookkeeping.load_config(config_path)
-    cfg.sampler.name = 'CRMTauL' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
+    cfg.sampler.name = 'TauL' #'ExactSampling' # ElboLBJF CRMTauL CRMLBJF
     cfg.sampler.num_corrector_steps = 0
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
-    cfg.sampler.num_steps = 5 #750
+    cfg.sampler.num_steps = 250 #750
     cfg.sampler.is_ordinal = False
 
     num_steps = [20, 50, 100, 200, 500]
-    num_sampler = ['CRMTauL', 'CRMLBJF', 'ExactSampling']
-    num_mmd = []
 
     #for sampler_i in num_sampler:
     #    cfg.sampler.name = sampler_i
@@ -162,3 +172,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Bert p_0t NLL
+# LBJF: 5.7640529121272266e-05, pos MMD: 4.8501624405616894e-05 4.868915129918605e-05
+# TauL: 4.4443211663747206e-05, 6.155172741273418e-05
+
+# Bert CT-ELBO
+# LBJF: 6.795923400204629e-05, pos MMD: 4.85652381030377e-05, 4.994598566554487e-05
+# TauL 6.84180049574934e-05
+    
+# Hollo
+# LBJF: pos MMD: 3.0517578125e-05

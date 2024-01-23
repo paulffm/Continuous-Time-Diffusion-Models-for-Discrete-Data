@@ -12,10 +12,8 @@ def get_config():
 
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CTElbo"
-    loss.loss_type = "rm"  # rm, mle, elbo
-    loss.logit_type = "reverse_prob"
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0.001
+    loss.nll_weight = 1 #0.001
     loss.min_time = 0.007
     loss.ce_coeff = 0
     loss.one_forward_pass = True
@@ -29,7 +27,7 @@ def get_config():
     training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
-    training.max_t = 1.0
+    training.max_t = 0.9999
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "SyntheticData"
@@ -46,10 +44,10 @@ def get_config():
 
     config.model = model = ml_collections.ConfigDict()
     model.concat_dim = data.shape[0]
-    model.name = "UniformBertEMA"
+    model.name = "UniVarBertEMA"
     # Forward model
-    model.rate_const = 1.2
-    #model.t_func = "sqrt_cos"  # log_sqr
+    model.rate_const = 2
+    model.t_func = "sqrt_cos"  # log_sqr
     # hollow:
 
     # BiDir
@@ -96,10 +94,10 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 10000
+    saving.checkpoint_freq = 20000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "ElboLBJF"  # TauLeaping or PCTauLeaping
+    sampler.name = "LBJF"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 500
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9

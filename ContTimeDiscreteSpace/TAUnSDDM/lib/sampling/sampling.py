@@ -28,7 +28,7 @@ def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
 
 
 def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
-    if cfg.loss.name == "CTElbo":
+    if cfg.loss.name == "CTElbo" or cfg.loss.name == "TauLDRNLL":
         device = model.device
         qt0 = model.transition(t_ones)  # (N, S, S)
         rate = model.rate(t_ones)  # (N, S, S)
@@ -72,7 +72,6 @@ def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
         reverse_rates = ratio * fwd_rate
 
         # B, D, S
-
     return reverse_rates, ratio
 
 
@@ -228,7 +227,7 @@ class TauL:
 
             return (
                 x_0max.detach().cpu().numpy().astype(int), #change_jump,
-                change_dim, change_jumps, change_mjumps
+                change_dim, 
             )  # , x_hist, x0_hist
 
 

@@ -7,8 +7,8 @@ import os
 #from config.maze_config.config_bert_maze import get_config
 #from config.maze_config.config_maskedUnet_maze import get_config
 #from config.maze_config.config_tauUnet_maze import get_config
-from config.maze_config.config_hollow_maze import get_config
-#from config.maze_config.config_protein_maze import get_config
+#from config.maze_config.config_hollow_maze import get_config
+from config.maze_config.config_protein_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -107,7 +107,6 @@ def main():
     start = time.time()
     while True:
         for minibatch in dataloader: #tqdm(dataloader): #
-            print(minibatch.shape)
             l = training_step.step(state, minibatch, loss)
             training_loss.append(l.item())
 

@@ -1,8 +1,8 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-#from config.synthetic_config.config_tauMLP_synthetic import get_config
-from config.synthetic_config.config_hollow_synthetic import get_config
+from config.synthetic_config.config_bert_synthetic import get_config
+#from config.synthetic_config.config_hollow_synthetic import get_config
 #from config.synthetic_config.config_masked_synthetic import get_config
 import matplotlib.pyplot as plt
 import lib.datasets.synthetic as synthetic
@@ -85,7 +85,6 @@ def main():
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
     #print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
-    print("Logit Type:", cfg.loss.logit_type)
     #print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
