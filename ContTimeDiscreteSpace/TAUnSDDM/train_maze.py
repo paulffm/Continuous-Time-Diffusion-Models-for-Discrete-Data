@@ -34,14 +34,14 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = True
+    train_resume = False
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_9999_auxProtein.pt"
+        model_name = "model_29999_auxProtein.pt"
         date = "2024-01-24"
         config_name = "config_001_auxProtein.yaml"
         config_path = os.path.join(save_location, date, config_name)
