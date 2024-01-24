@@ -120,6 +120,11 @@ def main():
     config_name = 'config_001_auxBert.yaml' # config_001_hollowMLEProb.yaml
     model_name = 'model_199999_auxBert.pt'
 
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2024-01-23' # 2
+    config_name = 'config_001.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_119999.pt'
+
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
     config_path = os.path.join(save_location, date, config_name)
