@@ -24,11 +24,12 @@ def get_config():
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
-    training.n_iters = 400000  # 2000 #2000000
+    training.n_iters = 600000  # 2000 #2000000
     training.clip_grad = True
     training.grad_norm = 2
     training.warmup = 0  # 5000
-
+    training.max_t = 1
+    
     config.data = data = ml_collections.ConfigDict()
     data.name = "DiscreteMNIST"
     data.train = True

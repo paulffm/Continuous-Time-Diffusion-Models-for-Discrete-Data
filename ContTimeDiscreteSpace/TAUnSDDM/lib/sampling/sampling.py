@@ -7,7 +7,7 @@ import lib.utils.utils as utils
 import time
 from functools import partial
 from lib.models.model_utils import get_logprob_with_logits
-
+import time
 
 # Sampling observations:
 def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
@@ -109,42 +109,44 @@ class TauL:
             change_mjumps = []
             #new_tensor = torch.empty((self.num_steps, N, self.D), device=device)
             
-
+            time_list = []
             for idx, t in tqdm(enumerate(ts[0:-1])):
+                start_time = time.time()
                 #new_tensor[idx] = x
                 h = ts[idx] - ts[idx + 1]
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
-
+                st = time.time()
                 logits = model(x, t_ones)
+
                 reverse_rates, _ = get_reverse_rates(
                     model, logits, x, t_ones, self.cfg, N, self.D, self.S
                 )
 
                 xt_onehot = F.one_hot(x.long(), self.S)
                 reverse_rates = reverse_rates * (1 - xt_onehot)
-
+                endt = time.time()
+                nn = endt - st
                 poisson_dist = torch.distributions.poisson.Poisson(
                     reverse_rates * h
                 )  # posterior: p_{t-eps|t}, B, D; S
                 jump_nums = (
                     poisson_dist.sample()
                 )  # how many jumps in interval [t-eps, t]
-
                 if not self.is_ordinal:
                     jump_num_sum = torch.sum(jump_nums, dim=2)
                     jump_num_sum_mask = jump_num_sum <= 1
                     jump_nums = jump_nums * jump_num_sum_mask.view(N, self.D, 1)
-                else:
+                
                     # proportion of jumps 
-                    jump_num_sum = torch.sum(jump_nums, dim=2)
+                    #jump_num_sum = torch.sum(jump_nums, dim=2)
                     # wv dim changen
-                    change_dim.append(torch.mean(((jump_num_sum > 0) * 1).to(dtype=float)).item())
+                    #change_dim.append(torch.mean(((jump_num_sum > 0) * 1).to(dtype=float)).item())
                     # in wv dim sind multiple jumps
-                    change_jumps.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
+                    #change_jumps.append(torch.mean(((jump_num_sum > 1) * 1).to(dtype=float)).item())
                     # wv prop von changes sind multiple changes
-                    changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
-                    changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
-                    change_mjumps.append((changes_rej/changes).item())
+                    #changes = torch.sum(((jump_num_sum > 0) * 1).to(dtype=float))
+                    #changes_rej = torch.sum(((jump_num_sum > 1) * 1).to(dtype=float))
+                    #change_mjumps.append((changes_rej/changes).item())
 
                 choices = utils.expand_dims(
                     torch.arange(self.S, device=device, dtype=torch.int32),
@@ -200,7 +202,7 @@ class TauL:
                         jump_nums = (
                             poisson_dist.sample()
                         )  # how many jumps in interval [t-eps, t]
-
+                        
                         if not self.is_ordinal:
                             jump_num_sum = torch.sum(jump_nums, dim=2)
                             jump_num_sum_mask = jump_num_sum <= 1
@@ -217,6 +219,12 @@ class TauL:
 
                         x_new = torch.clamp(xp, min=0, max=self.S - 1)
                         x = x_new
+                end_time = time.time()
+
+                # Die verstrichene Zeit berechnen
+                elapsed_time = end_time - start_time
+                time_list.append(nn / elapsed_time)
+                print("t", nn / elapsed_time)
             if self.loss_name == "CTElbo":
                 p_0gt = F.softmax(
                     model(x, self.min_t * torch.ones((N,), device=device)), dim=2

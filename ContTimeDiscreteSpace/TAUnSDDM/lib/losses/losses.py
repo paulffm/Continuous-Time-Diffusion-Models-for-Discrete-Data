@@ -543,9 +543,9 @@ class ScoreElbo:
 
         perm_x_logits = torch.permute(logits_reg, (0, 2, 1))
         nll = self.cross_ent(perm_x_logits, minibatch.long())
-        print(nll)
-        #return neg_elbo + self.nll_weight * nll
-        return nll
+
+        return neg_elbo + self.nll_weight * nll
+        
     
 @losses_utils.register_loss
 class RElbo:

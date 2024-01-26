@@ -2,7 +2,6 @@
 """
 Diffusion for discrete state spaces.
 Implementation of Paper: Structured Denoising Diffusion Models in Discrete State-Spaces https://arxiv.org/abs/2107.03006
-Implementation taken from https://github.com/ljh0v0/D3PM-Pytorch/tree/master and adjusted
 """
 
 import utils
@@ -53,11 +52,7 @@ def get_diffusion_betas(spec):
         return 1. / torch.linspace(spec.num_timesteps, 1., spec.num_timesteps)
     else:
         raise NotImplementedError(spec.type)
-# training if I just take the KL:
-#   => training_losses: noise data with q_sample => uses q_probs to calculate probabilites: q(x_t | x_0) = Cat(x_t; p=x_0 quer Q_t) = x_0 * quer Q_t
-#       q_probs just a wrapper and uses _a_t
-#       other functions before just computes quer Q_t for all t
-#   => vb_terms_bpd
+
 
 class CategoricalDiffusion(nn.Module):
     """Discrete state space diffusion process.
@@ -110,10 +105,7 @@ class CategoricalDiffusion(nn.Module):
                 f"transition_mat_type must be 'gaussian', 'uniform', 'absorbing' "
                 f", but is {self.transition_mat_type}"
             )
-        # stacked Q_t aneinander für die verschiedenen t-Werte 
-        # torch.stack(q_one_step_mats, dim=0) nimmt dann diese Liste von Matrizen und stapelt sie entlang einer neuen Dimension (Dimension 0). 
-        # Das Ergebnis ist ein 3D Tensor, bei dem die erste Dimension den Zeitschritt repräsentiert und die nächsten beiden Dimensionen die 
-        # eigentliche Transitionsmatrix für diesen Zeitschritt darstellen.
+
         self.register("q_onestep_mats", torch.stack(q_one_step_mats, dim=0))
 
         assert self.q_onestep_mats.shape == (self.num_timesteps,
@@ -131,7 +123,6 @@ class CategoricalDiffusion(nn.Module):
             # Q_{1...t} = Q_{1 ... t-1} Q_t = Q_1 Q_2 ... Q_t
             # t = 1: quer Q_t=1 = Q_1 * Q_2
             # t = 2: quer Q_t=2 = Q_t=1 * Q_3
-            # => brauche alle, da quer Q_t von t abhängt
 
             q_mat_t = torch.tensordot(q_mat_t, self.q_onestep_mats[t],
                                       dims=[[1], [0]])
