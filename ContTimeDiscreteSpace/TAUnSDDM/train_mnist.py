@@ -33,7 +33,7 @@ torch.cuda.empty_cache()
 def main():
     train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/MNISTHollow/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/MNIST/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 

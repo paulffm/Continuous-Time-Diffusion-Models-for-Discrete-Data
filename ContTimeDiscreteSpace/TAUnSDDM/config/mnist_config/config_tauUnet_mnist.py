@@ -18,7 +18,7 @@ def get_config():
     config.loss = loss = ml_collections.ConfigDict()
     loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0.001
+    loss.nll_weight = 0
     loss.min_time = 0.01
     loss.one_forward_pass = True
 
