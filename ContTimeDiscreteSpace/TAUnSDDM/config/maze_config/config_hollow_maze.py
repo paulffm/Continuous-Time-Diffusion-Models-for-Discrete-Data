@@ -12,7 +12,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRM"
+    loss.name = "CatRMNLL"
     loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
@@ -25,7 +25,7 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
 
-    training.n_iters = 400000 # 2000 #2000000
+    training.n_iters = 300000 # 2000 #2000000
 
     training.clip_grad = True
     training.grad_norm = 3  # 1

@@ -7,8 +7,8 @@ import os
 #from config.maze_config.config_bert_maze import get_config
 #from config.maze_config.config_maskedUnet_maze import get_config
 #from config.maze_config.config_tauUnet_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
-from config.maze_config.config_protein_maze import get_config
+from config.maze_config.config_hollow_maze import get_config
+#from config.maze_config.config_protein_maze import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.maze as maze
@@ -30,7 +30,7 @@ def main():
     data_name = 'MAZE'
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, f"SavedModels/MAZEprotein/")
+    save_location = os.path.join(script_dir, f"SavedModels/MAZE/")
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 

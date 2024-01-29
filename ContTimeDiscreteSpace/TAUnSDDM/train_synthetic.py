@@ -1,8 +1,8 @@
 import torch
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-from config.synthetic_config.config_bert_synthetic import get_config
-#from config.synthetic_config.config_hollow_synthetic import get_config
+#from config.synthetic_config.config_bert_synthetic import get_config
+from config.synthetic_config.config_hollow_synthetic import get_config
 #from config.synthetic_config.config_masked_synthetic import get_config
 import matplotlib.pyplot as plt
 import lib.datasets.synthetic as synthetic

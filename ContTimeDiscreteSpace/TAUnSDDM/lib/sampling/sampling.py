@@ -115,7 +115,6 @@ class TauL:
                 #new_tensor[idx] = x
                 h = ts[idx] - ts[idx + 1]
                 t_ones = t * torch.ones((N,), device=device)  # (N, S, S)
-                st = time.time()
                 logits = model(x, t_ones)
 
                 reverse_rates, _ = get_reverse_rates(
@@ -124,8 +123,6 @@ class TauL:
 
                 xt_onehot = F.one_hot(x.long(), self.S)
                 reverse_rates = reverse_rates * (1 - xt_onehot)
-                endt = time.time()
-                nn = endt - st
                 poisson_dist = torch.distributions.poisson.Poisson(
                     reverse_rates * h
                 )  # posterior: p_{t-eps|t}, B, D; S
@@ -219,12 +216,7 @@ class TauL:
 
                         x_new = torch.clamp(xp, min=0, max=self.S - 1)
                         x = x_new
-                end_time = time.time()
 
-                # Die verstrichene Zeit berechnen
-                elapsed_time = end_time - start_time
-                time_list.append(nn / elapsed_time)
-                print("t", nn / elapsed_time)
             if self.loss_name == "CTElbo":
                 p_0gt = F.softmax(
                     model(x, self.min_t * torch.ones((N,), device=device)), dim=2

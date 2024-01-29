@@ -95,8 +95,6 @@ class ResidualReadout(nn.Module):
         self.out_dim = self.readout_dim if self.readout_dim != 0 else self.config.data.S
         self.input_layer = nn.Linear(self.embed_dim, 2 * self.embed_dim)
 
-        # if out_dim in TransMLPBlock not None: 2*out_dim instead of self.config.model.embed_dim in MLP
-        # but always none
         self.mlp = MLP(
             [self.embed_dim, self.config.model.mlp_dim, 4 * self.embed_dim],
             activation=nn.GELU(),
@@ -128,8 +126,8 @@ class ResidualReadout(nn.Module):
             z = self.resid_layers[2 * i](x)  # B, D, 2E -> B, D, 2E
             x = self.resid_layers[2 * i + 1](x + z)
             x = apply_film(
-                film_params, x  # B, 4 E -> B, 2 E
-            )  # ensure the apply_film function is properly defined
+                film_params, x  
+            )  
         logits = self.logits_layer(x)
         return logits  # B, D, S
 
@@ -237,7 +235,6 @@ class CrossAttention(nn.Module):
         query = query / torch.sqrt(torch.tensor(query.shape[-1], device=self.device,dtype=torch.float32))
          # B, D, H, HD
         logits = torch.einsum("bqhd,bkhd->bhqk", query, key) # B, H, D, H*HD
-        #logits = torch.einsum("bqe,bke->bkq", query, key) # without view
 
 
         att_l2r_mask = ~torch.triu(
@@ -252,9 +249,8 @@ class CrossAttention(nn.Module):
  
 
         att_t = torch.ones((1, seq_len, 1), device=self.device) # 1, D, 1
- 
         joint_mask = torch.cat([att_t, att_l2r_mask, att_r2l_mask], dim=-1).unsqueeze(0) # 1, 1, D, H*HD
-        #print("joint_maks", joint_mask.shape)
+
         joint_mask = joint_mask > 0
         attn_weights = torch.where(joint_mask, logits, torch.tensor(torch.finfo(logits.dtype).min, device=self.device)) # B, D, H, H*HD
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -262,7 +258,6 @@ class CrossAttention(nn.Module):
             "bhqk,bkhd->bqhd", attn_weights, val
         )  # B, D, self.num_heads, self.head_dim
     
-        # x = torch.einsum("bkq,bke->bqe", attn_weights, val) # without view
         x = x.reshape(x.shape[0], x.shape[1], self.num_heads * self.head_dim) # B, D, H, HD
         x = self.out_linear(x)
         return x
@@ -359,7 +354,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         # TMLP: Lin, Relu, Dropout, Linear, Droput
         self.fc1 = nn.Linear(
             embed_dim, mlp_dim, bias=bias_init
-        )  # mlp_dim => d_model in TAU
+        )  
         self.activation = nn.ReLU() #nn.GELU()  # hier GeLu? 
         self.dropout1 = nn.Dropout(p=dropout_rate)
         self.fc2 = nn.Linear(
@@ -372,8 +367,7 @@ class TransformerMlpBlock(nn.Module):  # directly used in FFResidual in TAU
         self.kernel_init(self.fc2.weight)
 
     def forward(self, inputs: TensorType["B", "K", "E"]) -> TensorType["B", "K", "O"]:
-        # if conditioner None: K =D else D+n; if out_dim None: O = E
-        # in jax code they do not use out_dim; so O=E
+
         inputs = inputs.to(self.dtype)
         x = self.fc1(inputs)
         x = self.activation(x)
@@ -500,13 +494,6 @@ class UniDirectionalTransformer(nn.Module):
             self.trans_block_layers.append(TransformerBlock(config))
         self.trans_block_layers = nn.ModuleList(self.trans_block_layers)
 
-        # concat_dim in
-        # self.pos_embed = nn.Parameter(torch.nn.init.xavier_uniform_(torch.empty(1, config.concat_dim, config.embed_dim, dtype=torch.float32)))
-        # if K != D => need to initialize pos_embed with cfg.concat_dim + n
-        #if config.model.nets == 'visual':
-        #    seq_len = int((config.data.image_size / config.model.patch_size) ** 2)
-        #    print(seq_len)
-        #else:
         seq_len = config.model.concat_dim
         self.pos_embed = PositionalEncoding(
             config.device,
@@ -518,33 +505,33 @@ class UniDirectionalTransformer(nn.Module):
     def forward(
         self, x: TensorType["B", "D", "E"], temb: TensorType["B", "E"], conditioner=None
     ) -> TensorType["B", "K", "O"]:
-        # conditioner None: K = E else K = D + cond_dim - 1; out_dim always none in TransMLP: O = E
-        assert x.ndim == 3 and temb.ndim == 2  # B, D, E and B, E
+       
+        assert x.ndim == 3 and temb.ndim == 2  
         temb = temb.unsqueeze(1)
         if conditioner is None:
-            conditioner = temb  # B, 1, E; B, 1, T
+            conditioner = temb  
         else:
-            conditioner = torch.cat([conditioner, temb], dim=1)  # B, 2, E
-        # eventuell
-        cond_dim = conditioner.size(1)  # 1 if None, else 2
+            conditioner = torch.cat([conditioner, temb], dim=1)  
+      
+        cond_dim = conditioner.size(1)  
         concat_dim = (
             x.size(1) + cond_dim - 1
-        )  # D if None, else D+1 # mabye if: D+1 => I need in
+        )  
 
         if self.direction == "l2r":
             x = torch.cat(
                 [conditioner, x[:, :-1]], dim=1
-            )  # x[:, :-1] B, D-1, E; condtioner B, 1, E => B, D, E; => if temb not B, E => would not work
+            )  
             mask = torch.triu(
                 torch.ones(
                     (concat_dim, concat_dim), device=self.device, dtype=torch.bool
                 ),
-                diagonal=1,  # concat_dim = D; if conditioner:
+                diagonal=1,  
             )  
             mask = torch.where(mask, torch.tensor(float('-inf'), device=self.device), torch.tensor(0.0, device=self.device))
 
         else:
-            x = torch.cat([x[:, 1:], conditioner], dim=1)  # B, D-1, E + B, 1or2, E
+            x = torch.cat([x[:, 1:], conditioner], dim=1)  
             mask = torch.tril(
                 torch.ones(
                     (concat_dim, concat_dim), device=self.device, dtype=torch.bool
@@ -553,12 +540,9 @@ class UniDirectionalTransformer(nn.Module):
             )  
             mask = torch.where(mask, torch.tensor(float('-inf'), device=self.device), torch.tensor(0.0, device=self.device))
 
-
-        # if K != D => need to initialize pos_embed with cfg.concat_dim + n
         x = self.pos_embed(x)
         x = self.dropout(x)
-        # x: (B, D, E) or with conditioner: D + cond_dim - 1, E) true
-        # x now: (B, K, E)
+
         for trans_block_layers in self.trans_block_layers:
             x = trans_block_layers(x, masks=mask)
 

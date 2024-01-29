@@ -1403,4 +1403,63 @@ class SDDMNLL:
             log_xt = torch.sum(log_prob * xt_onehot, dim=-1)
             perm_x_logits = torch.permute(logits, (0, 2, 1))
             nll = nn.CrossEntropyLoss(perm_x_logits, minibatch.long())
-        return torch.mean(log_xt), nll
+        return nll
+    
+
+# checked
+@losses_utils.register_loss
+class CatRMNLL:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.min_time = cfg.loss.min_time
+        self.S = cfg.data.S
+        self.D = cfg.model.concat_dim
+        self.cross_ent = nn.CrossEntropyLoss()
+        self.max_t = cfg.training.max_t
+
+    def calc_loss(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+
+        model = state["model"]
+
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+
+        B = minibatch.shape[0]
+        device = self.cfg.device
+        ts = torch.rand((B,), device=device) * (1.0 - self.min_time) + self.min_time
+        #ts = torch.clamp(ts, max=0.99999)
+
+        qt0 = model.transition(ts)  # (B, S, S)
+
+        b = utils.expand_dims(
+            torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
+        )
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
+
+        log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # B, D
+        
+        # get logits from CondFactorizedBackwardModel
+        logits = model(
+            xt, ts
+        )  # B, D, S: logits for every class in every dimension in x_t
+        perm_x_logits = torch.permute(logits, (0, 2, 1))
+        nll = self.cross_ent(perm_x_logits, minibatch.long())
+        return nll # sum over D
