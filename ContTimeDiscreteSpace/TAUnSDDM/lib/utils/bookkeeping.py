@@ -359,7 +359,7 @@ def save_state(state: dict, save_dir) -> None:
     torch.save(checkpoint_dict, model_path)
 
 
-def load_state(state: dict, checkpoint_path: str, mapping=torch.device("cpu")) -> dict:
+def load_state(state: dict, checkpoint_path: str, mapping=torch.device("cuda")) -> dict:
 
     checkpoint = torch.load(checkpoint_path, map_location=mapping)
 
