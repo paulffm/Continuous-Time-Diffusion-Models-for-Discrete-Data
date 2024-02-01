@@ -11,7 +11,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRM"
+    loss.name = "CatRMNLL"
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.logit_type = "reverse_prob"
     loss.eps_ratio = 1e-9
@@ -28,6 +28,7 @@ def get_config():
     training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
+    training.max_t = 0.007
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "SyntheticData"
@@ -99,10 +100,10 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
-    saving.checkpoint_freq = 5000
+    saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
+    sampler.name = "LBJF"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 500
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9

@@ -229,7 +229,7 @@ class ProteinScoreNet(nn.Module):
 
         # Encoding path
         # x: NLC -> NCL
-        x = F.one_hot(x.long(), self.S)
+        x = F.one_hot(x.long(), self.S) 
         out = x.permute(0, 2, 1)
         out = self.act(self.linear(out.float()))
 

@@ -360,7 +360,6 @@ def save_state(state: dict, save_dir) -> None:
 
 
 def load_state(state: dict, checkpoint_path: str, mapping=torch.device("cuda")) -> dict:
-
     checkpoint = torch.load(checkpoint_path, map_location=mapping)
 
     state["model"].load_state_dict(checkpoint["model"])
@@ -375,8 +374,8 @@ def load_state(state: dict, checkpoint_path: str, mapping=torch.device("cuda")) 
 def save_config(config: dict, config_dir: str) -> None:
     # /Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST
     current_date = datetime.now().strftime("%Y-%m-%d")
-    file_name = 'config_001.yaml'
-    
+    file_name = "config_001.yaml"
+
     config_dir = os.path.join(config_dir, current_date)
     if not os.path.exists(config_dir):
         os.makedirs(config_dir)
