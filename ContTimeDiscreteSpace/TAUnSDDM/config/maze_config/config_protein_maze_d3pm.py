@@ -64,8 +64,8 @@ def get_config():
     # diffusion betas
     model.type='cosine'
                 # start, stop only relevant for linear, power, jsdtrunc schedules.
-    model.start=1e-4 # 1e-4 gauss, 0.02 uniform
-    model.stop=0.02 # 0.02, gauss, 1. uniform
+    model.start=0.02 # 1e-4 gauss, 0.02 uniform
+    model.stop=1 # 0.02, gauss, 1. uniform
     model.num_timesteps=1000
 
             # Settings used in diffusion_categorical.py
@@ -78,6 +78,7 @@ def get_config():
     model.model_output='logits'
     model.num_pixel_vals=3
     model.device='cuda'
+    model.is_img = True
 
 
     config.optimizer = optimizer = ml_collections.ConfigDict()

@@ -27,7 +27,7 @@ def create_train_mnist_dataloaders(
 
 
     train_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/MNISTDiffusionModel",
+        root="root/to/data",
         train=True,
         download=True,
         transform=base_transforms,
@@ -66,7 +66,7 @@ def create_full_mnist_dataloaders(
 
     # Load the training dataset
     train_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/MNISTDiffusionModel",
+        root="root/to/data",
         train=True,
         download=True,
         transform=preprocess
@@ -80,7 +80,7 @@ def create_full_mnist_dataloaders(
 
     # Load the test dataset
     test_dataset = MNIST(
-        root="/Users/paulheller/PythonRepositories/Master-Thesis/MNISTDiffusionModel",
+        root="root/to/data",
         train=False,
         download=True,
         transform=preprocess

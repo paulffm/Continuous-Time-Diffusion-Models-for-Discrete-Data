@@ -14,6 +14,7 @@ import lib.models.models as models
 import lib.models.model_utils as model_utils
 import lib.datasets.dataset_utils as dataset_utils
 from lib.datasets.metrics import eval_mmd
+from lib.d3pm import make_diffusion
 
 def main():
     
@@ -125,6 +126,12 @@ def main():
     config_name = 'config_001_bert500K.yaml' # config_001_hollowMLEProb.yaml
     model_name = 'model_199999_bert500K.pt'
 
+    save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
+    date = '2024-02-06' # 2
+    config_name = 'config_001_d3pm.yaml' # config_001_hollowMLEProb.yaml
+    model_name = 'model_199999_d3pm.pt'
+
+
     #config_name = 'config_001_r07.yaml' 
     #model_name = 'model_84999_hollowr07.pt' 
     config_path = os.path.join(save_location, date, config_name)
@@ -137,6 +144,8 @@ def main():
     cfg.sampler.corrector_entry_time = ScalarFloat(0.0)
     cfg.sampler.num_steps = 250 #750
     cfg.sampler.is_ordinal = False
+
+    diffusion = make_diffusion(cfg.model)
 
     num_steps = [20, 50, 100, 200, 500]
 
@@ -158,6 +167,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), cfg.optimizer.lr)
 
     sampler = sampling_utils.get_sampler(cfg)
+    
 
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
     state = bookkeeping.load_state(state, checkpoint_path)
@@ -170,8 +180,9 @@ def main():
     print("Model Name:", model_name)
     print("Sampler:", cfg.sampler.name)
     n_samples = 4096#2048 #4096 # 16384  #1024
-    n_rounds = 10
-    mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
+    n_rounds = 25
+    #mmd = eval_mmd(cfg, state['model'], sampler, dataloader, n_rounds, n_samples=n_samples)
+    mmd = eval_mmd(cfg, state['model'], diffusion, dataloader, n_rounds, n_samples=n_samples)
     #num_mmd.append(mmd.item())
     print("MMD", mmd.item())
 

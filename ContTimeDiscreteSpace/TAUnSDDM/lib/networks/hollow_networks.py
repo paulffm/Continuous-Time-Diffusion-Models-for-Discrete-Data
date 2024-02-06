@@ -985,7 +985,6 @@ class BertEnumTransformer(nn.Module):
         x = x.view(x.shape[0], -1)
         B, D = x.shape
 
-        prefix_cond = self.config.model.get("conditional_dim", 0)
 
         if self.use_cat:
             if self.use_one_hot_input:
@@ -1005,11 +1004,6 @@ class BertEnumTransformer(nn.Module):
         elif self.config.model.readout == "resnet":
             logits = self.model(embed, temb)
 
-        if prefix_cond:
-            dummy_logits = torch.zeros(
-                [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=torch.float32
-            )
-            logits = torch.cat([dummy_logits, logits], dim=1)
         #logits = logits.view(x.shape + (self.S,))
         return logits  # B, D, S
 

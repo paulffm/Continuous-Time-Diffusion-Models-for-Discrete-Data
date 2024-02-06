@@ -190,7 +190,9 @@ def eval_mmd(config, model, sampler, dataloader, n_rounds: int=10, n_samples: in
                     break
             gt_data = torch.stack(gt_data, axis=0)
             gt_data = gt_data.view(-1, config.model.concat_dim)
-            x0, _ = sampler.sample(model, n_samples)
+
+            x0 = sampler.p_sample_loop(model, (n_samples, 32), 500).cpu().numpy()
+            #x0, _ = sampler.sample(model, n_samples)
             x0 = torch.from_numpy(x0).to(device=config.device)
             #mmd =  exp_hamming_mmd(x0, gt_data, config, bandwidth=0.1)
             mmd = binary_exp_hamming_mmd(gt_data, x0, config)

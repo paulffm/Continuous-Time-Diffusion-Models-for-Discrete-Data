@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 import scipy.special
 from loguru import logger
-
+from tqdm import tqdm
 
 def make_diffusion(hps):
     """HParams -> diffusion object."""
@@ -320,7 +320,7 @@ class CategoricalDiffusion(nn.Module):
         # a.shape = (num_timesteps, num_pixel_vals, num_pixel_vals)
         # out.shape = (bs, channels, height, width, num_pixel_vals)
         # out[i, j, k, l, m] = a[t[i], x[i, j, k, l], m]
-        if len(x.shape) == 2 or len(x.shape) == 3:
+        if not self.is_img:
             B, D = x.shape
         else:
             B, C, H, W = x.shape
@@ -365,7 +365,7 @@ class CategoricalDiffusion(nn.Module):
         assert a_t.shape == (x.shape[0], self.num_pixel_vals, self.num_pixel_vals)
         x = x.view(B, -1, self.num_pixel_vals)
         out = torch.matmul(x, a_t)
-        if self.is_img:
+        if not self.is_img:
             out = out.view(B, D, self.num_pixel_vals)
         else:
             out = out.view(B, C, H, W, self.num_pixel_vals) 
@@ -605,7 +605,7 @@ class CategoricalDiffusion(nn.Module):
             num_timesteps = self.num_timesteps
 
         x = x_init
-        for i in reversed(range(0, num_timesteps)):
+        for i in tqdm(reversed(range(0, num_timesteps))):
             t = torch.full((shape[0],), i, dtype=torch.int64).to(device)
             x, _ = self.p_sample(
                 model_fn=model_fn,
@@ -726,7 +726,7 @@ class CategoricalDiffusion(nn.Module):
         # itself.
         # probabilites 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
-        #print("q-sample", x_t.shape)
+
         # Calculate the loss
 
         if self.loss_type == 'kl':
@@ -787,3 +787,5 @@ class CategoricalDiffusion(nn.Module):
             'vbterms': vbterms_bt,
             'prior': prior_b,
         }
+
+# mmd: 3.875399852404371e-05 (19)  3.855368777294643e-05

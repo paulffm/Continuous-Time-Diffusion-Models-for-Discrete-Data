@@ -55,8 +55,8 @@ def get_config():
     model.ema_decay = 0.9999  # 0.9999
     model.embed_dim = 64
     model.readout = 'resnet' # 'mlp'
-    model.use_one_hot_input = False
-    model.use_cat = False
+    model.use_one_hot_input = True
+    model.use_cat = True
     model.is_ebm = False
     model.log_prob = 'cat'
 
@@ -87,8 +87,8 @@ def get_config():
     # diffusion betas
     model.type='cosine'
                 # start, stop only relevant for linear, power, jsdtrunc schedules.
-    model.start=1e-4 # 1e-4 gauss, 0.02 uniform
-    model.stop=0.02 # 0.02, gauss, 1. uniform
+    model.start=0.02 # 1e-4 gauss, 0.02 uniform
+    model.stop=1 # 0.02, gauss, 1. uniform
     model.num_timesteps=500
     model.time_scale_factor=1000
 
@@ -98,15 +98,16 @@ def get_config():
     model.transition_mat_type='uniform'
     model.transition_bands=None
     model.loss_type='hybrid'# kl,cross_entropy_x_start, hybrid
-    model.hybrid_coeff=0.01
+    model.hybrid_coeff=0.001
     model.model_output='logits'
     model.num_pixel_vals=2
     model.device='cuda'
+    model.is_img = False
 
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 1.5e-4  # 2e-4
+    optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
