@@ -46,6 +46,7 @@ class MLP(nn.Module):
 
         # layers.append(nn.Linear(features[-1], features[-1]))
         self.layers = nn.Sequential(*layers)
+    # dropout
 
     def forward(self, x):
         return self.layers(x)

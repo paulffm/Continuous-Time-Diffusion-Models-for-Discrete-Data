@@ -226,6 +226,7 @@ class ProteinScoreNet(nn.Module):
         # Obtain the Gaussian random feature embedding for t
         # embed: [N, embed_dim]
         embed = self.act(self.embed(t / 2))
+        
 
         # Encoding path
         # x: NLC -> NCL
@@ -250,4 +251,5 @@ class ProteinScoreNet(nn.Module):
         out = out.permute(0, 2, 1)
 
         out = out - out.mean(axis=-1, keepdims=True)
+        
         return out

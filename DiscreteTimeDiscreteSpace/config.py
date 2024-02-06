@@ -11,7 +11,7 @@ def get_config():
         dataset=config_dict(
             name='mnist',
             path="/Users/paulheller/PythonRepositories/Master-Thesis/DiscreteTimeDiscreteSpace/datasets",
-            resolution=32,
+            resolution=28,
             args=config_dict(
                 class_conditional=False,
                 randflip=False,

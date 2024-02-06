@@ -173,10 +173,12 @@ class ImageX0PredBasePaul(nn.Module):
         """
         Returns logits over state space for each pixel
         """
-
-        B, D = x.shape
-        C, H, W = self.data_shape
-        x = x.view(B, C, H, W)
+        if len(x.shape) == 2:
+            B, D = x.shape
+            C, H, W = self.data_shape
+            x = x.view(B, C, H, W)
+        else:
+            B, C, H, W = x.shape
 
         if self.padding:
             x = nn.ReplicationPad2d((0, 1, 0, 1))(x.float())
@@ -231,9 +233,10 @@ class ImageX0PredBasePaul(nn.Module):
             logits = logits.reshape(B, D, self.S)
             #logits = logits.view(B, D, self.S)
         else:
-            logits = logits.view(B, D, self.S)
-
-        return logits
+            logits.view(B, C, H, W, self.S)# d3pm
+            #logits = logits.view(B, D, self.S)
+        
+        return logits #.view(B, C, H, W, self.S) # d3pm
 
     def _log_minus_exp(self, a, b, eps=1e-6):
         """
@@ -332,7 +335,7 @@ class ImageX0PredBase(nn.Module):
         else:
             logits = logits_1
 
-        logits = logits.view(B, D, S)
+        #logits = logits.view(B, D, S)
 
         return logits
 
@@ -640,9 +643,10 @@ class ProteinScoreNet(nn.Module):
         """
         Returns logits over state space
         """
-
+        x = x.view(-1, 15*15*1)
         logits = self.net(x, times)  # (B, D, S)
 
+        logits = logits.view(-1, 1, 15, 15, 3)
         return logits
 
 
@@ -842,7 +846,13 @@ class UniVarProteinScoreNetEMA(EMA, ProteinScoreNet, UniformVariantRate):
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+@model_utils.register_model
+class UniProteinD3PM(EMA, ProteinScoreNet):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        ProteinScoreNet.__init__(self, cfg, device, rank)
 
+        self.init_ema()
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMAPaul(
@@ -941,6 +951,15 @@ class UniVarBertEMA(EMA, BertMLPRes, UniformVariantRate):
         EMA.__init__(self, cfg)
         BertMLPRes.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+
+@model_utils.register_model
+class UniBertD3PM(EMA, BertMLPRes):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        BertMLPRes.__init__(self, cfg, device, rank)
 
         self.init_ema()
 

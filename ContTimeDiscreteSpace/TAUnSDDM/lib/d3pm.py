@@ -4,7 +4,7 @@ Diffusion for discrete state spaces.
 Implementation of Paper: Structured Denoising Diffusion Models in Discrete State-Spaces https://arxiv.org/abs/2107.03006
 """
 
-import utils
+import lib.d3pm_utils as d3pm_utils
 import torch
 import numpy as np
 from torch import nn
@@ -16,18 +16,21 @@ from loguru import logger
 def make_diffusion(hps):
     """HParams -> diffusion object."""
     return CategoricalDiffusion(
-        betas=get_diffusion_betas(hps.model),
+        betas=get_diffusion_betas(hps),
         model_prediction=hps.model_prediction,
-        model_output=hps.args.model_output,
+        model_output=hps.model_output,
         transition_mat_type=hps.transition_mat_type,
         transition_bands=hps.transition_bands,
         loss_type=hps.loss_type,
         hybrid_coeff=hps.hybrid_coeff,
-        num_pixel_vals=hps.args.num_pixel_vals)
+        num_pixel_vals=hps.num_pixel_vals,
+        device=hps.device,
+        is_img=hps.is_img)
 
 
 def get_diffusion_betas(spec):
     """Get betas from the hyperparameters."""
+    print("in betas", spec.num_timesteps)
     if spec.type == 'linear':
         # Used by Ho et al. for DDPM, https://arxiv.org/abs/2006.11239.
         # To be used with Gaussian diffusion models in continuous and discrete
@@ -64,7 +67,7 @@ class CategoricalDiffusion(nn.Module):
 
     def __init__(self, *, betas, model_prediction, model_output,
                  transition_mat_type, transition_bands, loss_type, hybrid_coeff,
-                 num_pixel_vals):
+                 num_pixel_vals, device, is_img):
         super().__init__()
 
         self.model_prediction = model_prediction  # x_start, xprev
@@ -77,6 +80,9 @@ class CategoricalDiffusion(nn.Module):
         self.transition_bands = transition_bands
         self.transition_mat_type = transition_mat_type
         self.eps = 1.e-6
+        self.device=device
+        self.is_img = is_img
+
 
         if not ((betas > 0).all() and (betas <= 1).all()):
             raise ValueError('betas must be in (0, 1]')
@@ -85,6 +91,7 @@ class CategoricalDiffusion(nn.Module):
         # self.betas = betas
         self.register("betas", betas)
         self.num_timesteps, = betas.shape
+        print("from beta", self.num_timesteps)
 
         # Construct transition matrices for q(x_t|x_{t-1}) (forward process)
         # NOTE: t goes from {0, ..., T-1}
@@ -106,7 +113,7 @@ class CategoricalDiffusion(nn.Module):
                 f", but is {self.transition_mat_type}"
             )
 
-        self.register("q_onestep_mats", torch.stack(q_one_step_mats, dim=0))
+        self.register("q_onestep_mats", torch.stack(q_one_step_mats, dim=0).to(self.device))
 
         assert self.q_onestep_mats.shape == (self.num_timesteps,
                                              self.num_pixel_vals,
@@ -130,7 +137,7 @@ class CategoricalDiffusion(nn.Module):
         
         # => above computation can be inefficient => therefore Q_t = exp(alpha_t * R) => connection to CTMC
 
-        self.register("q_mats", torch.stack(q_mats, dim=0))
+        self.register("q_mats", torch.stack(q_mats, dim=0).to(self.device))
         assert self.q_mats.shape == (self.num_timesteps, self.num_pixel_vals,
                                      self.num_pixel_vals), self.q_mats.shape
         
@@ -169,7 +176,7 @@ class CategoricalDiffusion(nn.Module):
         diag_val = 1. - beta_t * (self.num_pixel_vals - 1.) / self.num_pixel_vals
         mat[diag_indices] = diag_val
 
-        return torch.from_numpy(mat)
+        return torch.from_numpy(mat).to(self.device)
 
     def _get_transition_mat(self, t):
         r"""Computes transition matrix for q(x_t|x_{t-1}).
@@ -211,7 +218,7 @@ class CategoricalDiffusion(nn.Module):
         # Add diagonal values such that rows sum to one.
         diag = 1. - mat.sum(1)
         mat += np.diag(diag, k=0)
-        return torch.from_numpy(mat)
+        return torch.from_numpy(mat).to(self.device)
 
     def _get_gaussian_transition_mat(self, t):
         r"""Computes transition matrix for q(x_t|x_{t-1})=Cat(x_t; p=x_{t-1} * Q_t).
@@ -268,7 +275,7 @@ class CategoricalDiffusion(nn.Module):
         diag = 1. - mat.sum(1)
         mat += np.diag(diag, k=0)
 
-        return torch.from_numpy(mat)
+        return torch.from_numpy(mat).to(self.device)
 
     def _get_absorbing_transition_mat(self, t):
         """Computes transition matrix for q(x_t|x_{t-1}).
@@ -289,7 +296,7 @@ class CategoricalDiffusion(nn.Module):
         # Add beta_t to the num_pixel_vals/2-th column for the absorbing state.
         mat[:, self.num_pixel_vals // 2] += beta_t
 
-        return torch.from_numpy(mat)
+        return torch.from_numpy(mat).to(self.device)
 
     def _at(self, a, t, x):
         """Extract coefficients at specified timesteps t and conditioning data x.
@@ -313,14 +320,21 @@ class CategoricalDiffusion(nn.Module):
         # a.shape = (num_timesteps, num_pixel_vals, num_pixel_vals)
         # out.shape = (bs, channels, height, width, num_pixel_vals)
         # out[i, j, k, l, m] = a[t[i], x[i, j, k, l], m]
-        B, C, H, W = x.shape
+        if len(x.shape) == 2 or len(x.shape) == 3:
+            B, D = x.shape
+        else:
+            B, C, H, W = x.shape
+        #print(a.device, t.device)
         a_t = torch.index_select(a, dim=0, index=t)
         assert a_t.shape == (x.shape[0], self.num_pixel_vals, self.num_pixel_vals)
         # out = a_t[x.tolist()]
         # x to one hot encoding 
         x_onehot = F.one_hot(x.view(B, -1).to(torch.int64), num_classes=self.num_pixel_vals).to(torch.float32)
         out = torch.matmul(x_onehot, a_t)
-        out = out.view(B, C, H, W, self.num_pixel_vals)
+        if len(x.shape) == 2 or len(x.shape) == 3:
+            out = out.view(B, D, self.num_pixel_vals)
+        else:
+            out = out.view(B, C, H, W, self.num_pixel_vals)
 
         return out
 
@@ -342,12 +356,19 @@ class CategoricalDiffusion(nn.Module):
         # x.shape = (bs, channels, height, width, num_pixel_vals)
         # a[t]shape = (bs, num_pixel_vals, num_pixel_vals)
         # out.shape = (bs, height, width, channels, num_pixel_vals)
-        B, C, H, W, _ = x.shape
+        #print(x.shape, x)
+        if len(x.shape) == 3:
+            B, D, S = x.shape
+        else:
+            B, C, H, W, S = x.shape
         a_t = torch.index_select(a, dim=0, index=t)
         assert a_t.shape == (x.shape[0], self.num_pixel_vals, self.num_pixel_vals)
         x = x.view(B, -1, self.num_pixel_vals)
         out = torch.matmul(x, a_t)
-        out = out.view(B, C, H, W, self.num_pixel_vals)
+        if self.is_img:
+            out = out.view(B, D, self.num_pixel_vals)
+        else:
+            out = out.view(B, C, H, W, self.num_pixel_vals) 
         # gives probability over 
         return out
 
@@ -420,7 +441,7 @@ class CategoricalDiffusion(nn.Module):
         log_cdf_plus = F.logsigmoid(
             inv_scale * (bin_centers + 0.5 * bin_width))
 
-        logits = utils.log_min_exp(log_cdf_plus, log_cdf_min, self.eps)
+        logits = d3pm_utils.log_min_exp(log_cdf_plus, log_cdf_min, self.eps)
 
         # Normalization:
         # # Option 1:
@@ -449,7 +470,10 @@ class CategoricalDiffusion(nn.Module):
         # softmax to normalize
         # => multiplication in log_space => thats why we add term
 
-        print(x_start, x_start.shape)
+        #print( "start", x_start.shape)15,15
+        #print("t", x_t.shape)15,15
+        #print((x_t.shape + (self.num_pixel_vals,), (x_start.shape, x_t.shape)))
+
         if x_start_logits:
             assert x_start.shape == x_t.shape + (self.num_pixel_vals,), (
                 x_start.shape, x_t.shape)
@@ -505,6 +529,7 @@ class CategoricalDiffusion(nn.Module):
 
             # t_broadcast = np.expand_dims(t, tuple(range(1, model_logits.ndim)))
             t_broadcast = torch.reshape(t, ([model_logits.shape[0]] + [1] * (len(model_logits.shape) - 1)))
+            #print("before q_ps", pred_x_start_logits.shape, x.shape, t.shape)
             model_logits = torch.where(t_broadcast == 0,
                                        pred_x_start_logits,
                                        self.q_posterior_logits(pred_x_start_logits, x,
@@ -617,15 +642,15 @@ class CategoricalDiffusion(nn.Module):
         true_logits = self.q_posterior_logits(x_start, x_t, t, x_start_logits=False)
         model_logits, pred_x_start_logits = self.p_logits(model_fn, x=x_t, t=t)
 
-        kl = utils.categorical_kl_logits(logits1=true_logits, logits2=model_logits)
+        kl = d3pm_utils.categorical_kl_logits(logits1=true_logits, logits2=model_logits)
         assert kl.shape == x_start.shape
-        kl = utils.meanflat(kl) / np.log(2.)
+        kl = d3pm_utils.meanflat(kl) / np.log(2.)
         #kl = torch.mean(kl.view(batch_size, -1), dim=1) / np.log(2.)
 
         # discretized_gaussian_log_likelihood
-        decoder_nll = -utils.categorical_log_likelihood(x_start, model_logits)
+        decoder_nll = -d3pm_utils.categorical_log_likelihood(x_start, model_logits)
         assert decoder_nll.shape == x_start.shape
-        decoder_nll = utils.meanflat(decoder_nll) / np.log(2.)
+        decoder_nll = d3pm_utils.meanflat(decoder_nll) / np.log(2.)
 
         # At the first timestep return the decoder NLL,
         # otherwise return KL(q(x_{t-1}|x_t,x_start) || p(x_{t-1}|x_t))
@@ -665,10 +690,10 @@ class CategoricalDiffusion(nn.Module):
 
         assert prior_probs.shape == q_probs.shape
 
-        kl_prior = utils.categorical_kl_probs(
+        kl_prior = d3pm_utils.categorical_kl_probs(
             q_probs, prior_probs)
         assert kl_prior.shape == x_start.shape
-        return utils.meanflat(kl_prior) / np.log(2.)
+        return d3pm_utils.meanflat(kl_prior) / np.log(2.)
 
     def cross_entropy_x_start(self, x_start, pred_x_start_logits):
         """Calculate crossentropy between x_start and predicted x_start.
@@ -681,9 +706,9 @@ class CategoricalDiffusion(nn.Module):
           ce: cross entropy.
         """
 
-        ce = -utils.categorical_log_likelihood(x_start, pred_x_start_logits)
+        ce = -d3pm_utils.categorical_log_likelihood(x_start, pred_x_start_logits)
         assert ce.shape == x_start.shape
-        ce = utils.meanflat(ce) / np.log(2.)
+        ce = d3pm_utils.meanflat(ce) / np.log(2.)
 
         assert ce.shape == (x_start.shape[0],)
 
@@ -694,13 +719,14 @@ class CategoricalDiffusion(nn.Module):
 
         # Add noise to data
         # noise_rng, time_rng = jax.random.split(rng)
+        #print("0", x_start.shape)
         noise = torch.rand(size=x_start.shape + (self.num_pixel_vals,)).to(x_start.device)
 
         # t starts at zero. so x_0 is the first noisy datapoint, not the datapoint
         # itself.
         # probabilites 
         x_t = self.q_sample(x_start=x_start, t=t, noise=noise)
-
+        #print("q-sample", x_t.shape)
         # Calculate the loss
 
         if self.loss_type == 'kl':

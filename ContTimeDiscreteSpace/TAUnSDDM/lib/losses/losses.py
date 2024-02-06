@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import lib.utils.utils as utils
 import time
 from lib.models.model_utils import get_logprob_with_logits
-
+from lib.d3pm import make_diffusion
 
 @losses_utils.register_loss
 class CTElbo:
@@ -106,7 +106,8 @@ class CTElbo:
         # ---------- First term of ELBO (regularization) ---------------
 
         if self.one_forward_pass:
-            x_logits = model(x_tilde, ts)  # (B, D, S)
+            #x_logits = model(x_tilde, ts)  # (B, D, S)
+            x_logits = model(x_t, ts)
             # ensures that positive
             p0t_reg = F.softmax(x_logits, dim=2)  # (B, D, S)
             reg_x = x_tilde
@@ -281,8 +282,8 @@ class CTElbo:
         perm_x_logits = torch.permute(x_logits, (0, 2, 1))
         nll = self.cross_ent(perm_x_logits, minibatch.long())
 
-        return neg_elbo + self.nll_weight * nll
-        # return nll
+        #return neg_elbo + self.nll_weight * nll
+        return nll
 
 
 @losses_utils.register_loss
@@ -1463,3 +1464,32 @@ class CatRMNLL:
         perm_x_logits = torch.permute(logits, (0, 2, 1))
         nll = self.cross_ent(perm_x_logits, minibatch.long())
         return nll  # sum over D
+
+
+
+class d3pm_loss:
+    def __init__(self, cfg, diffusion):
+        self.cfg = cfg
+        self.diffusion = diffusion
+        self.device = cfg.device
+        self.num_timesteps = cfg.model.num_timesteps
+
+    def calc_loss(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+
+        model = state["model"]
+        # t = np.random.randint(size=(img.shape[0],), low=0, high=self.num_timesteps, dtype=np.int32)
+        t = (torch.randint(low=0, high=(self.num_timesteps), size=(minibatch.shape[0],))).to(self.device)
+        loss = self.diffusion.training_losses(model, minibatch, t).mean()
+
+        return loss
