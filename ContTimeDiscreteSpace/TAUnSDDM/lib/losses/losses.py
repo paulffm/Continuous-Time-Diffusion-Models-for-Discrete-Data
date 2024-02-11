@@ -238,6 +238,7 @@ class CTElbo:
         Z_subtraction = base_Z_tmp  # (B,D)
         Z_addition = rate_row_sums
 
+        # Z_t => sum of R_t for all transition from x^d to tilde(x)^d but not x^d = tilde(x)^d => jumps 
         Z_sig_norm = (
             base_Z.view(B, 1, 1)
             - Z_subtraction.view(B, D, 1)
@@ -267,7 +268,7 @@ class CTElbo:
             ].view(B, D)
             + self.ratio_eps
         )
-
+        # sigma
         sig_norm = torch.sum(
             (rate_sig_norm * qt0_sig_norm_numer * x_tilde_mask)
             / (Z_sig_norm * qt0_sig_norm_denom.view(B, D, 1)),
@@ -960,7 +961,6 @@ class CatRM:
         self.min_time = cfg.loss.min_time
         self.S = self.cfg.data.S
         self.D = self.cfg.model.concat_dim
-        print("D", self.D)
 
     def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
         device = model.device
@@ -1409,7 +1409,7 @@ class SDDMNLL:
 
 # checked
 @losses_utils.register_loss
-class CatRMNLL:
+class NLL:
     def __init__(self, cfg):
         self.cfg = cfg
         self.ratio_eps = cfg.loss.eps_ratio
@@ -1491,5 +1491,218 @@ class d3pm_loss:
         # t = np.random.randint(size=(img.shape[0],), low=0, high=self.num_timesteps, dtype=np.int32)
         t = (torch.randint(low=0, high=(self.num_timesteps), size=(minibatch.shape[0],))).to(self.device)
         loss = self.diffusion.training_losses(model, minibatch, t).mean()
+
+        return loss
+
+
+# checked
+@losses_utils.register_loss
+class CatRMNLL:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.min_time = cfg.loss.min_time
+        self.S = self.cfg.data.S
+        self.D = self.cfg.model.concat_dim
+        self.max_t = cfg.training.max_t
+        self.cross_ent = nn.CrossEntropyLoss()
+        self.nll_weight = cfg.loss.nll_weight
+
+    def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
+        device = model.device
+        B = xt.shape[0]
+        if self.cfg.loss.loss_type == "rm":
+            loss = -ll_xt
+        elif self.cfg.loss.loss_type == "mle":
+            # check
+            # - ((S-1) * log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)
+            #          + sum_y^d log(1 - exp(-|log p^{\theta}_t(y^{d}_t|x^{\backslash d}_t)|))
+            #          - log(1 - exp(-|log p^{\theta}_t(x^{d}_t|x^{\backslash d}_t)|))
+            loss = -(
+                (self.cfg.data.S - 1) * ll_xt
+                + torch.sum(
+                    utils.log1mexp(ll_all), dim=-1
+                )  # log(1 - exp(-|x|)) elementwise in a numerically stable way.
+                - utils.log1mexp(ll_xt)
+            )
+        elif self.cfg.loss.loss_type == "elbo":  
+            xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
+            b = utils.expand_dims(
+                torch.arange(xt.shape[0], device=device), tuple(range(1, xt.dim()))
+            )
+
+            qt0_x2y = model.transition(t)
+            qt0_y2x = qt0_x2y.permute(0, 2, 1)
+            qt0_y2x = qt0_y2x[b, xt.long()]
+            ll_xt = ll_xt.unsqueeze(-1)
+            backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
+            first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
+
+            qt0_x2y = qt0_x2y[b, xt.long()]
+            fwd = (ll_xt - ll_all) * qt0_x2y
+            second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
+            loss = first_term - second_term
+
+        else:
+            raise ValueError("Unknown loss_type: %s" % self.cfg.loss_type)
+        weight = torch.ones((B,), device=device, dtype=torch.float32)
+        weight = utils.expand_dims(weight, axis=list(range(1, loss.dim())))
+        loss = loss * weight
+
+
+        return loss
+
+    def calc_loss(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+
+        model = state["model"]
+
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+
+        B = minibatch.shape[0]
+        device = self.cfg.device
+        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time
+
+        qt0 = model.transition(ts)  # (B, S, S)
+
+        b = utils.expand_dims(
+            torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
+        )
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
+
+        log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # B, D
+
+        # get logits from CondFactorizedBackwardModel
+        logits = model(
+            xt, ts
+        )  # B, D, S: logits for every class in every dimension in x_t
+        loss = 0.0
+
+        ll_all, ll_xt = get_logprob_with_logits(
+            self.cfg, model, xt, ts, logits
+        )  # ll_all= log prov of all states, ll_xt = log prob of true states
+
+        loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
+            1 - self.cfg.loss.ce_coeff
+        )
+        perm_x_logits = torch.permute(logits, (0, 2, 1))
+        nll = self.cross_ent(perm_x_logits, minibatch.long())
+        return torch.sum(loss) / B  + self.nll_weight * nll
+
+
+# checked
+@losses_utils.register_loss
+class ELBOCatRM:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.ratio_eps = cfg.loss.eps_ratio
+        self.min_time = cfg.loss.min_time
+        self.S = self.cfg.data.S
+        self.D = self.cfg.model.concat_dim
+        self.max_t = cfg.training.max_t
+        self.nll_weight = cfg.loss.nll_weight
+
+    def _comp_loss(self, model, xt, t, ll_all, ll_xt):  # <1sec
+        device = model.device
+        B = xt.shape[0]
+
+        loss_rm = -ll_xt
+        loss_rm = torch.sum(loss_rm) / B  
+
+        xt_onehot = F.one_hot(xt.long(), num_classes=self.cfg.data.S)
+        b = utils.expand_dims(
+            torch.arange(xt.shape[0], device=device), tuple(range(1, xt.dim()))
+        )
+
+        qt0_x2y = model.transition(t)
+        qt0_y2x = qt0_x2y.permute(0, 2, 1)
+        qt0_y2x = qt0_y2x[b, xt.long()]
+        ll_xt = ll_xt.unsqueeze(-1)
+        # ll_xt: log p_t(X^d=x^d_t|x^ohned)
+        # ll_all
+        backwd = torch.exp(ll_all - ll_xt) * qt0_y2x
+        first_term = torch.sum(backwd * (1 - xt_onehot), dim=-1)
+
+        qt0_x2y = qt0_x2y[b, xt.long()]
+        fwd = (ll_xt - ll_all) * qt0_x2y
+        second_term = torch.sum(fwd * (1 - xt_onehot), dim=-1)
+        loss_elbo = first_term - second_term
+
+
+        weight = torch.ones((B,), device=device, dtype=torch.float32)
+        weight = utils.expand_dims(weight, axis=list(range(1, loss_elbo.dim())))
+        loss_elbo = loss_elbo * weight
+
+        loss_elbo = torch.sum(loss_elbo) / B 
+        loss = loss_elbo + self.nll_weight * loss_rm
+        return loss
+
+    def calc_loss(self, minibatch, state):
+        """
+        ce > 0 == ce < 0 + direct + rm
+
+        Args:
+            minibatch (_type_): _description_
+            state (_type_): _description_
+            writer (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+
+        model = state["model"]
+
+        if len(minibatch.shape) == 4:
+            B, C, H, W = minibatch.shape
+            minibatch = minibatch.view(B, C * H * W)
+
+        B = minibatch.shape[0]
+        device = self.cfg.device
+        ts = torch.rand((B,), device=device) * (self.max_t - self.min_time) + self.min_time
+
+        qt0 = model.transition(ts)  # (B, S, S)
+
+        b = utils.expand_dims(
+            torch.arange(B, device=device), (tuple(range(1, minibatch.dim())))
+        )
+        qt0 = qt0[b, minibatch.long()].view(-1, self.S)  # B*D, S
+
+        log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
+        xt = (
+            torch.distributions.categorical.Categorical(logits=log_qt0)
+            .sample()
+            .view(B, self.D)
+        )  # B, D
+
+        # get logits from CondFactorizedBackwardModel
+        logits = model(
+            xt, ts
+        )  # B, D, S: logits for every class in every dimension in x_t
+        loss = 0.0
+
+        ll_all, ll_xt = get_logprob_with_logits(
+            self.cfg, model, xt, ts, logits
+        )  # ll_all= log prov of all states, ll_xt = log prob of true states
+
+        loss = self._comp_loss(model, xt, ts, ll_all, ll_xt) * (
+            1 - self.cfg.loss.ce_coeff
+        )
 
         return loss

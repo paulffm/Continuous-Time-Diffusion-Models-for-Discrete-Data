@@ -2,7 +2,7 @@ import ml_collections
 import os
 
 def get_config():
-    save_directory = "SavedModels/MAZE/"
+    save_directory = "SavedModels/MAZEelbo/"
 
     config = ml_collections.ConfigDict()
     config.save_location = save_directory
@@ -12,11 +12,11 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRMNLL"
-    loss.logit_type = "direct"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
+    loss.name = "ELBOCatRM"
+    loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
-    loss.nll_weight = 0.001
+    loss.nll_weight = 0.01
     loss.one_forward_pass = True
 
     loss.eps_ratio = 1e-9
@@ -31,6 +31,7 @@ def get_config():
     training.grad_norm = 3  # 1
     training.warmup = 0  # 50 # 5000
     training.resume = True
+    training.max_t = 0.99999
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
@@ -52,8 +53,6 @@ def get_config():
     model.rate_const = 1.7
     #model.rate_sigma = 6.0
     model.Q_sigma = 512.0
-    #model.time_exp = 5  # b
-    #model.time_base = 5 # a
     model.t_func = "sqrt_cos"  # log_sqr
     # hollow:
     model.net_arch = "bidir_transformer"

@@ -4,8 +4,8 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.bin_mnist_config.config_tauUnet_binmnist import get_config
-from config.mnist_config.config_tauUnet_cifar10 import get_config
-#from config.mnist_config.config_hollow_mnist import get_config
+#from config.mnist_config.config_tauUnet_cifar10 import get_config
+from config.mnist_config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -33,7 +33,7 @@ torch.cuda.empty_cache()
 def main():
     train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/CIFAR10/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/MNISTHollow/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
@@ -42,7 +42,7 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2024-02-03"
+        date = "2024-02-07"
         config_name = "config_001_hollow_aux.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
@@ -56,7 +56,7 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_269999_hollow_aux.pt"
+        model_name = "model_459999_hollow_aux.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path, device)
         cfg.training.n_iters = 600000 

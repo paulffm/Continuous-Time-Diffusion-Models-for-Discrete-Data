@@ -8,7 +8,7 @@ from typing import Tuple
 # Deep Unsupervised Learning using Nonequilibrium Thermodynamics
 
 
-class InitialDiffusionModel():
+class InitialDiffusionModel:
 
     def __init__(self, T: int, betas: torch.Tensor, model: nn.Module, dim: int=2):
         """
@@ -116,11 +116,6 @@ class InitialDiffusionModel():
         loss = - k # Should be minimized
 
         # we fix beta_t thus the approximate posterior q has no learnable parameters
-        #print(mu_q.requires_grad)
-        #print(sigma_q.requires_grad)
-
-        #print(mu_p.requires_grad)
-        #print(sigma_p.requires_grad)
 
         return loss
 

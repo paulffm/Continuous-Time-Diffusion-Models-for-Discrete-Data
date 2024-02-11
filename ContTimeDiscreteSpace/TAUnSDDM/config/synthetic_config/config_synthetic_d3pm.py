@@ -85,7 +85,7 @@ def get_config():
     model.qkv_dim = config.model.embed_dim
 
     # diffusion betas
-    model.type='cosine'
+    model.type='linear'
                 # start, stop only relevant for linear, power, jsdtrunc schedules.
     model.start=0.02 # 1e-4 gauss, 0.02 uniform
     model.stop=1 # 0.02, gauss, 1. uniform
@@ -98,7 +98,7 @@ def get_config():
     model.transition_mat_type='uniform'
     model.transition_bands=None
     model.loss_type='hybrid'# kl,cross_entropy_x_start, hybrid
-    model.hybrid_coeff=0.001
+    model.hybrid_coeff=0.01
     model.model_output='logits'
     model.num_pixel_vals=2
     model.device='cuda'

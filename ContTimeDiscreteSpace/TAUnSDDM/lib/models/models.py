@@ -233,8 +233,8 @@ class ImageX0PredBasePaul(nn.Module):
             logits = logits.reshape(B, D, self.S)
             #logits = logits.view(B, D, self.S)
         else:
-            logits.view(B, C, H, W, self.S)# d3pm
-            #logits = logits.view(B, D, self.S)
+            #logits.view(B, C, H, W, self.S)# d3pm
+            logits = logits.view(B, D, self.S)
         
         return logits #.view(B, C, H, W, self.S) # d3pm
 
