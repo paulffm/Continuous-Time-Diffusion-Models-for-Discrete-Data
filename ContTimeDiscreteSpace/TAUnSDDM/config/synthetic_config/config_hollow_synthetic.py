@@ -11,7 +11,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "ELBOCatRM"
+    loss.name = "ScoreElbo"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek

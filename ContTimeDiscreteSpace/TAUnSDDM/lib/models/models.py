@@ -646,7 +646,7 @@ class ProteinScoreNet(nn.Module):
         x = x.view(-1, 15*15*1)
         logits = self.net(x, times)  # (B, D, S)
 
-        logits = logits.view(-1, 1, 15, 15, 3)
+        #logits = logits.view(-1, 1, 15, 15, 3)
         return logits
 
 

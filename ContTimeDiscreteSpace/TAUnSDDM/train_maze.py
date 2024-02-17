@@ -38,16 +38,16 @@ def main():
     save_location_png = os.path.join(save_location, "PNGs/")
     # dataset_location = os.path.join(script_dir, 'lib/datasets')
 
-    train_resume = False
+    train_resume = True
     print(save_location)
     if not train_resume:
         cfg = get_config()
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_174999_auxhollow.pt"
-        date = "2024-01-31"
-        config_name = "config_001_auxhollow.yaml"
+        model_name = "model_9999_crmelbo.pt"
+        date = "2024-02-15"
+        config_name = "config_001_crmelbo.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
         # cfg.loss.name = "CatRMTest"
