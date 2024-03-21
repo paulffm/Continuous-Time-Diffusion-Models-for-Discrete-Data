@@ -283,7 +283,7 @@ class CTElbo:
         perm_x_logits = torch.permute(x_logits, (0, 2, 1))
         nll = self.cross_ent(perm_x_logits, minibatch.long())
 
-        return neg_elbo + self.nll_weight * nll
+        #return neg_elbo + self.nll_weight * nll
         return nll
 
 
@@ -1492,7 +1492,6 @@ class d3pm_loss:
         # t = np.random.randint(size=(img.shape[0],), low=0, high=self.num_timesteps, dtype=np.int32)
         t = (torch.randint(low=0, high=(self.num_timesteps), size=(minibatch.shape[0],))).to(self.device)
         loss = self.diffusion.training_losses(model, minibatch, t).mean()
-
         return loss
 
 

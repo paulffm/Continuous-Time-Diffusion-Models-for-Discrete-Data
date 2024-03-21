@@ -53,7 +53,7 @@ def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
             torch.arange(S, device=device).repeat(N * D),
             x.long().flatten().repeat_interleave(S),
         ].view(N, D, S)
-
+     
         ratio = (p0t / qt0_denom) @ qt0_numer  # (N, D, S)
 
         reverse_rates = forward_rates * ratio  # (N, D, S)
@@ -154,8 +154,11 @@ class TauL:
                 adj_diffs = jump_nums * diff
                 overall_jump = torch.sum(adj_diffs, dim=2)
                 xp = x + overall_jump
-
+                
                 x_new = torch.clamp(xp, min=0, max=self.S - 1)
+                changes = torch.sum(x != x_new)
+                change_dim.append(changes.cpu().numpy() / N)
+
 
                 x = x_new
                 if t <= self.corrector_entry_time:
@@ -258,7 +261,7 @@ class LBJF:
             ts = np.concatenate(
                 (np.linspace(self.max_t, self.min_t, self.num_steps), np.array([0]))
             )
-            change_jump = []
+            change_dim = []
             new_tensor = torch.empty((self.num_steps, N, self.D), device=device)
             for idx, t in tqdm(enumerate(ts[0:-1])):
                 new_tensor[idx] = x
@@ -287,6 +290,8 @@ class LBJF:
                     .sample()
                     .view(N, self.D)
                 )
+                changes = torch.sum(x != x_new)
+                change_dim.append(changes.cpu().numpy() / N)
                 if t <= self.corrector_entry_time:
                     for _ in range(self.num_corrector_steps):
                         print("corrector")
@@ -334,7 +339,7 @@ class LBJF:
                             .view(N, self.D)
                         )
                 # print(torch.sum(x_new != x, dim=1))
-                change_jump.append((torch.sum(x_new != x) / (N * self.D)).item())
+                
                 x = x_new
             if self.loss_name == "CTElbo":
                 p_0gt = F.softmax(
@@ -345,7 +350,7 @@ class LBJF:
                 x_0max = x
             return (
                 x_0max.detach().cpu().numpy().astype(int),
-                change_jump
+                change_dim
                 # new_tensor.detach().cpu().numpy().astype(int),
             )  # , x_hist, x0_hist
 
@@ -1468,7 +1473,7 @@ class ExactSampling:
                 q_teps_0 = model.transition(
                     t_eps * torch.ones((N,), device=device)
                 )  # (N, S, S)
-                q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
+                q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim))) # N,1,S,S
 
                 q_t_teps = model.transit_between(
                     t_eps * torch.ones((N,), device=device),
@@ -1483,7 +1488,7 @@ class ExactSampling:
                 q_t_teps = q_t_teps[b, xt.long()].unsqueeze(-2)  # N, D, 1, S
 
                 qt0 = q_teps_0 * q_t_teps
-                log_qt0 = torch.log(qt0)
+                log_qt0 = torch.log(qt0) # N,D,S,S
                 # log_qt0 = torch.where(qt0 <= 0.0, -1e9, torch.log(qt0))
 
                 log_p0t = log_p0t.unsqueeze(-1)
@@ -1714,7 +1719,6 @@ class CRMTauL:
                     mask = (flips > 0) & (flips == max_values)
                     flips[mask] = 1
                     flips[~mask] = 0
-
                     # Regel 2: Wenn in einer Spalte ein Wert über 1, dann diesen zu 1 setzen (für jede Spalte separat)
                     flips[flips > 1] = 0
 
@@ -2182,6 +2186,9 @@ class ExactELBO:
                 q_teps_0 = model.transition(
                     t_eps * torch.ones((N,), device=device)
                 )  # (N, S, S)
+                q_t_0 = model.transition(
+                    t * torch.ones((N,), device=device)
+                ) 
                 b = utils.expand_dims(
                     torch.arange(xt.shape[0], device=device),
                     axis=list(range(1, xt.ndim)),
@@ -2191,8 +2198,7 @@ class ExactELBO:
                 # q_teps_0 (N, 1, S, S)
                 # q_teps_0 = utils.expand_dims(q_teps_0, axis=list(range(1, xt.ndim)))
 
-                q_t0 = model.transition(t * torch.ones((N,), device=device))
-                q_t0_denom = q_t0[b, xt.long()]
+                #q_t0_denom = q_t0[b, xt.long()]
 
                 # q_t_denom = utils.expand_dims(q_t_denom, axis=list(range(1, xt.ndim)))
 
@@ -2201,17 +2207,17 @@ class ExactELBO:
                     t * torch.ones((N,), device=device),
                 )  # (N, S, S)
                 q_t_teps = q_t_teps.permute(0, 2, 1)
-                q_t_teps_denom = q_t_teps.clone()
 
                 b = utils.expand_dims(
                     torch.arange(xt.shape[0], device=device),
                     axis=list(range(1, xt.ndim)),
                 )
                 # print("qtteps", q_t_teps.shape)
-                q_t_teps_denom = q_t_teps_denom[b, xt.long()].unsqueeze(-2)
-
-                q_new1 = p0t / q_t_teps_denom / q_teps_0_denom
-                q_new = q_new1 @ q_t_teps.transpose(1, 2) @ q_teps_0
+                q_num = q_t_teps * q_teps_0
+                print("q_num", q_num.shape)
+                print("qt0", q_t_0.shape)
+                print("p0t", p0t.shape)
+                q_new = (p0t * q_num) / q_t_0 
 
                 # qt0 = (q_t_denom * q_t_teps_denom)
 

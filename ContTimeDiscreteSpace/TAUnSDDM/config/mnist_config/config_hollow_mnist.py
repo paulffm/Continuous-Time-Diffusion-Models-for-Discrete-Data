@@ -11,7 +11,7 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CatRMNLL"
+    loss.name = "ScoreElbo"
     loss.logit_type = "reverse_prob"  # direct:  whole train_step with backward < 10 sek, reverse_prob, reverse_logscale
     loss.loss_type = "rm"  # rm, mle, elbo
     loss.ce_coeff = 0  # >0 whole train_step with backward < 10 sek
@@ -19,7 +19,7 @@ def get_config():
     loss.eps_ratio = 1e-9
     loss.min_time = 0.007
     loss.one_forward_pass = True
-    loss.nll_weight = 0.001
+    loss.nll_weight = 0.01
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -88,7 +88,7 @@ def get_config():
     saving.checkpoint_freq = 10000
 
     config.sampler = sampler = ml_collections.ConfigDict()
-    sampler.name = "CRMLBJF"  # TauLeaping or PCTauLeaping
+    sampler.name = "TauL"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 1000
     sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9

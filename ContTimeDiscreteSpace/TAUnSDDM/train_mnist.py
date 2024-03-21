@@ -4,8 +4,8 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.bin_mnist_config.config_tauUnet_binmnist import get_config
-#from config.mnist_config.config_tauUnet_cifar10 import get_config
-from config.mnist_config.config_hollow_mnist import get_config
+from config.mnist_config.config_tauUnet_cifar10 import get_config
+#from config.mnist_config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -33,7 +33,7 @@ torch.cuda.empty_cache()
 def main():
     train_resume = True
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/MNISTHollow/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/CIFAR10/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
@@ -42,8 +42,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2024-02-17"
-        config_name = "config_001_crmnll_001.yaml"
+        date = "2024-02-24"
+        config_name = "config_001_unet_nll.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -56,12 +56,12 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_314999_crmnll_001.pt"
+        model_name = "model_299999.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path, device)
-        cfg.training.n_iters = 600000 
+        cfg.training.n_iters = 1850000 
         cfg.sampler.sample_freq = 100000000
-        cfg.saving.checkpoint_freq = 5000
+        cfg.saving.checkpoint_freq = 10000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
     
@@ -100,6 +100,7 @@ def main():
     while True:
         for minibatch in tqdm(dataloader):
             minibatch = minibatch.to(device)
+            #print(minibatch.shape)
             l = training_step.step(state, minibatch.long(), loss)
 
             training_loss.append(l.item())

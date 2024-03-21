@@ -312,14 +312,7 @@ class CategoricalDiffusion(nn.Module):
         Returns:
           a[t, x]: jnp.ndarray: Jax array.
         """
-        # a = np.asarray(a, dtype=self.jax_dtype)
-        # t_broadcast = np.expand_dims(t, tuple(range(1, x.ndim))).tolist()
 
-        # x.shape = (bs, channels, height, width)
-        # t.shape = (bs)
-        # a.shape = (num_timesteps, num_pixel_vals, num_pixel_vals)
-        # out.shape = (bs, channels, height, width, num_pixel_vals)
-        # out[i, j, k, l, m] = a[t[i], x[i, j, k, l], m]
         if not self.is_img:
             B, D = x.shape
         else:
@@ -443,36 +436,11 @@ class CategoricalDiffusion(nn.Module):
 
         logits = d3pm_utils.log_min_exp(log_cdf_plus, log_cdf_min, self.eps)
 
-        # Normalization:
-        # # Option 1:
-        # # Assign cdf over range (-\inf, x + 0.5] to pmf for pixel with
-        # # value x = 0.
-        # logits = logits.at[..., 0].set(log_cdf_plus[..., 0])
-        # # Assign cdf over range (x - 0.5, \inf) to pmf for pixel with
-        # # value x = 255.
-        # log_one_minus_cdf_min = - jax.nn.softplus(
-        #     inv_scale * (bin_centers - 0.5 * bin_width))
-        # logits = logits.at[..., -1].set(log_one_minus_cdf_min[..., -1])
-        # # Option 2:
-        # # Alternatively normalize by reweighting all terms. This avoids
-        # # sharp peaks at 0 and 255.
-        # since we are outputting logits here, we don't need to do anything.
-        # they will be normalized by softmax anyway.
-
         return logits
 
     def q_posterior_logits(self, x_start, x_t, t, x_start_logits):
         """Compute logits of q(x_{t-1} | x_t, x_start)."""
-        # q(x_{t-1} | x_t, x_start) = Cat(x_{t-1}|P = x_t * Q_t^T * x_0 quer * Q_{t-1} / x_0 * quer Q_t * x_t^T)
-        # => x_start_logits = True 
-        # => fact1 = log(x_t * Q_t^T )          ==> Term: q(x_t|x_{t-1})
-        # => fact2 = log(x_0 quer * Q_{t-1})    ==> Term: q(x_{t-1}|x_0)
-        # softmax to normalize
-        # => multiplication in log_space => thats why we add term
 
-        #print( "start", x_start.shape)15,15
-        #print("t", x_t.shape)15,15
-        #print((x_t.shape + (self.num_pixel_vals,), (x_start.shape, x_t.shape)))
 
         if x_start_logits:
             assert x_start.shape == x_t.shape + (self.num_pixel_vals,), (
@@ -746,7 +714,9 @@ class CategoricalDiffusion(nn.Module):
                 model_fn=model_fn, x_start=x_start, x_t=x_t, t=t)
             ce_losses = self.cross_entropy_x_start(
                 x_start=x_start, pred_x_start_logits=pred_x_start_logits)
-            losses = vb_losses + self.hybrid_coeff * ce_losses
+            #losses = vb_losses + self.hybrid_coeff * ce_losses
+            losses = ce_losses 
+
 
         else:
             raise NotImplementedError(self.loss_type)
@@ -787,5 +757,3 @@ class CategoricalDiffusion(nn.Module):
             'vbterms': vbterms_bt,
             'prior': prior_b,
         }
-
-# mmd: 3.875399852404371e-05 (19)  3.855368777294643e-05

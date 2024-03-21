@@ -236,7 +236,7 @@ class ImageX0PredBasePaul(nn.Module):
             #logits.view(B, C, H, W, self.S)# d3pm
             logits = logits.view(B, D, self.S)
         
-        return logits #.view(B, C, H, W, self.S) # d3pm
+        return logits #.view(B, D, self.S) # d3pm
 
     def _log_minus_exp(self, a, b, eps=1e-6):
         """
@@ -646,7 +646,7 @@ class ProteinScoreNet(nn.Module):
         x = x.view(-1, 15*15*1)
         logits = self.net(x, times)  # (B, D, S)
 
-        #logits = logits.view(-1, 1, 15, 15, 3)
+        logits = logits.view(-1, 1, 15, 15, 3)
         return logits
 
 
