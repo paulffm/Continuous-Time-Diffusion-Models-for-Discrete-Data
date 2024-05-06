@@ -1,7 +1,6 @@
 import ml_collections
 import os
 
-# config_bert_001: Param: 7 226 883
 def get_config():
     save_directory = "SavedModels/MAZEprotein"
     config = ml_collections.ConfigDict()
@@ -11,7 +10,6 @@ def get_config():
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CTElbo"
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0
     loss.min_time = 0.007
@@ -30,7 +28,6 @@ def get_config():
 
     config.data = data = ml_collections.ConfigDict()
     data.name = "Maze3S"
-    #data.location = 'lib/datasets/'
     data.is_img = True
     data.S = 3
     data.batch_size = 128  # use 128 if you have enough memory or use distributed
@@ -68,7 +65,6 @@ def get_config():
     model.stop=1 # 0.02, gauss, 1. uniform
     model.num_timesteps=1000
 
-            # Settings used in diffusion_categorical.py
     model.model_prediction='x_start' # 'x_start','xprev'
             # 'gaussian','uniform','absorbing'
     model.transition_mat_type='uniform'

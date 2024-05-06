@@ -1477,7 +1477,6 @@ class d3pm_loss:
 
     def calc_loss(self, minibatch, state):
         """
-        ce > 0 == ce < 0 + direct + rm
 
         Args:
             minibatch (_type_): _description_

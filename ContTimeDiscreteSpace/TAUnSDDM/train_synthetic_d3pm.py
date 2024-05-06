@@ -3,10 +3,6 @@ import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from lib.d3pm import make_diffusion
-# from config.maze_config.config_bert_maze import get_config
-# from config.maze_config.config_maskedUnet_maze import get_config
-# from config.maze_config.config_tauUnet_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
 from ruamel.yaml.scalarfloat import ScalarFloat
 from config.synthetic_config.config_synthetic_d3pm import get_config
 import matplotlib.pyplot as plt
@@ -33,7 +29,6 @@ from lib.losses.losses import d3pm_loss
 
 
 def main():
-    data_name = "MAZE"
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, "SavedModels/Synthetic/")
@@ -113,9 +108,7 @@ def main():
     training_loss = []
     exit_flag = False
     n = 1
-    start = time.time()
     num_timesteps = cfg.model.num_timesteps
-    print("Num steps", num_timesteps)
     while True:
         for minibatch in tqdm(dataloader):
             minibatch = minibatch.to(device)
@@ -145,7 +138,6 @@ def main():
             ] == cfg.training.n_iters - 1:
                 state["model"].eval()
                 samples = diffusion.p_sample_loop(state['model'], minibatch.shape, num_timesteps)
-                #samples = samples.reshape(n_samples, 1, cfg.data.image_size, cfg.data.image_size)
 
                 state["model"].train()
 

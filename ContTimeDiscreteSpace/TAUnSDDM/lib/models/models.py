@@ -185,7 +185,6 @@ class ImageX0PredBasePaul(nn.Module):
 
         # Output: 3 × 32 × 32 × 2 => mean and log scale of a logistic distribution
         # Truncated logistic output from https://arxiv.org/pdf/2107.03006.pdf
-        # wenden tanh auf beides an, d3pm nur auf mu
 
         net_out = self.net(x, times)  # (B, 2*C, H, W)
         if self.cfg.model.model_output == "logits":

@@ -5,11 +5,6 @@ import matplotlib.pyplot as plt
 import ssl
 import os
 from lib.d3pm import make_diffusion
-# from config.maze_config.config_bert_maze import get_config
-# from config.maze_config.config_maskedUnet_maze import get_config
-# from config.maze_config.config_tauUnet_maze import get_config
-#from config.maze_config.config_hollow_maze import get_config
-
 from config.mnist_config.config_mnist_d3pm import get_config
 import lib.models.models as models
 import lib.models.model_utils as model_utils
@@ -21,8 +16,6 @@ import lib.training.training as training
 import lib.training.training_utils as training_utils
 import lib.optimizers.optimizers as optimizers
 import lib.optimizers.optimizers_utils as optimizers_utils
-import lib.loggers.loggers as loggers
-import lib.loggers.logger_utils as logger_utils
 import lib.sampling.sampling as sampling
 import lib.sampling.sampling_utils as sampling_utils
 import time
@@ -32,16 +25,12 @@ from ruamel.yaml.scalarfloat import ScalarFloat
 import time
 from lib.losses.losses import d3pm_loss
 
-# MLE: Iter: 300000 168214.7792992592
-
 
 def main():
-    data_name = "MAZE"
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, f"SavedModels/MNIST/")
     save_location_png = os.path.join(save_location, "PNGs/")
-    # dataset_location = os.path.join(script_dir, 'lib/datasets')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
     train_resume = False
@@ -51,12 +40,11 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        model_name = "model_174999_auxhollow.pt"
-        date = "2024-01-31"
-        config_name = "config_001_auxhollow.yaml"
+        model_name = "model_name.pt"
+        date = "2024-05-10"
+        config_name = "config_001.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
-        # cfg.loss.name = "CatRMTest"
 
     device = torch.device(cfg.device)
 
@@ -94,19 +82,12 @@ def main():
     print("--------------------------------")
     print("Name Dataset:", cfg.data.name)
     print("Loss Name:", cfg.loss.name)
-    # print("Loss Type: None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.loss.loss_type}")
-    # print("Logit Type:", cfg.loss.logit_type)
-    # print("Ce_coeff: None" if cfg.loss.name == "GenericAux" else f"Ce_Coeff: {cfg.loss.ce_coeff}")
     print("--------------------------------")
     print("Model Name:", cfg.model.name)
     print("Number of Parameters: ", sum([p.numel() for p in model.parameters()]))
-    # print("Net Arch:", cfg.model.net_arch)
-    # print("Bidir Readout:None" if cfg.loss.name == "GenericAux" else f"Loss Type: {cfg.model.bidir_readout}")
     print("Sampler:", cfg.sampler.name)
 
     n_samples = 16
-
-    print("cfg.saving.checkpoint_freq", cfg.saving.checkpoint_freq)
     training_loss = []
     exit_flag = False
     n = 1
