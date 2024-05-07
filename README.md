@@ -28,9 +28,9 @@ led to increased sample quality.
 - **CT-ELBO loss**: The Continuous-time ELBO loss is now compatible with SDDM.
 - **Combination of Log-likelihood loss and Categorical Ratio Matching loss**: $L_{\text{CRMll}}(\theta) = L_{\text{CRM}} + \lambda L_{\text{ll}}$ with $\lambda$ between 0.001 and 0.01 led to sample quality improvements.
   
-### Weitere Verbesserungen
+### Networks
 
-- [Weitere Verbesserungen und Erweiterungen hier...]
+- I included many more neural networks as initially proposed, i.e. the score-network from the paper [Dirichlet Diffusion Score Model for Biological Sequence Generation](https://arxiv.org/pdf/2305.10699.pdf)
 
 ## Usage
 
