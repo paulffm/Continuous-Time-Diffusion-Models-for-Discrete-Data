@@ -7,7 +7,7 @@ paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.
 by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) by H. Sun et al.
 
 <p align="center">
-  <img src="ct_forwardrev_process2.png"  alt="1" width = 876px height = 621px >
+  <img src="ct_forwardrev_process2.png"  alt="1" width = 438px height = 311px >
 </p>
 
 ## Overview
