@@ -12,7 +12,7 @@ by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-B
 
 ## Overview
 
-This implementation contains various enhancements and extensions aimed at improving functionality and flexibility. Below are the key areas where enhancements have been made, along with specific additions:
+This implementation contains various enhancements and extensions aimed at improving sample quality and flexibility. Below are the key areas where enhancements have been made, along with specific additions:
 
 ### Sampling Methods
 
