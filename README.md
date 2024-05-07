@@ -1,6 +1,6 @@
 # Continuous-Time Diffusion Models for Discrete Data
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/paulffm/Discrete-Time-Diffusion-Models-for-Discrete-Data/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/paulffm/Master-Thesis/blob/master/LICENSE)
 
 Unofficial **PyTorch** reimplementation of the
 paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987)
