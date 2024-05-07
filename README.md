@@ -42,7 +42,6 @@ def main():
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, f"SavedModels/MNIST/")
     save_location_png = os.path.join(save_location, "PNGs/")
-    # dataset_location = os.path.join(script_dir, 'lib/datasets')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
     train_resume = False
