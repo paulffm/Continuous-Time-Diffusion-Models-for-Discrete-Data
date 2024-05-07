@@ -372,7 +372,6 @@ def load_state(state: dict, checkpoint_path: str, mapping=torch.device("cuda")) 
 
 
 def save_config(config: dict, config_dir: str) -> None:
-    # /Users/paulheller/PythonRepositories/Master-Thesis/ContTimeDiscreteSpace/tauLDR/SavedModels/MNIST
     current_date = datetime.now().strftime("%Y-%m-%d")
     file_name = "config_001.yaml"
 

@@ -7,8 +7,8 @@ import torch.nn.functional as F
 import numpy as np
 
 
+# ----------------------------Unet from D3PM--------------------------------------------
 
-#----------------------------Unet from D3PM--------------------------------------------
 
 def swish(input):
     return input * torch.sigmoid(input)
@@ -39,14 +39,14 @@ def variance_scaling_init_(tensor, scale=1, mode="fan_avg", distribution="unifor
 
 
 def conv2d(
-        in_channel,
-        out_channel,
-        kernel_size,
-        stride=1,
-        padding=0,
-        bias=True,
-        scale=1,
-        mode="fan_avg",
+    in_channel,
+    out_channel,
+    kernel_size,
+    stride=1,
+    padding=0,
+    bias=True,
+    scale=1,
+    mode="fan_avg",
 ):
     conv = nn.Conv2d(
         in_channel, out_channel, kernel_size, stride=stride, padding=padding, bias=bias
@@ -92,7 +92,6 @@ class Downsample(nn.Module):
         super().__init__()
         self.downsample = nn.Sequential(conv2d(channel, channel, 3, stride=2))
 
-
     def forward(self, input):
         input_pad = F.pad(input, [0, 1, 0, 1])
 
@@ -103,13 +102,17 @@ class ResBlock(nn.Module):
     def __init__(self, in_channel, out_channel, time_dim, dropout):
         super().__init__()
 
-        self.norm1 = nn.GroupNorm(num_groups=min(in_channel//4, 32), num_channels=in_channel, eps=1e-06) #32
+        self.norm1 = nn.GroupNorm(
+            num_groups=min(in_channel // 4, 32), num_channels=in_channel, eps=1e-06
+        )  # 32
         self.activation1 = Swish()
         self.conv1 = conv2d(in_channel, out_channel, 3, padding=1)
 
         self.time = nn.Sequential(Swish(), linear(time_dim, out_channel))
 
-        self.norm2 = nn.GroupNorm(num_groups=min(out_channel//4, 32), num_channels=out_channel, eps=1e-06) #32
+        self.norm2 = nn.GroupNorm(
+            num_groups=min(out_channel // 4, 32), num_channels=out_channel, eps=1e-06
+        )  # 32
         self.activation2 = Swish()
         self.dropout = nn.Dropout(dropout)
         self.conv2 = conv2d(out_channel, out_channel, 3, padding=1, scale=1e-10)
@@ -137,6 +140,7 @@ class ResBlock(nn.Module):
 
         return out + input
 
+
 def zero_module(module):
     """
     Zero out the parameters of a module and return it.
@@ -144,6 +148,7 @@ def zero_module(module):
     for p in module.parameters():
         p.detach().zero_()
     return module
+
 
 class SelfAttention(nn.Module):
     """
@@ -157,7 +162,9 @@ class SelfAttention(nn.Module):
         self.channels = channels
         self.num_heads = n_head
 
-        self.norm = nn.GroupNorm(num_groups=min(channels//4, 32), num_channels=channels)
+        self.norm = nn.GroupNorm(
+            num_groups=min(channels // 4, 32), num_channels=channels
+        )
         self.qkv = nn.Conv1d(channels, channels * 3, 1)
         self.attention = QKVAttention()
         self.proj_out = zero_module(nn.Conv1d(channels, channels, 1))
@@ -210,7 +217,7 @@ class QKVAttention(nn.Module):
         # We perform two matmuls with the same number of ops.
         # The first computes the weight matrix, the second computes
         # the combination of the value vectors.
-        matmul_ops = 2 * b * (num_spatial ** 2) * c
+        matmul_ops = 2 * b * (num_spatial**2) * c
         model.total_ops += torch.DoubleTensor([matmul_ops])
 
 
@@ -220,7 +227,10 @@ class TimeEmbedding(nn.Module):
 
         self.dim = dim
         half_dim = self.dim // 2
-        self.inv_freq = torch.exp(torch.arange(half_dim, dtype=torch.float32) * (-math.log(10000) / (half_dim - 1)))
+        self.inv_freq = torch.exp(
+            torch.arange(half_dim, dtype=torch.float32)
+            * (-math.log(10000) / (half_dim - 1))
+        )
 
     def forward(self, input):
         shape = input.shape
@@ -233,7 +243,15 @@ class TimeEmbedding(nn.Module):
 
 
 class ResBlockWithAttention(nn.Module):
-    def __init__(self, in_channel, out_channel, time_dim, dropout, attention_head=1, use_attention=False):
+    def __init__(
+        self,
+        in_channel,
+        out_channel,
+        time_dim,
+        dropout,
+        attention_head=1,
+        use_attention=False,
+    ):
         super().__init__()
 
         self.resblocks = ResBlock(in_channel, out_channel, time_dim, dropout)
@@ -263,8 +281,8 @@ def spatial_fold(input, fold):
 
     return (
         input.view(batch, channel, h_fold, fold, w_fold, fold)
-            .permute(0, 1, 3, 5, 2, 4)
-            .reshape(batch, -1, h_fold, w_fold)
+        .permute(0, 1, 3, 5, 2, 4)
+        .reshape(batch, -1, h_fold, w_fold)
     )
 
 
@@ -278,29 +296,28 @@ def spatial_unfold(input, unfold):
 
     return (
         input.view(batch, -1, unfold, unfold, height, width)
-            .permute(0, 1, 4, 2, 5, 3)
-            .reshape(batch, -1, h_unfold, w_unfold)
+        .permute(0, 1, 4, 2, 5, 3)
+        .reshape(batch, -1, h_unfold, w_unfold)
     )
 
 
 class UNet(nn.Module):
     def __init__(
-            self,
-            in_channel: int,
-            out_channel: int,
-            channel: int,
-            channel_multiplier: list[int],
-            n_res_blocks: int,
-            attn_resolutions: list,
-            x_min_max: list[int],
-            num_heads: int,
-            dropout: float,
-            model_output: str,  # 'logits' or 'logistic_pars'
-            num_classes: int,
-            img_size: int
-            
+        self,
+        in_channel: int,
+        out_channel: int,
+        channel: int,
+        channel_multiplier: list[int],
+        n_res_blocks: int,
+        attn_resolutions: list,
+        x_min_max: list[int],
+        num_heads: int,
+        dropout: float,
+        model_output: str,  # 'logits' or 'logistic_pars'
+        num_classes: int,
+        img_size: int,
     ):
-        super().__init__() 
+        super().__init__()
         self.model_output = model_output
         self.S = num_classes
         self.out_channel = out_channel
@@ -334,7 +351,7 @@ class UNet(nn.Module):
                         time_dim,
                         dropout,
                         attention_head=num_heads,
-                        use_attention=2 ** i in attn_strides,
+                        use_attention=2**i in attn_strides,
                     )
                 )
 
@@ -357,9 +374,7 @@ class UNet(nn.Module):
                     attention_head=num_heads,
                     use_attention=True,
                 ),
-                ResBlockWithAttention(
-                    in_ch, in_ch, time_dim, dropout=dropout
-                ),
+                ResBlockWithAttention(in_ch, in_ch, time_dim, dropout=dropout),
             ]
         )
 
@@ -375,7 +390,7 @@ class UNet(nn.Module):
                         time_dim,
                         dropout=dropout,
                         attention_head=num_heads,
-                        use_attention=2 ** i in attn_strides,
+                        use_attention=2**i in attn_strides,
                     )
                 )
 
@@ -386,30 +401,30 @@ class UNet(nn.Module):
 
         self.up = nn.ModuleList(up_layers)
 
-        if self.model_output == 'logistic_pars':
+        if self.model_output == "logistic_pars":
             # The output represents logits or the log scale and loc of a
             # logistic distribution.
             self.out = nn.Sequential(
-                nn.GroupNorm(min(in_ch//4, 32), in_ch, eps=1e-06),
+                nn.GroupNorm(min(in_ch // 4, 32), in_ch, eps=1e-06),
                 Swish(),
                 conv2d(in_ch, out_channel * 2, 3, padding=1, scale=1e-10),
             )
         else:
             self.out = nn.Sequential(
-                nn.GroupNorm(min(in_ch//4, 32), in_ch, eps=1e-06),
+                nn.GroupNorm(min(in_ch // 4, 32), in_ch, eps=1e-06),
                 Swish(),
                 conv2d(in_ch, out_channel * self.S, 3, padding=1, scale=1e-10),
             )
-        self.D = img_size*img_size
-        
+        self.D = img_size * img_size
+
     def forward(self, input, time):
         time_embed = self.time(time)
         feats = []
         #
         # out = spatial_fold(input, self.fold)
         B, C, H, W = input.shape
-        #input_onehot = F.one_hot(input.view(B, self.D).long(), num_classes=self.S)
-        #input_onehot = input_onehot.view(B, C, H, W, self.S)
+        # input_onehot = F.one_hot(input.view(B, self.D).long(), num_classes=self.S)
+        # input_onehot = input_onehot.view(B, C, H, W, self.S)
         hid = input = network_utils.center_data(input, self.x_min_max)
 
         for layer in self.down:
@@ -424,101 +439,143 @@ class UNet(nn.Module):
             hid = layer(hid, time_embed)
         for layer in self.up:
             if isinstance(layer, ResBlockWithAttention):
-                #print("hid", hid.shape)
-                #print("feats", feats)
+                # print("hid", hid.shape)
+                # print("feats", feats)
                 hid = layer(torch.cat((hid, feats.pop()), 1), time_embed)
 
             else:
                 hid = layer(hid)
         out = self.out(hid)
-        if self.model_output == 'logistic_pars':
+        if self.model_output == "logistic_pars":
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
             out = torch.reshape(out, (B, self.out_channel, self.S, H, W))
             out = out.permute(0, 1, 3, 4, 2).contiguous()
-            out = out #+ input_onehot
+            out = out  # + input_onehot
         return out
+
 
 ### 1D Unet
 class conbr_block(nn.Module):
     def __init__(self, in_layer, out_layer, kernel_size, stride, dilation):
         super(conbr_block, self).__init__()
 
-        self.conv1 = nn.Conv1d(in_layer, out_layer, kernel_size=kernel_size, stride=stride, dilation = dilation, padding = 3, bias=True)
+        self.conv1 = nn.Conv1d(
+            in_layer,
+            out_layer,
+            kernel_size=kernel_size,
+            stride=stride,
+            dilation=dilation,
+            padding=3,
+            bias=True,
+        )
         self.bn = nn.BatchNorm1d(out_layer)
         self.relu = nn.ReLU()
-    
-    def forward(self,x):
+
+    def forward(self, x):
         x = self.conv1(x)
         x = self.bn(x)
         out = self.relu(x)
-        
-        return out       
+
+        return out
+
 
 class se_block(nn.Module):
-    def __init__(self,in_layer, out_layer):
+    def __init__(self, in_layer, out_layer):
         super(se_block, self).__init__()
-        
-        self.conv1 = nn.Conv1d(in_layer, out_layer//8, kernel_size=1, padding=0)
-        self.conv2 = nn.Conv1d(out_layer//8, in_layer, kernel_size=1, padding=0)
-        self.fc = nn.Linear(1,out_layer//8)
-        self.fc2 = nn.Linear(out_layer//8,out_layer)
+
+        self.conv1 = nn.Conv1d(in_layer, out_layer // 8, kernel_size=1, padding=0)
+        self.conv2 = nn.Conv1d(out_layer // 8, in_layer, kernel_size=1, padding=0)
+        self.fc = nn.Linear(1, out_layer // 8)
+        self.fc2 = nn.Linear(out_layer // 8, out_layer)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
-    
-    def forward(self,x):
 
-        x_se = nn.functional.adaptive_avg_pool1d(x,1)
+    def forward(self, x):
+
+        x_se = nn.functional.adaptive_avg_pool1d(x, 1)
         x_se = self.conv1(x_se)
         x_se = self.relu(x_se)
         x_se = self.conv2(x_se)
         x_se = self.sigmoid(x_se)
-        
+
         x_out = torch.add(x, x_se)
         return x_out
+
 
 class re_block(nn.Module):
     def __init__(self, in_layer, out_layer, kernel_size, dilation):
         super(re_block, self).__init__()
-        
-        self.cbr1 = conbr_block(in_layer,out_layer, kernel_size, 1, dilation)
-        self.cbr2 = conbr_block(out_layer,out_layer, kernel_size, 1, dilation)
+
+        self.cbr1 = conbr_block(in_layer, out_layer, kernel_size, 1, dilation)
+        self.cbr2 = conbr_block(out_layer, out_layer, kernel_size, 1, dilation)
         self.seblock = se_block(out_layer, out_layer)
-    
-    def forward(self,x):
+
+    def forward(self, x):
 
         x_re = self.cbr1(x)
         x_re = self.cbr2(x_re)
         x_re = self.seblock(x_re)
         x_out = torch.add(x, x_re)
-        return x_out          
+        return x_out
+
 
 class UNET_1D(nn.Module):
-    def __init__(self ,input_dim, channel, time_dim, layer_n,kernel_size,depth):
+    def __init__(self, input_dim, channel, time_dim, layer_n, kernel_size, depth):
         super(UNET_1D, self).__init__()
         self.input_dim = input_dim
         self.layer_n = layer_n
         self.kernel_size = kernel_size
         self.depth = depth
-        
+
         self.AvgPool1D1 = nn.AvgPool1d(input_dim, stride=5)
         self.AvgPool1D2 = nn.AvgPool1d(input_dim, stride=25)
         self.AvgPool1D3 = nn.AvgPool1d(input_dim, stride=125)
-        
-        self.layer1 = self.down_layer(self.input_dim, self.layer_n, self.kernel_size,1, 2)
-        self.layer2 = self.down_layer(self.layer_n, int(self.layer_n*2), self.kernel_size,5, 2)
-        self.layer3 = self.down_layer(int(self.layer_n*2)+int(self.input_dim), int(self.layer_n*3), self.kernel_size,5, 2)
-        self.layer4 = self.down_layer(int(self.layer_n*3)+int(self.input_dim), int(self.layer_n*4), self.kernel_size,5, 2)
-        self.layer5 = self.down_layer(int(self.layer_n*4)+int(self.input_dim), int(self.layer_n*5), self.kernel_size,4, 2)
 
-        self.cbr_up1 = conbr_block(int(self.layer_n*7), int(self.layer_n*3), self.kernel_size, 1, 1)
-        self.cbr_up2 = conbr_block(int(self.layer_n*5), int(self.layer_n*2), self.kernel_size, 1, 1)
-        self.cbr_up3 = conbr_block(int(self.layer_n*3), self.layer_n, self.kernel_size, 1, 1)
-        self.upsample = nn.Upsample(scale_factor=5, mode='nearest')
-        self.upsample1 = nn.Upsample(scale_factor=5, mode='nearest')
-        
-        self.outcov = nn.Conv1d(self.layer_n, 11, kernel_size=self.kernel_size, stride=1,padding = 3)
+        self.layer1 = self.down_layer(
+            self.input_dim, self.layer_n, self.kernel_size, 1, 2
+        )
+        self.layer2 = self.down_layer(
+            self.layer_n, int(self.layer_n * 2), self.kernel_size, 5, 2
+        )
+        self.layer3 = self.down_layer(
+            int(self.layer_n * 2) + int(self.input_dim),
+            int(self.layer_n * 3),
+            self.kernel_size,
+            5,
+            2,
+        )
+        self.layer4 = self.down_layer(
+            int(self.layer_n * 3) + int(self.input_dim),
+            int(self.layer_n * 4),
+            self.kernel_size,
+            5,
+            2,
+        )
+        self.layer5 = self.down_layer(
+            int(self.layer_n * 4) + int(self.input_dim),
+            int(self.layer_n * 5),
+            self.kernel_size,
+            4,
+            2,
+        )
+
+        self.cbr_up1 = conbr_block(
+            int(self.layer_n * 7), int(self.layer_n * 3), self.kernel_size, 1, 1
+        )
+        self.cbr_up2 = conbr_block(
+            int(self.layer_n * 5), int(self.layer_n * 2), self.kernel_size, 1, 1
+        )
+        self.cbr_up3 = conbr_block(
+            int(self.layer_n * 3), self.layer_n, self.kernel_size, 1, 1
+        )
+        self.upsample = nn.Upsample(scale_factor=5, mode="nearest")
+        self.upsample1 = nn.Upsample(scale_factor=5, mode="nearest")
+
+        self.outcov = nn.Conv1d(
+            self.layer_n, 11, kernel_size=self.kernel_size, stride=1, padding=3
+        )
 
         self.time = nn.Sequential(
             TimeEmbedding(channel),
@@ -526,48 +583,47 @@ class UNET_1D(nn.Module):
             Swish(),
             linear(time_dim, time_dim),
         )
-    
-        
+
     def down_layer(self, input_layer, out_layer, kernel, stride, depth):
         block = []
         block.append(conbr_block(input_layer, out_layer, kernel, stride, 1))
         for i in range(depth):
-            block.append(re_block(out_layer,out_layer,kernel,1))
+            block.append(re_block(out_layer, out_layer, kernel, 1))
         return nn.Sequential(*block)
-            
+
     def forward(self, x, t):
-        
+
         pool_x1 = self.AvgPool1D1(x)
         pool_x2 = self.AvgPool1D2(x)
         pool_x3 = self.AvgPool1D3(x)
-        
+
         #############Encoder#####################
-        
+
         out_0 = self.layer1(x)
         out_1 = self.layer2(out_0)
-        
-        x = torch.cat([out_1,pool_x1],1)
+
+        x = torch.cat([out_1, pool_x1], 1)
         out_2 = self.layer3(x)
-        
-        x = torch.cat([out_2,pool_x2],1)
+
+        x = torch.cat([out_2, pool_x2], 1)
         x = self.layer4(x)
-        
+
         #############Decoder####################
-        
+
         up = self.upsample1(x)
-        up = torch.cat([up,out_2],1)
+        up = torch.cat([up, out_2], 1)
         up = self.cbr_up1(up)
-        
+
         up = self.upsample(up)
-        up = torch.cat([up,out_1],1)
+        up = torch.cat([up, out_1], 1)
         up = self.cbr_up2(up)
-        
+
         up = self.upsample(up)
-        up = torch.cat([up,out_0],1)
+        up = torch.cat([up, out_0], 1)
         up = self.cbr_up3(up)
-        
+
         out = self.outcov(up)
-        
-        #out = nn.functional.softmax(out,dim=2)
-        
+
+        # out = nn.functional.softmax(out,dim=2)
+
         return out
