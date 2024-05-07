@@ -22,8 +22,10 @@ This implementation contains various enhancements and extensions aimed at improv
 
 ### Loss Functions
 
-- **Log-likelihood loss** \[ L_{\text{ll}}(\theta) = T \mathbb{E}_{t \sim \mathcal{U}(0, T) \pi_{\text{data}}(\bm{x}_0) q_{t|0}(\bm{x}|\bm{x}_0)} \left[ - \log p^{\theta}_{0|t}(\bm{x}_0|\bm{x}) \right] \] led to increased sample quality
-
+- **Log-likelihood loss** $L_{\text{ll}}(\theta) = T \mathbb{E}_{t \sim \mathcal{U}(0, T) \pi_{\text{data}}(\bm{x}_0) q_{t|0}(\bm{x}|\bm{x}_0)} \left[ - \log p^{\theta}_{0|t}(\bm{x}_0|\bm{x}) \right]$ led to increased sample quality.
+- **CT-ELBO loss**: Now it can be also used within SDDM.
+- **Combination of Log-likelihood loss and Categorical Ratio Matchin**: $L_{\text{CRMll}}(\theta) = L_{\text{CRM}} + \lambda L_{\text{ll}}$ with $\lambda$ between 0.001 and 0.01 led to sample quality improvements.
+  
 ### Weitere Verbesserungen
 
 - [Weitere Verbesserungen und Erweiterungen hier...]
