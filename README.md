@@ -9,7 +9,7 @@ by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-B
 <p align="center">
   <img src="ct_forwardrev_process2.png"  alt="1" width = 876px height = 621px >
 </p>
-1755 × 1242
+
 ## Overview
 
 This implementation contains various enhancements and extensions aimed at improving functionality and flexibility. Below are the key areas where enhancements have been made, along with specific additions:
@@ -22,7 +22,7 @@ This implementation contains various enhancements and extensions aimed at improv
 
 ### Loss Functions
 
-- **Log-likelihood loss** \[L_{\text{ll}}(\theta) = T \mathbb{E}_{t \sim \mathcal{U}(0, T) \pi_{\text{data}}(\bm{x}_0) q_{t|0}(\bm{x}|\bm{x}_0)} \left[ - \log p^{\theta}_{0|t}(\bm{x}_0|\bm{x}) \right] \] led to increased sample quality
+- **Log-likelihood loss** \[ L_{\text{ll}}(\theta) = T \mathbb{E}_{t \sim \mathcal{U}(0, T) \pi_{\text{data}}(\bm{x}_0) q_{t|0}(\bm{x}|\bm{x}_0)} \left[ - \log p^{\theta}_{0|t}(\bm{x}_0|\bm{x}) \right] \] led to increased sample quality
 
 ### Weitere Verbesserungen
 
