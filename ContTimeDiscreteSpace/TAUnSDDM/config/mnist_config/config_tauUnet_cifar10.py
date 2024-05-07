@@ -6,10 +6,7 @@ def get_config():
     save_directory = "SavedModels/CIFAR10/"
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
     config.save_location = save_directory
-
-    config.init_model_path = None
 
     config.device = "cuda"
     config.distributed = False
