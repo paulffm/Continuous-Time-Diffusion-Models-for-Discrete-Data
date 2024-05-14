@@ -1,10 +1,7 @@
 # Continuous-Time Diffusion Models for Discrete Data
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/paulffm/Master-Thesis/blob/master/LICENSE)
-
-Unofficial **PyTorch** reimplementation of the
-paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987)
-by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) by H. Sun et al.
+This repository serves as an unofficial **PyTorch** reimplementation of the paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987) ($\tau$LDR) by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) (SDDM) by H. Sun et al. As part of my master's thesis, it includes extensions such as the implementation of new **sampling methods** and alternative **loss functions** to enhance the performance and flexibility of both frameworks.
 
 <p align="center">
   <img src="ct_forwardrev_process2.png"  alt="1" width = 438px height = 311px >
