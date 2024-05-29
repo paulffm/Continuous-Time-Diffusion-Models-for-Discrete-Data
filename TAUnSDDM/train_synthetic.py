@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 import lib.sampling.sampling_utils as sampling_utils
 import numpy as np
 
-
+# test change
 def main():
     train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
