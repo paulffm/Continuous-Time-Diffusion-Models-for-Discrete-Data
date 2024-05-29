@@ -32,7 +32,33 @@ led to increased sample quality.
 
 ## Installation
 
+Follow these steps to clone the repository and install the dependencies:
 
+### 1. Clone the repository
+
+Clone the repository using the following command:
+
+```sh
+git clone https://github.com/paulffm/Continuous-Time-Diffusion-Models-for-Discrete-Data.git
+cd Continuous-Time-Diffusion-Models-for-Discrete-Data
+```
+
+### 2. Create a virtual environment
+
+Create a virtual environment to install dependencies in isolation:
+
+```sh
+python -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+```
+
+### 3. Install dependencies
+
+Install the necessary dependencies using pip:
+
+```sh
+pip install -r requirements.txt
+```
 
 ## Usage
 
