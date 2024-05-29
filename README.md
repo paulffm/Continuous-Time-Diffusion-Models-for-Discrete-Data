@@ -30,9 +30,13 @@ led to increased sample quality.
 
 - I included many more neural networks as initially proposed, i.e. the score-network from the paper [Dirichlet Diffusion Score Model for Biological Sequence Generation](https://arxiv.org/pdf/2305.10699.pdf)
 
+## Installation
+
+
+
 ## Usage
 
-This implementation provides example scripta for training SDDM and tauLDR models to generate MNIST/maze/synthetic data. In this script you can simply use my provided configs and start training or retraining your models. You just need to set the correct paths in the beginning of the script, i.e.:
+This implementation provides example scripts for training SDDM and tauLDR models to generate MNIST/maze/synthetic data. In this script you can simply use my provided configs and start training or retraining your models. You just need to set the correct paths in the beginning of the script, i.e.:
 
 ```python
 def main():
