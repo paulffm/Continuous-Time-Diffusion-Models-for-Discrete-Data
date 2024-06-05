@@ -6,132 +6,111 @@ import lib.models.model_utils as model_utils
 from torchtyping import TensorType
 import torch.autograd.profiler as profiler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from lib.networks import hollow_networks, ebm_networks, tau_networks, unet
+from lib.networks import hollow_networks, ebm_networks, tau_networks, unet, dit
 from lib.models.forward_model import (
     UniformRate,
     UniformVariantRate,
     GaussianTargetRate,
     BirthDeathForwardBase,
 )
-
 from lib.datasets.sudoku import define_relative_encoding
 
-
-class MaskedUNet(nn.Module):
-    """
-    First embedds input data with Transformer Network by: adding positional encoding and time embedding + general Embedding layer
-    Then predicts logits by an arbitrary neural network
-    """
-
-    def __init__(self, cfg, device, rank=None):
-        super(MaskedUNet, self).__init__()
-        self.cfg = cfg
-        self.device = device
-        self.S = cfg.data.S
-        self.padding = cfg.model.padding
-        self.temb_scale = cfg.model.time_scale_factor
-        self.data_shape = cfg.data.shape
-        self.fix_logistic = cfg.model.fix_logistic
-        self.model_output = self.cfg.model.model_output
-
-        if self.padding:
-            img_size = cfg.data.image_size + 1
-        else:
-            img_size = cfg.data.image_size
-
-        self.net = unet.UNet(
-            in_channel=cfg.model.input_channels,
-            out_channel=cfg.model.input_channels,
-            channel=cfg.model.ch,
-            channel_multiplier=cfg.model.ch_mult,
-            n_res_blocks=cfg.model.num_res_blocks,
-            attn_resolutions=cfg.model.attn_resolutions,
-            num_heads=cfg.model.num_heads,
-            dropout=cfg.model.dropout,
-            model_output=cfg.model.model_output,  # c or 'logistic_pars'
-            num_classes=cfg.data.S,
-            x_min_max=cfg.model.data_min_max,
-            img_size=img_size,
-        ).to(self.device)
-
-    def forward(
-        self, x: TensorType["B", "D"], t: TensorType["B"]
-    ) -> TensorType["B", "D", "S"]:
-        x = x.view(x.shape[0], -1)
-
-        prefix_cond = self.cfg.model.get("conditional_dim", 0)
-        positions = torch.arange(prefix_cond, x.shape[1], device=self.device)
-        B, D = x.shape
-        logits_list = []
-
-        for pos in positions:
-            x_masked = x.clone()
-            x_masked[:, pos] = self.S  # B, D - cond_dim
-
-            C, H, W = self.data_shape
-            x_masked = x_masked.view(B, C, H, W)
-
-            if self.padding:
-                x_masked = nn.ReplicationPad2d((0, 1, 0, 1))(x_masked.float())
-            net_out = self.net(x_masked, t)  # B, D, S
-
-            if self.model_output == "logits":
-                logits = net_out
-
-            else:
-                mu = net_out[0].unsqueeze(-1)
-                log_scale = net_out[1].unsqueeze(-1)
-
-                inv_scale = torch.exp(-(log_scale - 2))
-
-                bin_width = 2.0 / self.S
-                bin_centers = torch.linspace(
-                    start=-1.0 + bin_width / 2,
-                    end=1.0 - bin_width / 2,
-                    steps=self.S,
-                    device=self.device,
-                ).view(1, 1, 1, 1, self.S)
-
-                sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
-                bin_left_logcdf = F.logsigmoid(sig_in_left)
-                sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
-                bin_right_logcdf = F.logsigmoid(sig_in_right)
-
-                logits_1 = self._log_minus_exp(bin_right_logcdf, bin_left_logcdf)
-                logits_2 = self._log_minus_exp(
-                    -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
-                )
-                if self.fix_logistic:
-                    logits = torch.min(logits_1, logits_2)
-                else:
-                    logits = logits_1
-
-            if self.padding:
-                logits = logits[:, :, :-1, :-1, :]
-                logits = logits.reshape(B, D, self.S)
-            else:
-                logits = logits.view(B, D, self.S)
-
-            logit = logits[:, pos].unsqueeze(1)
-            logit = logit.squeeze(1)  # B, S
-            logits_list.append(logit)  # list with len D of tensors with shape B, S
-
-        logits = torch.stack(logits_list, dim=1)  # B, D, S
-
-        if prefix_cond:
-            dummy_logits = torch.zeros(
-                [x.shape[0], prefix_cond] + list(logits.shape[2:]), dtype=torch.float32
-            )
-            logits = torch.cat([dummy_logits, logits], dim=1)
-        logits = logits.view(x.shape + (self.S,))
-        return logits  # B, D, S
-
-    def _log_minus_exp(self, a, b, eps=1e-6):
+def log_minus_exp(a, b, eps=1e-6):
         """
         Compute log (exp(a) - exp(b)) for (b<a)
         From https://arxiv.org/pdf/2107.03006.pdf
         """
         return a + torch.log1p(-torch.exp(b - a) + eps)
+
+def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
+    """
+    net_out: Output of neural network with shape B, 2*C, H,W
+    B: Batch Size
+    C: Number of channel
+    D: Dimension = C*H*W
+    S: Number of States
+
+    """
+    mu = net_out[:, 0:C, :, :].unsqueeze(-1)
+    log_scale = net_out[:, C:, :, :].unsqueeze(-1)
+
+    #if self.padding: 
+    #    mu = mu[:, :, :-1, :-1, :]
+    #    log_scale = log_scale[:, :, :-1, :-1, :]
+    
+    # The probability for a state is then the integral of this continuous distribution between
+    # this state and the next when mapped onto the real line. To impart a residual inductive bias
+    # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
+    # is the normalized input into the model and μ′ is mean outputted from the network.
+    # The normalization operation takes the input in the range 0, . . . , 255 and maps it to [−1, 1].
+    inv_scale = torch.exp(-(log_scale - 2))
+
+    bin_width = 2.0 / S
+    bin_centers = torch.linspace(
+        start=-1.0 + bin_width / 2,
+        end=1.0 - bin_width / 2,
+        steps=S,
+        device=device,
+    ).view(1, 1, 1, 1, S)
+
+    sig_in_left = (bin_centers - bin_width / 2 - mu) * inv_scale
+    bin_left_logcdf = F.logsigmoid(sig_in_left)
+    sig_in_right = (bin_centers + bin_width / 2 - mu) * inv_scale
+    bin_right_logcdf = F.logsigmoid(sig_in_right)
+
+    logits_1 = log_minus_exp(bin_right_logcdf, bin_left_logcdf)
+    logits_2 = log_minus_exp(
+        -sig_in_left + bin_left_logcdf, -sig_in_right + bin_right_logcdf
+    )
+    if fix_logistic:
+        logits = torch.min(logits_1, logits_2)
+    else:
+        logits = logits_1
+
+    logits = logits.view(B, D, S)
+
+    return logits 
+
+class LogDiT(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
+        self.cfg = cfg
+        self.device = device 
+        self.fix_logistic = cfg.model.fix_logistic
+        self.S = cfg.data.S
+        net = dit.DiT(input_size=32, # 28
+            patch_size= cfg.model.patch_size, # 2
+            in_channels=cfg.model.input_channel,
+            hidden_size=cfg.model.hidden_dim, #1152
+            depth=cfg.model.depth, # 28
+            num_heads=cfg.model.num_heads, #16
+            mlp_ratio=cfg.model.mlp_ratio, #4.0,
+            class_dropout_prob=cfg.model.dropout, #0.1
+            num_classes=self.S,
+            logits_pars_out=cfg.model.model_output) # logistic_pars output)
+        
+        if cfg.distributed:
+            self.net = DDP(net, device_ids=[rank])
+        else:
+            self.net = net
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"], y: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space for each pixel
+        """
+        if len(x.shape) == 2:
+            B, D = x.shape
+            C, H, W = self.data_shape
+            x = x.view(B, C, H, W)
+        else:
+            B, C, H, W = x.shape
+
+        net_out = self.net(x, times, y)  # (B, 2*C, H, W)
+        logits = sample_logistic(net_out, B, C, D, self.S, self.fix_logistic, self.device)
+        return logits
+
 
 
 class ImageX0PredBasePaul(nn.Module):
@@ -767,9 +746,22 @@ class EMA:
             self.move_model_params_to_collected_params()
             self.move_shadow_params_to_model_params()
 
+##############################################################################################################################################################
 
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
+
+@model_utils.register_model
+class GaussianLogDiTEMA(
+    EMA, LogDiT, GaussianTargetRate
+):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        LogDiT.__init__(self, cfg, device, rank)
+        GaussianTargetRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
 @model_utils.register_model
 class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
     def __init__(self, cfg, device, rank=None):
@@ -976,16 +968,6 @@ class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         BinaryEBM.__init__(self, cfg, device, rank)
-        UniformVariantRate.__init__(self, cfg, device)
-
-        self.init_ema()
-
-# MaskedUNet
-@model_utils.register_model
-class UniVarMaskUNetEMA(EMA, MaskedUNet, UniformVariantRate):
-    def __init__(self, cfg, device, rank=None):
-        EMA.__init__(self, cfg)
-        MaskedUNet.__init__(self, cfg, device, rank)
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
