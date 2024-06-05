@@ -78,7 +78,8 @@ class LogDiT(nn.Module):
         self.device = device 
         self.fix_logistic = cfg.model.fix_logistic
         self.S = cfg.data.S
-        net = dit.DiT(input_size=32, # 28
+        self.data_shape = cfg.data.shape
+        net = dit.DiT(input_size=cfg.data.image_size, # 28
             patch_size= cfg.model.patch_size, # 2
             in_channels=cfg.model.input_channel,
             hidden_size=cfg.model.hidden_dim, #1152
@@ -87,7 +88,8 @@ class LogDiT(nn.Module):
             mlp_ratio=cfg.model.mlp_ratio, #4.0,
             class_dropout_prob=cfg.model.dropout, #0.1
             num_classes=self.S,
-            logits_pars_out=cfg.model.model_output) # logistic_pars output)
+            logits_pars_out=cfg.model.model_output,
+            x_min_max=cfg.model.data_min_max) # logistic_pars output)
         
         if cfg.distributed:
             self.net = DDP(net, device_ids=[rank])
@@ -95,7 +97,7 @@ class LogDiT(nn.Module):
             self.net = net
 
     def forward(
-        self, x: TensorType["B", "D"], times: TensorType["B"], y: TensorType["B"]
+        self, x: TensorType["B", "D"], times: TensorType["B"], y: TensorType["B"]=None
     ) -> TensorType["B", "D", "S"]:
         """
         Returns logits over state space for each pixel

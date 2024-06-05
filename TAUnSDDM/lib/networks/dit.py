@@ -2,17 +2,194 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
+from timm.models.vision_transformer import Attention, Mlp # PatchEmbed
 from torchtyping import TensorType
+from typing import Callable, List, Optional, Tuple, Union
+from enum import Enum
+from typing import Union
+import torch.nn.functional as F
+from itertools import repeat
+import collections.abc
+import lib.networks.network_utils as network_utils
+
+##### Helper
 
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
+class Format(str, Enum):
+    NCHW = "NCHW"
+    NHWC = "NHWC"
+    NCL = "NCL"
+    NLC = "NLC"
+
+
+FormatT = Union[str, Format]
+
+
+def get_spatial_dim(fmt: FormatT):
+    fmt = Format(fmt)
+    if fmt is Format.NLC:
+        dim = (1,)
+    elif fmt is Format.NCL:
+        dim = (2,)
+    elif fmt is Format.NHWC:
+        dim = (1, 2)
+    else:
+        dim = (2, 3)
+    return dim
+
+
+def get_channel_dim(fmt: FormatT):
+    fmt = Format(fmt)
+    if fmt is Format.NHWC:
+        dim = 3
+    elif fmt is Format.NLC:
+        dim = 2
+    else:
+        dim = 1
+    return dim
+
+
+def nchw_to(x: torch.Tensor, fmt: Format):
+    if fmt == Format.NHWC:
+        x = x.permute(0, 2, 3, 1)
+    elif fmt == Format.NLC:
+        x = x.flatten(2).transpose(1, 2)
+    elif fmt == Format.NCL:
+        x = x.flatten(2)
+    return x
+
+
+def nhwc_to(x: torch.Tensor, fmt: Format):
+    if fmt == Format.NCHW:
+        x = x.permute(0, 3, 1, 2)
+    elif fmt == Format.NLC:
+        x = x.flatten(1, 2)
+    elif fmt == Format.NCL:
+        x = x.flatten(1, 2).transpose(1, 2)
+    return x
+
+
+# From PyTorch internals
+def _ntuple(n):
+    def parse(x):
+        if isinstance(x, collections.abc.Iterable) and not isinstance(x, str):
+            return tuple(x)
+        return tuple(repeat(x, n))
+
+    return parse
+
+
+to_1tuple = _ntuple(1)
+to_2tuple = _ntuple(2)
+to_3tuple = _ntuple(3)
+to_4tuple = _ntuple(4)
+to_ntuple = _ntuple
+
 #################################################################################
 #               Embedding Layers for Timesteps and Class Labels                 #
 #################################################################################
+
+
+class PatchEmbed(nn.Module):
+    """2D Image to Patch Embedding"""
+
+    output_fmt: Format
+    dynamic_img_pad: torch.jit.Final[bool]
+
+    def __init__(
+        self,
+        img_size: Optional[int] = 224,
+        patch_size: int = 16,
+        in_chans: int = 3,
+        embed_dim: int = 768,
+        norm_layer: Optional[Callable] = None,
+        flatten: bool = True,
+        output_fmt: Optional[str] = None,
+        bias: bool = True,
+        strict_img_size: bool = True,
+        dynamic_img_pad: bool = False,
+    ):
+        super().__init__()
+        self.patch_size = to_2tuple(patch_size)
+        if img_size is not None:
+            self.img_size = to_2tuple(img_size)
+            self.grid_size = tuple(
+                [s // p for s, p in zip(self.img_size, self.patch_size)]
+            )
+            self.num_patches = self.grid_size[0] * self.grid_size[1]
+        else:
+            self.img_size = None
+            self.grid_size = None
+            self.num_patches = None
+
+        if output_fmt is not None:
+            self.flatten = False
+            self.output_fmt = Format(output_fmt)
+        else:
+            # flatten spatial dim and transpose to channels last, kept for bwd compat
+            self.flatten = flatten
+            self.output_fmt = Format.NCHW
+        self.strict_img_size = strict_img_size
+        self.dynamic_img_pad = dynamic_img_pad
+
+        self.proj = nn.Conv2d(
+            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size, bias=bias
+        )
+        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
+
+    def feat_ratio(self, as_scalar=True) -> Union[Tuple[int, int], int]:
+        if as_scalar:
+            return max(self.patch_size)
+        else:
+            return self.patch_size
+
+    def dynamic_feat_size(self, img_size: Tuple[int, int]) -> Tuple[int, int]:
+        """Get grid (feature) size for given image size taking account of dynamic padding.
+        NOTE: must be torchscript compatible so using fixed tuple indexing
+        """
+        if self.dynamic_img_pad:
+            return math.ceil(img_size[0] / self.patch_size[0]), math.ceil(
+                img_size[1] / self.patch_size[1]
+            )
+        else:
+            return img_size[0] // self.patch_size[0], img_size[1] // self.patch_size[1]
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        if self.img_size is not None:
+            if self.strict_img_size:
+                assert (
+                    H == self.img_size[0],
+                    f"Input height ({H}) doesn't match model ({self.img_size[0]}).",
+                )
+                assert (
+                    W == self.img_size[1],
+                    f"Input width ({W}) doesn't match model ({self.img_size[1]}).",
+                )
+            elif not self.dynamic_img_pad:
+                assert (
+                    H % self.patch_size[0] == 0,
+                    f"Input height ({H}) should be divisible by patch size ({self.patch_size[0]}).",
+                )
+                assert (
+                    W % self.patch_size[1] == 0,
+                    f"Input width ({W}) should be divisible by patch size ({self.patch_size[1]}).",
+                )
+        if self.dynamic_img_pad:
+            pad_h = (self.patch_size[0] - H % self.patch_size[0]) % self.patch_size[0]
+            pad_w = (self.patch_size[1] - W % self.patch_size[1]) % self.patch_size[1]
+            x = F.pad(x, (0, pad_w, 0, pad_h))
+        x = self.proj(x)
+        if self.flatten:
+            x = x.flatten(2).transpose(1, 2)  # NCHW -> NLC
+        elif self.output_fmt != Format.NCHW:
+            x = nchw_to(x, self.output_fmt)
+        x = self.norm(x)
+        return x
 
 
 class TimestepEmbedder(nn.Module):
@@ -176,6 +353,7 @@ class DiT(nn.Module):
         class_dropout_prob=0.1,
         num_classes=10,
         logits_pars_out=True,  # logistic_pars output
+        x_min_max=(0, 255)
     ):
         super().__init__()
         self.logits_pars_out = logits_pars_out
@@ -183,6 +361,7 @@ class DiT(nn.Module):
         self.out_channels = in_channels * 2 if logits_pars_out else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
+        self.x_min_max = x_min_max
 
         self.x_embedder = PatchEmbed(
             input_size, patch_size, in_channels, hidden_size, bias=True
@@ -259,7 +438,7 @@ class DiT(nn.Module):
         return imgs
 
     def forward(
-        self, x: TensorType["B", "C", "H", "W"], t: TensorType["B"], y: TensorType["B"]
+        self, x: TensorType["B", "C", "H", "W"], t: TensorType["B"], y: TensorType["B"]=None
     ):
         """
         Forward pass of DiT.
@@ -267,22 +446,24 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
+        x = network_utils.center_data(x, self.x_min_max)
         x = (
             self.x_embedder(x) + self.pos_embed
         )  # (N, T, D), where T = H * W / patch_size ** 2
         t = self.t_embedder(t)  # (N, D)
-        y = self.y_embedder(y, self.training)  # (N, D)
-        c = t + y  # (N, D)
+        if y is not None:
+            y = self.y_embedder(y, self.training)  # (N, D)
+            c = t + y  # (N, D)
+        else:
+            c = t
         for block in self.blocks:
             x = block(x, c)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
 
         # idea to predict mean and eps of a log distribution and sample from it
         # cfg.model.model_output == "logits" => out_channels = 2*C
-        if self.logits_pars_out:
-            pass
-        else:
-            x = self.unpatchify(x)
+
+        x = self.unpatchify(x)
             # (N, out_channels, H, W)
         return x
 

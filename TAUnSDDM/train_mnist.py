@@ -4,7 +4,7 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.bin_mnist_config.config_tauUnet_binmnist import get_config
-from config.mnist_config.config_tauUnet_cifar10 import get_config
+from config.mnist_config.config_dit_mnist import get_config
 #from config.mnist_config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
@@ -31,9 +31,9 @@ import numpy as np
 torch.cuda.empty_cache()
 
 def main():
-    train_resume = True
+    train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/CIFAR10/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/MNIST/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
@@ -98,10 +98,11 @@ def main():
     training_loss = []
     exit_flag = False
     while True:
-        for minibatch in tqdm(dataloader):
+        for minibatch, label in tqdm(dataloader):
             minibatch = minibatch.to(device)
+            #label = label.to(device)
             #print(minibatch.shape)
-            l = training_step.step(state, minibatch.long(), loss)
+            l = training_step.step(state, loss, minibatch.long())
 
             training_loss.append(l.item())
 

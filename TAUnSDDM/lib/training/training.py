@@ -14,9 +14,9 @@ class Standard:
         self.lr = cfg.optimizer.lr
         self.device = cfg.device
 
-    def step(self, state, minibatch, loss):
+    def step(self, state, loss, minibatch, label=None):
         state["optimizer"].zero_grad()
-        l = loss.calc_loss(minibatch, state)
+        l = loss.calc_loss(state, minibatch, label)
 
         # print("Loss in train", l)
         if l.isnan().any() or l.isinf().any():

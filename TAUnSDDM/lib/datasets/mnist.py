@@ -84,7 +84,7 @@ class DiscreteMNIST(torchvision.datasets.MNIST):
         if self.random_flips:
             img = self.flip(img)
 
-        return img
+        return img, target
 
 
 @dataset_utils.register_dataset

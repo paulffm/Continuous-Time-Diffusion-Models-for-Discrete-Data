@@ -6,25 +6,22 @@ def get_config():
     save_directory = "SavedModels/MNIST/"
 
     config = ml_collections.ConfigDict()
-    config.experiment_name = "mnist"
-    config.save_location = save_directory
-
     config.device = "cuda"
     config.distributed = False
     config.num_gpus = 0
 
     config.loss = loss = ml_collections.ConfigDict()
-    loss.name = "CTElbo"
+    loss.name = "NLL"
     loss.eps_ratio = 1e-9
-    loss.nll_weight = 0
+    loss.nll_weight = 0  # only for CT-ELBO
     loss.min_time = 0.01
-    loss.one_forward_pass = True
+    loss.one_forward_pass = True # only for CT-ELBO
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
     training.n_iters = 600000  # 2000 #2000000
     training.clip_grad = True
-    training.grad_norm = 2
+    training.grad_norm = 1
     training.warmup = 0  # 5000
     training.max_t = 1
     
@@ -37,33 +34,28 @@ def get_config():
     data.shuffle = True
     data.image_size = 28
     data.shape = [1, data.image_size, data.image_size]
-    data.random_flips = True
     data.use_augm = False
     data.location = 'lib/datasets/'
     
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "GaussianTargetRateImageX0PredEMAPaul"
-    model.padding = False
+    model.name = "GaussianLogDiTEMA" 
     model.ema_decay = 0.9999  # 0.9999
 
-    model.ch = 96  # 128 => 4mal so viele Params
-    model.num_res_blocks = 2
-    model.ch_mult = [1, 2, 2]  # [1, 2, 2, 2]
-    model.input_channels = 1  
-    model.scale_count_to_put_attn = 1
-    model.data_min_max = [0, 255]
-    model.dropout = 0.1
-    model.skip_rescale = True
-    model.time_embed_dim = model.ch
-    model.time_scale_factor = 1000
-    model.fix_logistic = False
-    model.model_output = 'logits' #logistic_pars'
+    model.patch_size = 4  # 128 => 4mal so viele Params
+    model.input_channel = 1  
+    model.concat_dim = model.input_channel * data.image_size * data.image_size # D
+    model.hidden_dim = 512
+    model.depth = 28
     model.num_heads = 8
-    model.attn_resolutions = [int(model.ch / 2)]
-    model.concat_dim = data.image_size * data.image_size * 1
-    model.padding = False
+    model.mlp_ratio = 4.0
+    model.dropout = 0.1
+    model.time_scale_factor = 1000
+    model.model_output = 'logistic_pars' #logistic_pars'
+    model.fix_logistic = False
+    model.data_min_max = (0, data.S - 1)
 
+    # forward model
     model.rate_sigma = 6.0
     model.Q_sigma = 512.0
     model.time_exp = 100.0
@@ -74,20 +66,19 @@ def get_config():
     optimizer.lr = 2e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
-
-    saving.checkpoint_freq = 10000
+    saving.checkpoint_freq = 1000
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
     sampler.name = "TauL"  # TauLeaping or PCTauLeaping
     sampler.num_steps = 1000
-    sampler.min_t = 0.01
+    sampler.min_t = loss.min_time
     sampler.eps_ratio = 1e-9
     sampler.initial_dist = "gaussian"
-    sampler.num_corrector_steps = 10
+    sampler.num_corrector_steps = 0
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
-    sampler.sample_freq = 220000000
+    sampler.sample_freq = 1000
 
     return config
