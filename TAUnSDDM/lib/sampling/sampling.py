@@ -218,7 +218,7 @@ class TauL:
                         x_new = torch.clamp(xp, min=0, max=self.S - 1)
                         x = x_new
 
-            if self.loss_name == "CTElbo":
+            if self.loss_name == "CTElbo" or self.loss_name == "NLL":
                 p_0gt = F.softmax(
                     model(x, self.min_t * torch.ones((N,), device=device)), dim=2
                 )  # (N, D, S)
