@@ -344,10 +344,10 @@ class DiT(nn.Module):
     def __init__(
         self,
         input_size=32,  # 28
-        patch_size=2,  # 4
+        patch_size=2,  # 2-4
         in_channels=1,
-        hidden_size=1152,
-        depth=28,
+        hidden_size=1152, #256-512
+        depth=28, # number of layers 9-13
         num_heads=16,
         mlp_ratio=4.0,
         class_dropout_prob=0.1,
@@ -456,6 +456,7 @@ class DiT(nn.Module):
             c = t + y  # (N, D)
         else:
             c = t
+
         for block in self.blocks:
             x = block(x, c)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
