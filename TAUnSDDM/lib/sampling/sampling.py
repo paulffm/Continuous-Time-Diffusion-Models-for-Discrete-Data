@@ -58,7 +58,7 @@ def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
 
         reverse_rates = forward_rates * ratio  # (N, D, S)
 
-    else:
+    elif cfg.loss.name == "CatRM" or cfg.loss.name == "CatRMNLL" or "ScoreElbo":
         ll_all, ll_xt = get_logprob_with_logits(
             cfg=cfg,
             model=model,
@@ -71,6 +71,8 @@ def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
         fwd_rate = model.rate_mat(x.long(), t_ones)  # B, D, S
         ratio = torch.exp(log_weight)
         reverse_rates = ratio * fwd_rate
+    else:
+        raise ValueError(f"No loss named {cfg.loss.name}")
 
         # B, D, S
     return reverse_rates, ratio
