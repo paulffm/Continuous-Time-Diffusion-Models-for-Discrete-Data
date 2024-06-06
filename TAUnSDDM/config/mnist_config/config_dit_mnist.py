@@ -39,14 +39,14 @@ def get_config():
     
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "GaussianLogDiTEMA" 
+    model.name = "GaussianDiTEMA" 
     model.ema_decay = 0.9999  # 0.9999
 
     model.patch_size = 4  # 128 => 4mal so viele Params
     model.input_channel = 1  
     model.concat_dim = model.input_channel * data.image_size * data.image_size # D
     model.hidden_dim = 512
-    model.depth = 28
+    model.depth = 7
     model.num_heads = 8
     model.mlp_ratio = 4.0
     model.dropout = 0.1

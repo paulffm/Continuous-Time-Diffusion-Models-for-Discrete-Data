@@ -1,6 +1,7 @@
 import ml_collections
 import os
 
+
 # 6 138 946
 def get_config():
     save_directory = "SavedModels/MNIST/"
@@ -15,7 +16,7 @@ def get_config():
     loss.eps_ratio = 1e-9
     loss.nll_weight = 0  # only for CT-ELBO
     loss.min_time = 0.01
-    loss.one_forward_pass = True # only for CT-ELBO
+    loss.one_forward_pass = True  # only for CT-ELBO
 
     config.training = training = ml_collections.ConfigDict()
     training.train_step_name = "Standard"
@@ -24,7 +25,7 @@ def get_config():
     training.grad_norm = 1
     training.warmup = 0  # 5000
     training.max_t = 1
-    
+
     config.data = data = ml_collections.ConfigDict()
     data.name = "DiscreteMNIST"
     data.train = True
@@ -35,23 +36,22 @@ def get_config():
     data.image_size = 28
     data.shape = [1, data.image_size, data.image_size]
     data.use_augm = False
-    data.location = 'lib/datasets/'
-    
+    data.location = "lib/datasets/"
 
     config.model = model = ml_collections.ConfigDict()
-    model.name = "GaussianUViTEMA" 
+    model.name = "GaussianUViTEMA"
     model.ema_decay = 0.9999  # 0.9999
 
-    model.patch_size = 2  
-    model.input_channel = 1  
-    model.concat_dim = model.input_channel * data.image_size * data.image_size # D
+    model.patch_size = 2
+    model.input_channel = 1
+    model.concat_dim = model.input_channel * data.image_size * data.image_size  # D
     model.hidden_dim = 512
     model.depth = 14
     model.num_heads = 16
     model.mlp_ratio = 4.0
     model.dropout = 0.1
     model.time_scale_factor = 1000
-    model.model_output = 'logits' #logistic_pars'
+    model.model_output = "logits"  # logistic_pars'
     model.fix_logistic = False
     model.data_min_max = (0, data.S - 1)
 
@@ -63,7 +63,7 @@ def get_config():
 
     config.optimizer = optimizer = ml_collections.ConfigDict()
     optimizer.name = "Adam"
-    optimizer.lr = 2e-4  # 2e-4
+    optimizer.lr = 3e-4  # 2e-4
 
     config.saving = saving = ml_collections.ConfigDict()
     saving.checkpoint_freq = 1000

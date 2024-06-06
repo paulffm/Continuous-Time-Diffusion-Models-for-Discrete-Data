@@ -14,6 +14,7 @@ from lib.models.forward_model import (
     BirthDeathForwardBase,
 )
 from lib.datasets.sudoku import define_relative_encoding
+import lib.networks.network_utils as network_utils
 
 
 def log_minus_exp(a, b, eps=1e-6):
@@ -33,6 +34,7 @@ def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
     S: Number of States
 
     """
+
     mu = net_out[0].unsqueeze(-1)  # B, C, H, W, 1
     log_scale = net_out[1].unsqueeze(-1)  # B, C, H, W, 1
 
@@ -67,8 +69,7 @@ def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
     if fix_logistic:
         logits = torch.min(logits_1, logits_2)
     else:
-        logits = logits_1
-    logits = logits.view(B, D, S)  # shape before B, C, H, W, S
+        logits = logits_1  # shape before B, C, H, W, S
 
     return logits
 
@@ -76,7 +77,6 @@ def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
 class UViTModel(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
-
 
         self.S = cfg.data.S
 
@@ -109,29 +109,37 @@ class UViTModel(nn.Module):
         self.data_shape = cfg.data.shape
 
     def forward(
-        self, x: TensorType["B", "D"], times: TensorType["B"], label: TensorType["B"]
+        self,
+        x: TensorType["B", "D"],
+        times: TensorType["B"],
+        label: TensorType["B"] = None,
     ) -> TensorType["B", "D", "S"]:
         """
         Returns logits over state space
         """
         B, D = x.shape
 
-        logits = self.net(x, times)  
-        logits = logits.view(B, D, self.S) # (B, D, S)
+        logits = self.net(x, times)
+        logits = logits.view(B, D, self.S)  # (B, D, S)
 
         return logits
 
 
-class LogDiT(nn.Module):
+class DiTModel(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
+
         self.cfg = cfg
         self.device = device
         self.fix_logistic = cfg.model.fix_logistic
         self.S = cfg.data.S
         self.data_shape = cfg.data.shape
+        self.model_output = cfg.model.model_output
+        self.x_min_max = (0, self.S - 1)
+
         net = dit.DiT(
             input_size=cfg.data.image_size,  # 28
+            num_states=cfg.data.S,
             patch_size=cfg.model.patch_size,  # 2
             in_channels=cfg.model.input_channel,
             hidden_size=cfg.model.hidden_dim,  # 1152
@@ -140,8 +148,7 @@ class LogDiT(nn.Module):
             mlp_ratio=cfg.model.mlp_ratio,  # 4.0,
             class_dropout_prob=cfg.model.dropout,  # 0.1
             num_classes=self.S,
-            logits_pars_out=cfg.model.model_output,
-            x_min_max=cfg.model.data_min_max,
+            model_output=self.model_output,
         )  # logistic_pars output)
 
         if cfg.distributed:
@@ -162,10 +169,23 @@ class LogDiT(nn.Module):
         else:
             B, C, H, W = x.shape
 
+        x = network_utils.center_data(x, self.x_min_max)
         net_out = self.net(x, times, y)  # (B, 2*C, H, W)
-        logits = sample_logistic(
-            net_out, B, C, D, self.S, self.fix_logistic, self.device
-        )
+
+        if self.model_output == "logits":
+            out = torch.reshape(net_out, (B, C, self.S, H, W))  # B, C, S, H, W]
+            logits = out.permute(0, 1, 3, 4, 2).contiguous()
+
+        elif self.model_output == "logistic_pars":
+            loc, log_scale = torch.chunk(net_out, 2, dim=1)
+            out = torch.tanh(loc + x), log_scale
+            logits = sample_logistic(
+                out, B, C, D, self.S, self.fix_logistic, self.device
+            )
+        else:
+            raise ValueError(f"No model output called {self.model_output} registered")
+        print("logit", logits.shape)
+        logits = logits.view(B, D, self.S)
         return logits
 
 
@@ -808,10 +828,9 @@ class EMA:
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
 
+
 @model_utils.register_model
-class GaussianUViTEMA(
-    EMA, UViTModel, GaussianTargetRate
-):
+class GaussianUViTEMA(EMA, UViTModel, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         UViTModel.__init__(self, cfg, device, rank)
@@ -819,11 +838,12 @@ class GaussianUViTEMA(
 
         self.init_ema()
 
+
 @model_utils.register_model
-class GaussianLogDiTEMA(EMA, LogDiT, GaussianTargetRate):
+class GaussianDiTEMA(EMA, DiTModel, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        LogDiT.__init__(self, cfg, device, rank)
+        DiTModel.__init__(self, cfg, device, rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()

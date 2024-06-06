@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from timm.models.vision_transformer import Attention, Mlp # PatchEmbed
+from timm.models.vision_transformer import Attention, Mlp  # PatchEmbed
 from torchtyping import TensorType
 from typing import Callable, List, Optional, Tuple, Union
 from enum import Enum
@@ -344,24 +344,22 @@ class DiT(nn.Module):
     def __init__(
         self,
         input_size=32,  # 28
+        num_states=256,
         patch_size=2,  # 2-4
         in_channels=1,
-        hidden_size=1152, #256-512
-        depth=28, # number of layers 9-13
+        hidden_size=1152,  # 256-512
+        depth=28,  # number of layers 9-13
         num_heads=16,
         mlp_ratio=4.0,
         class_dropout_prob=0.1,
         num_classes=10,
-        logits_pars_out=True,  # logistic_pars output
-        x_min_max=(0, 255)
+        model_output="logistic_pars",  # logistic_pars or logits
     ):
         super().__init__()
-        self.logits_pars_out = logits_pars_out
+        self.S = num_states
         self.in_channels = in_channels
-        self.out_channels = in_channels * 2 if logits_pars_out else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
-        self.x_min_max = x_min_max
 
         self.x_embedder = PatchEmbed(
             input_size, patch_size, in_channels, hidden_size, bias=True
@@ -380,7 +378,21 @@ class DiT(nn.Module):
                 for _ in range(depth)
             ]
         )
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+        self.final_layer = FinalLayer(hidden_size, patch_size, self.in_channels)
+
+        if model_output == "logits":
+            self.final_conv = nn.Conv2d(
+                self.in_channels, self.in_channels * self.S, 3, padding=1
+            )
+
+        elif model_output == "logistic_pars":
+
+            self.final_conv = nn.Conv2d(
+                self.in_channels, self.in_channels * 2, 3, padding=1
+            )
+        else:
+            raise ValueError(f"No model output called {model_output} registered")
+
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -427,7 +439,7 @@ class DiT(nn.Module):
         x: (N, T, patch_size**2 * C)
         imgs: (N, H, W, C)
         """
-        c = self.out_channels
+        c = self.in_channels  # vorher self.out_channels
         p = self.x_embedder.patch_size[0]
         h = w = int(x.shape[1] ** 0.5)
         assert h * w == x.shape[1]
@@ -438,7 +450,10 @@ class DiT(nn.Module):
         return imgs
 
     def forward(
-        self, inp: TensorType["B", "C", "H", "W"], t: TensorType["B"], y: TensorType["B"]=None
+        self,
+        x: TensorType["B", "C", "H", "W"],
+        t: TensorType["B"],
+        y: TensorType["B"] = None,
     ):
         """
         Forward pass of DiT.
@@ -446,7 +461,7 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-        x = inp = network_utils.center_data(inp, self.x_min_max)
+        B, C, H, W = x.shape
         x = (
             self.x_embedder(x) + self.pos_embed
         )  # (N, T, D), where T = H * W / patch_size ** 2
@@ -460,14 +475,12 @@ class DiT(nn.Module):
         for block in self.blocks:
             x = block(x, c)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-
         # idea to predict mean and eps of a log distribution and sample from it
         # cfg.model.model_output == "logits" => out_channels = 2*C
 
-        x = self.unpatchify(x)
-            # (N, out_channels, H, W)
-        loc, log_scale = torch.chunk(x, 2, dim=1)
-        out = torch.tanh(loc + inp), log_scale
+        x = self.unpatchify(x)  # B, C; H, W
+        out = self.final_conv(x)  # B, S or 2, H, W
+
         return out
 
     def forward_with_cfg(self, x, t, y, cfg_scale):

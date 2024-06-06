@@ -75,7 +75,7 @@ def get_config():
 
     config.saving = saving = ml_collections.ConfigDict()
 
-    saving.checkpoint_freq = 10000
+    saving.checkpoint_freq = 1000
     saving.sample_plot_path = os.path.join(save_directory, "PNGs")
 
     config.sampler = sampler = ml_collections.ConfigDict()
@@ -88,6 +88,6 @@ def get_config():
     sampler.corrector_step_size_multiplier = float(1.5)
     sampler.corrector_entry_time = float(0.0)
     sampler.is_ordinal = True
-    sampler.sample_freq = 220000000
+    sampler.sample_freq = 1000
 
     return config

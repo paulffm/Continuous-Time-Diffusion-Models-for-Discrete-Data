@@ -283,7 +283,7 @@ class UViT(nn.Module):
 
         self.img_size = img_size
         self.S = num_states
-        self.x_min_max = (0, self.S + 1)
+        self.x_min_max = (0, self.S - 1)
         self.num_features = self.embed_dim = (
             embed_dim  # num_features for consistency with other models
         )

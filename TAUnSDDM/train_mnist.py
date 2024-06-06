@@ -3,9 +3,8 @@ import ml_collections
 import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
-#from config.bin_mnist_config.config_tauUnet_binmnist import get_config
+#from config.mnist_config.config_uvit_mnist import get_config
 from config.mnist_config.config_dit_mnist import get_config
-#from config.mnist_config.config_hollow_mnist import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os

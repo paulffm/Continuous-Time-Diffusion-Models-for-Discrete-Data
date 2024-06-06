@@ -445,12 +445,16 @@ class UNet(nn.Module):
             else:
                 hid = layer(hid)
         out = self.out(hid)
+        #shape before conv torch.Size([64, 96, 28, 28])
+        #shape after conv torch.Size([64, 256, 28, 28])
         if self.model_output == "logistic_pars":
             loc, log_scale = torch.chunk(out, 2, dim=1)
             out = torch.tanh(loc + input), log_scale
         else:
             out = torch.reshape(out, (B, self.out_channel, self.S, H, W))
             out = out.permute(0, 1, 3, 4, 2).contiguous()
+            # shape after resh torch.Size([64, 1, 256, 28, 28])
+            # shape after perm and cont torch.Size([64, 1, 28, 28, 256])
             out = out  # + input_onehot
         return out
 
