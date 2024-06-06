@@ -6,7 +6,7 @@ import lib.models.model_utils as model_utils
 from torchtyping import TensorType
 import torch.autograd.profiler as profiler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from lib.networks import hollow_networks, ebm_networks, tau_networks, unet, dit
+from lib.networks import hollow_networks, ebm_networks, tau_networks, unet, dit, u_vit
 from lib.models.forward_model import (
     UniformRate,
     UniformVariantRate,
@@ -15,12 +15,14 @@ from lib.models.forward_model import (
 )
 from lib.datasets.sudoku import define_relative_encoding
 
+
 def log_minus_exp(a, b, eps=1e-6):
-        """
-        Compute log (exp(a) - exp(b)) for (b<a)
-        From https://arxiv.org/pdf/2107.03006.pdf
-        """
-        return a + torch.log1p(-torch.exp(b - a) + eps)
+    """
+    Compute log (exp(a) - exp(b)) for (b<a)
+    From https://arxiv.org/pdf/2107.03006.pdf
+    """
+    return a + torch.log1p(-torch.exp(b - a) + eps)
+
 
 def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
     """
@@ -31,13 +33,13 @@ def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
     S: Number of States
 
     """
-    mu = net_out[:, 0:C, :, :].unsqueeze(-1)
-    log_scale = net_out[:, C:, :, :].unsqueeze(-1)
+    mu = net_out[0].unsqueeze(-1)  # B, C, H, W, 1
+    log_scale = net_out[1].unsqueeze(-1)  # B, C, H, W, 1
 
-    #if self.padding: 
+    # if self.padding:
     #    mu = mu[:, :, :-1, :-1, :]
     #    log_scale = log_scale[:, :, :-1, :-1, :]
-    
+
     # The probability for a state is then the integral of this continuous distribution between
     # this state and the next when mapped onto the real line. To impart a residual inductive bias
     # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
@@ -66,38 +68,89 @@ def sample_logistic(net_out, B, C, D, S, fix_logistic, device):
         logits = torch.min(logits_1, logits_2)
     else:
         logits = logits_1
+    logits = logits.view(B, D, S)  # shape before B, C, H, W, S
 
-    logits = logits.view(B, D, S)
+    return logits
 
-    return logits 
+
+class UViTModel(nn.Module):
+    def __init__(self, cfg, device, rank=None):
+        super().__init__()
+
+
+        self.S = cfg.data.S
+
+        # assert len(cfg.data.shape) == 1
+
+        tmp_net = u_vit.UViT(
+            img_size=cfg.data.image_size,
+            num_states=cfg.data.S,
+            patch_size=cfg.model.patch_size,
+            in_chans=cfg.model.input_channel,
+            embed_dim=cfg.model.hidden_dim,
+            depth=cfg.model.depth,
+            num_heads=cfg.model.num_heads,
+            mlp_ratio=cfg.model.mlp_ratio,
+            qkv_bias=False,
+            qk_scale=None,
+            norm_layer=nn.LayerNorm,
+            mlp_time_embed=True,
+            num_classes=-1,
+            use_checkpoint=False,
+            conv=True,
+            skip=True,
+            model_output=cfg.model.model_output,
+        ).to(device)
+        if cfg.distributed:
+            self.net = DDP(tmp_net, device_ids=[rank])
+        else:
+            self.net = tmp_net
+
+        self.data_shape = cfg.data.shape
+
+    def forward(
+        self, x: TensorType["B", "D"], times: TensorType["B"], label: TensorType["B"]
+    ) -> TensorType["B", "D", "S"]:
+        """
+        Returns logits over state space
+        """
+        B, D = x.shape
+
+        logits = self.net(x, times)  
+        logits = logits.view(B, D, self.S) # (B, D, S)
+
+        return logits
+
 
 class LogDiT(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
         self.cfg = cfg
-        self.device = device 
+        self.device = device
         self.fix_logistic = cfg.model.fix_logistic
         self.S = cfg.data.S
         self.data_shape = cfg.data.shape
-        net = dit.DiT(input_size=cfg.data.image_size, # 28
-            patch_size= cfg.model.patch_size, # 2
+        net = dit.DiT(
+            input_size=cfg.data.image_size,  # 28
+            patch_size=cfg.model.patch_size,  # 2
             in_channels=cfg.model.input_channel,
-            hidden_size=cfg.model.hidden_dim, #1152
-            depth=cfg.model.depth, # 28
-            num_heads=cfg.model.num_heads, #16
-            mlp_ratio=cfg.model.mlp_ratio, #4.0,
-            class_dropout_prob=cfg.model.dropout, #0.1
+            hidden_size=cfg.model.hidden_dim,  # 1152
+            depth=cfg.model.depth,  # 28
+            num_heads=cfg.model.num_heads,  # 16
+            mlp_ratio=cfg.model.mlp_ratio,  # 4.0,
+            class_dropout_prob=cfg.model.dropout,  # 0.1
             num_classes=self.S,
             logits_pars_out=cfg.model.model_output,
-            x_min_max=cfg.model.data_min_max) # logistic_pars output)
-        
+            x_min_max=cfg.model.data_min_max,
+        )  # logistic_pars output)
+
         if cfg.distributed:
             self.net = DDP(net, device_ids=[rank])
         else:
             self.net = net
 
     def forward(
-        self, x: TensorType["B", "D"], times: TensorType["B"], y: TensorType["B"]=None
+        self, x: TensorType["B", "D"], times: TensorType["B"], y: TensorType["B"] = None
     ) -> TensorType["B", "D", "S"]:
         """
         Returns logits over state space for each pixel
@@ -110,9 +163,10 @@ class LogDiT(nn.Module):
             B, C, H, W = x.shape
 
         net_out = self.net(x, times, y)  # (B, 2*C, H, W)
-        logits = sample_logistic(net_out, B, C, D, self.S, self.fix_logistic, self.device)
+        logits = sample_logistic(
+            net_out, B, C, D, self.S, self.fix_logistic, self.device
+        )
         return logits
-
 
 
 class ImageX0PredBasePaul(nn.Module):
@@ -174,11 +228,10 @@ class ImageX0PredBasePaul(nn.Module):
         else:
             mu = net_out[0].unsqueeze(-1)
             log_scale = net_out[1].unsqueeze(-1)
-
-            #if self.padding: 
+            # if self.padding:
             #    mu = mu[:, :, :-1, :-1, :]
             #    log_scale = log_scale[:, :, :-1, :-1, :]
-            
+
             # The probability for a state is then the integral of this continuous distribution between
             # this state and the next when mapped onto the real line. To impart a residual inductive bias
             # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
@@ -211,12 +264,12 @@ class ImageX0PredBasePaul(nn.Module):
         if self.padding:
             logits = logits[:, :, :-1, :-1, :]
             logits = logits.reshape(B, D, self.S)
-            #logits = logits.view(B, D, self.S)
+            # logits = logits.view(B, D, self.S)
         else:
-            #logits.view(B, C, H, W, self.S)# d3pm
+            # logits.view(B, C, H, W, self.S)# d3pm
             logits = logits.view(B, D, self.S)
-        
-        return logits #.view(B, D, self.S) # d3pm
+
+        return logits  # .view(B, D, self.S) # d3pm
 
     def _log_minus_exp(self, a, b, eps=1e-6):
         """
@@ -315,7 +368,7 @@ class ImageX0PredBase(nn.Module):
         else:
             logits = logits_1
 
-        #logits = logits.view(B, D, S)
+        # logits = logits.view(B, D, S)
 
         return logits
 
@@ -426,7 +479,7 @@ class HollowTransformer(nn.Module):
             tmp_net = hollow_networks.BidirectionalTransformer2(
                 cfg, readout_dim=None
             ).to(device)
-        #elif cfg.model.nets == "visual":
+        # elif cfg.model.nets == "visual":
         #    tmp_net = hollow_networks.BiVisualTransformer(
         #        cfg, readout_dim=None
         #    ).to(device)
@@ -450,7 +503,8 @@ class HollowTransformer(nn.Module):
         logits = self.net(x, times)  # (B, D, S)
 
         return logits
-    
+
+
 class HollowTransformerLogistics(nn.Module):
     def __init__(self, cfg, device, rank=None):
         super().__init__()
@@ -459,17 +513,17 @@ class HollowTransformerLogistics(nn.Module):
         self.fix_logistic = cfg.model.fix_logistic
         self.device = cfg.device
         if cfg.model.nets == "bidir_transformer2":
-            tmp_net = hollow_networks.BidirectionalTransformer2(
-                cfg, readout_dim=2
-            ).to(device)
-        #elif cfg.model.nets == "visual":
+            tmp_net = hollow_networks.BidirectionalTransformer2(cfg, readout_dim=2).to(
+                device
+            )
+        # elif cfg.model.nets == "visual":
         #    tmp_net = hollow_networks.BiVisualTransformer(
         #        cfg, readout_dim=None
         #    ).to(device)
         else:
-            tmp_net = hollow_networks.BidirectionalTransformer(
-                cfg, readout_dim=2
-            ).to(device)
+            tmp_net = hollow_networks.BidirectionalTransformer(cfg, readout_dim=2).to(
+                device
+            )
 
         if cfg.distributed:
             self.net = DDP(tmp_net, device_ids=[rank])
@@ -493,10 +547,10 @@ class HollowTransformerLogistics(nn.Module):
         mu = net_out[0].unsqueeze(-1)
         log_scale = net_out[1].unsqueeze(-1)
 
-        #if self.padding: 
+        # if self.padding:
         #    mu = mu[:, :, :-1, :-1, :]
         #    log_scale = log_scale[:, :, :-1, :-1, :]
-        
+
         # The probability for a state is then the integral of this continuous distribution between
         # this state and the next when mapped onto the real line. To impart a residual inductive bias
         # on the output, the mean of the logistic distribution is taken to be tanh(xt + μ′) where xt
@@ -537,8 +591,8 @@ class HollowTransformerLogistics(nn.Module):
         """
         return a + torch.log1p(-torch.exp(b - a) + eps)
 
-
         return logits
+
 
 class MaskedModel(nn.Module):
     def __init__(self, cfg, device, rank=None):
@@ -601,7 +655,7 @@ class SudokuScoreNet(nn.Module):
         Returns logits over state space
         """
         B, D = x.shape
-        x = x.view(-1, 9, 9 ,9)
+        x = x.view(-1, 9, 9, 9)
         logits = self.net(x, times)  # (B, D, S)
         logits = logits.view(B, 81, 9)
         return logits
@@ -623,7 +677,7 @@ class ProteinScoreNet(nn.Module):
         """
         Returns logits over state space
         """
-        x = x.view(-1, 15*15*1)
+        x = x.view(-1, 15 * 15 * 1)
         logits = self.net(x, times)  # (B, D, S)
 
         logits = logits.view(-1, 1, 15, 15, 3)
@@ -748,21 +802,32 @@ class EMA:
             self.move_model_params_to_collected_params()
             self.move_shadow_params_to_model_params()
 
+
 ##############################################################################################################################################################
 
 # make sure EMA inherited first so it can override the state dict functions
 # for CIFAR10
 
 @model_utils.register_model
-class GaussianLogDiTEMA(
-    EMA, LogDiT, GaussianTargetRate
+class GaussianUViTEMA(
+    EMA, UViTModel, GaussianTargetRate
 ):
+    def __init__(self, cfg, device, rank=None):
+        EMA.__init__(self, cfg)
+        UViTModel.__init__(self, cfg, device, rank)
+        GaussianTargetRate.__init__(self, cfg, device)
+
+        self.init_ema()
+
+@model_utils.register_model
+class GaussianLogDiTEMA(EMA, LogDiT, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         LogDiT.__init__(self, cfg, device, rank)
         GaussianTargetRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class UniformRateImageX0PredEMA(EMA, ImageX0PredBasePaul, UniformRate):
@@ -783,6 +848,7 @@ class UniVarHollowEMA(EMA, HollowTransformer, UniformVariantRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniVarHollowEMALogistics(EMA, HollowTransformerLogistics, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
@@ -791,6 +857,7 @@ class UniVarHollowEMALogistics(EMA, HollowTransformerLogistics, UniformVariantRa
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 # hollow
 @model_utils.register_model
@@ -802,6 +869,7 @@ class UniformMaskedEMA(EMA, MaskedModel, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniVarMaskedEMA(EMA, MaskedModel, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
@@ -810,6 +878,7 @@ class UniVarMaskedEMA(EMA, MaskedModel, UniformVariantRate):
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class UniformHollowEMA(EMA, HollowTransformer, UniformRate):
@@ -839,6 +908,8 @@ class UniVarProteinScoreNetEMA(EMA, ProteinScoreNet, UniformVariantRate):
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+
+
 @model_utils.register_model
 class UniProteinD3PM(EMA, ProteinScoreNet):
     def __init__(self, cfg, device, rank=None):
@@ -846,6 +917,7 @@ class UniProteinD3PM(EMA, ProteinScoreNet):
         ProteinScoreNet.__init__(self, cfg, device, rank)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class GaussianTargetRateImageX0PredEMAPaul(
@@ -858,10 +930,9 @@ class GaussianTargetRateImageX0PredEMAPaul(
 
         self.init_ema()
 
+
 @model_utils.register_model
-class GaussianHollowEMA(
-    EMA, HollowTransformer, GaussianTargetRate
-):
+class GaussianHollowEMA(EMA, HollowTransformer, GaussianTargetRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
         HollowTransformer.__init__(self, cfg, device, rank)
@@ -890,6 +961,7 @@ class UniformRateUnetEMA(EMA, ImageX0PredBasePaul, UniformRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniVarUnetEMA(EMA, ImageX0PredBasePaul, UniformVariantRate):
     def __init__(self, cfg, device, rank=None):
@@ -898,6 +970,7 @@ class UniVarUnetEMA(EMA, ImageX0PredBasePaul, UniformVariantRate):
         UniformVariantRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 # make sure EMA inherited first so it can override the state dict functions
 @model_utils.register_model
@@ -956,6 +1029,7 @@ class UniBertD3PM(EMA, BertMLPRes):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformBertEMA(EMA, BertMLPRes, UniformRate):
     def __init__(self, cfg, device, rank=None):
@@ -964,6 +1038,7 @@ class UniformBertEMA(EMA, BertMLPRes, UniformRate):
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()
+
 
 @model_utils.register_model
 class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):
@@ -974,11 +1049,14 @@ class UniVarBinaryEBMEMA(EMA, BinaryEBM, UniformVariantRate):
 
         self.init_ema()
 
+
 @model_utils.register_model
 class UniformBDTEMA(EMA, hollow_networks.BidirectionalTransformer, UniformRate):
     def __init__(self, cfg, device, rank=None):
         EMA.__init__(self, cfg)
-        hollow_networks.BidirectionalTransformer.__init__(self, cfg, readout_dim=None)# .to(device)
+        hollow_networks.BidirectionalTransformer.__init__(
+            self, cfg, readout_dim=None
+        )  # .to(device)
         UniformRate.__init__(self, cfg, device)
 
         self.init_ema()

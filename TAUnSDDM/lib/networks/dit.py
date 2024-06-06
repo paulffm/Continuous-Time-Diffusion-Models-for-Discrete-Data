@@ -438,7 +438,7 @@ class DiT(nn.Module):
         return imgs
 
     def forward(
-        self, x: TensorType["B", "C", "H", "W"], t: TensorType["B"], y: TensorType["B"]=None
+        self, inp: TensorType["B", "C", "H", "W"], t: TensorType["B"], y: TensorType["B"]=None
     ):
         """
         Forward pass of DiT.
@@ -446,7 +446,7 @@ class DiT(nn.Module):
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
         """
-        x = network_utils.center_data(x, self.x_min_max)
+        x = inp = network_utils.center_data(inp, self.x_min_max)
         x = (
             self.x_embedder(x) + self.pos_embed
         )  # (N, T, D), where T = H * W / patch_size ** 2
@@ -466,7 +466,9 @@ class DiT(nn.Module):
 
         x = self.unpatchify(x)
             # (N, out_channels, H, W)
-        return x
+        loc, log_scale = torch.chunk(x, 2, dim=1)
+        out = torch.tanh(loc + inp), log_scale
+        return out
 
     def forward_with_cfg(self, x, t, y, cfg_scale):
         """
