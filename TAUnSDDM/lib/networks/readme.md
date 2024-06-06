@@ -26,7 +26,7 @@ The first approach to utilize a single ViT as an alternative to the U-Net in DDP
 - predicts noise but can be adapted for $x_0$-prediction
 - we find that our U-ViT performs especially well in the latent space, where images are firstly converted to their latent representations before applying diffusion models => must be usable in pixel space
 
-## DiffiT: : DIFFUSION VISION TRANSFORMERS FOR IMAGE GENERATION (2024) (No Code)
+## DiffiT: DIFFUSION VISION TRANSFORMERS FOR IMAGE GENERATION (2024) (No Code)
 
 - We introduce a novel time-dependent self-attention module that allows attention layers to adapt their behavior at different stages of the denoising process in an efficient manner
 - We also introduce latent DiffiT which consists of transformer model with the proposed self-attention layers, for high-resolution image generation
@@ -43,4 +43,4 @@ The first approach to utilize a single ViT as an alternative to the U-Net in DDP
 
 ## Idea
 
-To latent space diffusion models in discrete space? Before feeding $x$ into diffusion model 
+To latent space diffusion models in discrete space? Before feeding $x$ into diffusion model
