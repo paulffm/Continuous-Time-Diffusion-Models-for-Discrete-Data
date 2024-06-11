@@ -5,7 +5,7 @@
 This repository serves as an unofficial **PyTorch** reimplementation of the paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987) (tauLDR) by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) (SDDM) by H. Sun et al. As part of my [master's thesis](https://paulffm.github.io/Master_Thesis_Diffusion_Models.pdf), it includes extensions such as the implementation of new **sampling methods** and alternative **loss functions** to enhance the performance and flexibility of both frameworks.
 
 <p align="center">
-  <img src="ct_forwardrev_process2.png"  alt="1" width = 438px height = 311px >
+  <img src="assets/ct_forwardrev_process2.png"  alt="1" width = 438px height = 311px >
 </p>
 
 ## Overview
@@ -28,7 +28,7 @@ led to increased sample quality.
   
 ### Networks
 
-- I included many more neural networks as initially proposed, i.e. the score-network from the paper [Dirichlet Diffusion Score Model for Biological Sequence Generation](https://arxiv.org/pdf/2305.10699.pdf)
+In addition to the originally proposed models, I have incorporated several other neural networks (located at `TAUnSDDM/lib/networks`), including the score network described in the paper [Dirichlet Diffusion Score Model for Biological Sequence Generation](https://arxiv.org/pdf/2305.10699.pdf).
 
 ## Installation
 
@@ -62,7 +62,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-This implementation provides example scripts for training SDDM and tauLDR models to generate MNIST/maze/synthetic data. In this script you can simply use my provided configs and start training or retraining your models. You just need to set the correct paths in the beginning of the script, i.e.:
+This implementation offers example scripts for training SDDM and tauLDR models to generate datasets such as [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html), [MNIST](http://yann.lecun.com/exdb/mnist/), [maze](https://github.com/Turidus/Python-Maze/tree/master), and synthetic data from [this paper](https://arxiv.org/pdf/2211.16750). These scripts simplify the training process by providing pre-configured settings. To begin training or continue training your models, simply adjust the paths at the beginning of the script as follows:
 
 ```python
 def main():
@@ -86,7 +86,7 @@ def main():
         cfg = bookkeeping.load_config(config_path)
 ```
 
-In addition, there are configuration files (`TAUnSDDM/config`) provided to simplify the training and sampling process. A configuration file tailored for generating MNIST data with a U-Net includes the following parameters:
+The configuration files (`TAUnSDDM/config`) are provided to simplify the training and sampling process. A configuration file tailored for generating MNIST data with a U-Net includes the following parameters:
 
 | Parameter | Description | Type |
 | ------------- | ------------- | ------------- |
@@ -151,6 +151,16 @@ In addition, there are configuration files (`TAUnSDDM/config`) provided to simpl
 | sampler.sample_freq | Frequency of sampling | int |
 
 ## Results
+
+According to [PaperwithCode](https://paperswithcode.com/sota/image-generation-on-mnist), the tauLDR framework, combined with negative log-likelihood loss and our Midpoint Tau-Leaping sampler, achieves state-of-the-art performance in terms of FID score, surpassing previous state-of-the-art models:
+
+| Rank | Model | FID |
+| ---- | ----- | --- |
+| 1    | tauLDR + $L_{\text{ll}}$ + Midpoint Tau-Leaping | 1.75 |
+| 2    | tauLDR + $L_{\text{CTEll}}$+ Midpoint Tau-Leaping | 2.40 |
+| 3    | [Sliced Iterative Normalizing Flows](https://arxiv.org/pdf/2007.00674v3) | 4.5 |
+| 4    | [Generative Latent Flow + perceptual loss](https://arxiv.org/pdf/1905.10485v2) | 5.8 |
+| 5    | [HypGan](https://arxiv.org/pdf/2102.05567v1) | 7.87 |
 
 Some generated MNIST, maze and synthetic data samples.
 
