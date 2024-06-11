@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/paulffm/Master-Thesis/blob/master/LICENSE)
 
-This repository serves as an unofficial **PyTorch** reimplementation of the paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987) (tauLDR) by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) (SDDM) by H. Sun et al. As part of my master's thesis, it includes extensions such as the implementation of new **sampling methods** and alternative **loss functions** to enhance the performance and flexibility of both frameworks.
+This repository serves as an unofficial **PyTorch** reimplementation of the paper [A Continuous Time Framework for Discrete Denoising Models](https://arxiv.org/pdf/2205.14987) (tauLDR) by A. Campbell et al. and first **PyTorch** implementation of the paper [Score-Based Continuous-Time Discrete Diffusion Models](https://openreview.net/pdf?id=BYWWwSY2G5s) (SDDM) by H. Sun et al. As part of my [master's thesis](https://paulffm.github.io/Master_Thesis_Diffusion_Models.pdf), it includes extensions such as the implementation of new **sampling methods** and alternative **loss functions** to enhance the performance and flexibility of both frameworks.
 
 <p align="center">
   <img src="ct_forwardrev_process2.png"  alt="1" width = 438px height = 311px >
@@ -85,7 +85,8 @@ def main():
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 ```
-In addition, there are configuration files (`mnist_generation_example/config/mnist_config`)  provided to simplify the training and sampling process. A configuration file tailored for generating MNIST data with a U-Net includes the following parameters:
+
+In addition, there are configuration files (`TAUnSDDM/config`) provided to simplify the training and sampling process. A configuration file tailored for generating MNIST data with a U-Net includes the following parameters:
 
 | Parameter | Description | Type |
 | ------------- | ------------- | ------------- |
@@ -148,6 +149,16 @@ In addition, there are configuration files (`mnist_generation_example/config/mni
 | sampler.corrector_entry_time | Entry time for corrector | float |
 | sampler.is_ordinal | Whether the data is ordinal | bool |
 | sampler.sample_freq | Frequency of sampling | int |
+
+## Results
+
+Some generated MNIST, maze and synthetic data samples.
+
+<p align="center">
+  <img src="assets/mnist_unet_ll.png" alt="Image 1" width="30%">
+  <img src="assets/mazes.png" alt="Image 2" width="30%">
+  <img src="assets/synthetic.png" alt="Image 3" width="30%">
+</p>
 
 ## Note
 
