@@ -62,7 +62,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-This implementation offers example scripts for training SDDM and tauLDR models to generate datasets such as [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html), [MNIST](http://yann.lecun.com/exdb/mnist/), [maze](https://github.com/Turidus/Python-Maze/tree/master), and synthetic data from [this paper](https://arxiv.org/pdf/2211.16750). These scripts simplify the training process by providing pre-configured settings. To begin training or continue training your models, simply adjust the paths at the beginning of the script as follows:
+This implementation offers example scripts for training SDDM and tauLDR models to generate datasets such as [CIFAR10](https://www.cs.toronto.edu/~kriz/cifar.html), [MNIST](http://yann.lecun.com/exdb/mnist/), [maze](https://github.com/Turidus/Python-Maze/tree/master), and [synthetic](https://arxiv.org/pdf/2211.16750) data. These scripts simplify the training process by providing pre-configured settings. To begin training or continue training your models, simply adjust the paths at the beginning of the script as follows:
 
 ```python
 def main():
@@ -152,7 +152,7 @@ The configuration files (`TAUnSDDM/config`) are provided to simplify the trainin
 
 ## Results
 
-According to [PaperwithCode](https://paperswithcode.com/sota/image-generation-on-mnist), the tauLDR framework, combined with negative log-likelihood loss and our Midpoint Tau-Leaping sampler, achieves state-of-the-art performance in terms of FID score, surpassing previous state-of-the-art models:
+According to [PaperwithCode](https://paperswithcode.com/sota/image-generation-on-mnist), the tauLDR framework, combined with negative log-likelihood loss and our Midpoint Tau-Leaping sampler, achieves state-of-the-art performance in terms of FID score on the MNIST dataset, surpassing previous state-of-the-art models:
 
 | Rank | Model | FID |
 | ---- | ----- | --- |
@@ -172,7 +172,7 @@ Some generated MNIST, maze and synthetic data samples.
 
 ## Note
 
-More information about the maze dataset and sample quality metrics can be found here.
+More information about the maze dataset and sample quality metrics can be found [here](https://github.com/Turidus/Python-Maze/tree/master).
 
 ## Reference
 
