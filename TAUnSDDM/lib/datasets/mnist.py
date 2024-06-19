@@ -51,7 +51,7 @@ class DiscreteCIFAR10(torchvision.datasets.CIFAR10):
         if self.random_flips:
             img = self.flip(img)
 
-        return img
+        return img, target
 
 
 @dataset_utils.register_dataset

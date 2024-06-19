@@ -4,7 +4,7 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.mnist_config.config_uvit_mnist import get_config
-from config.mnist_config.config_dit_mnist import get_config
+from config.cifar10_config.config_uvit_cifar10 import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
