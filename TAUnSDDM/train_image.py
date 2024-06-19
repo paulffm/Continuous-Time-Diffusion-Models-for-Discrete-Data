@@ -32,7 +32,7 @@ torch.cuda.empty_cache()
 def main():
     train_resume = False
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    save_location = os.path.join(script_dir, 'SavedModels/MNIST/') #'SavedModels/BIN-MNIST/'
+    save_location = os.path.join(script_dir, 'SavedModels/CIFAR10/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
     dataset_location = os.path.join(script_dir, 'lib/datasets')
 
@@ -126,7 +126,7 @@ def main():
                 state["model"].eval()
                 samples, _ = sampler.sample(state["model"], n_samples)
                 samples = samples.reshape(
-                    n_samples, 1, cfg.data.image_size, cfg.data.image_size
+                    n_samples, cfg.model.input_channel, cfg.data.image_size, cfg.data.image_size
                 )
 
                 state["model"].train()
