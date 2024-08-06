@@ -4,7 +4,7 @@ import yaml
 import lib.utils.bookkeeping as bookkeeping
 from tqdm import tqdm
 #from config.mnist_config.config_uvit_mnist import get_config
-from config.cifar10_config.config_uvit_cifar10 import get_config
+from config.cifar10_config.config_tauUnet_cifar10 import get_config
 import matplotlib.pyplot as plt
 import ssl
 import os
@@ -17,7 +17,7 @@ import lib.losses.losses as losses
 import lib.losses.losses_utils as losses_utils
 import lib.training.training as training
 import lib.training.training_utils as training_utils
-import lib.optimizers.optimizers as optimizers
+import lib.optimizers.optimizers as optimizersç
 import lib.optimizers.optimizers_utils as optimizers_utils
 import lib.loggers.loggers as loggers
 import lib.loggers.logger_utils as logger_utils
@@ -30,7 +30,7 @@ import numpy as np
 torch.cuda.empty_cache()
 
 def main():
-    train_resume = False
+    train_resume = True
     script_dir = os.path.dirname(os.path.realpath(__file__))
     save_location = os.path.join(script_dir, 'SavedModels/CIFAR10/') #'SavedModels/BIN-MNIST/'
     save_location_png = os.path.join(save_location, 'PNGs/')
@@ -41,8 +41,8 @@ def main():
         bookkeeping.save_config(cfg, save_location)
 
     else:
-        date = "2024-02-24"
-        config_name = "config_001_unet_nll.yaml"
+        date = "2024-08-01"
+        config_name = "config_001_unet_lossweight.yaml"
         config_path = os.path.join(save_location, date, config_name)
         cfg = bookkeeping.load_config(config_path)
 
@@ -55,12 +55,12 @@ def main():
     state = {"model": model, "optimizer": optimizer, "n_iter": 0}
 
     if train_resume:
-        model_name = "model_299999.pt"
+        model_name = "model_29999_unet_lossweight.pt"
         checkpoint_path = os.path.join(save_location, date, model_name)
         state = bookkeeping.load_state(state, checkpoint_path, device)
-        cfg.training.n_iters = 1850000 
-        cfg.sampler.sample_freq = 100000000
-        cfg.saving.checkpoint_freq = 10000
+        cfg.training.n_iters = 500000 
+        cfg.sampler.sample_freq = 5000
+        cfg.saving.checkpoint_freq = 5000
         cfg.sampler.num_steps = 1000
         bookkeeping.save_config(cfg, save_location)
     
@@ -126,7 +126,7 @@ def main():
                 state["model"].eval()
                 samples, _ = sampler.sample(state["model"], n_samples)
                 samples = samples.reshape(
-                    n_samples, cfg.model.input_channel, cfg.data.image_size, cfg.data.image_size
+                    n_samples, cfg.model.input_channels, cfg.data.image_size, cfg.data.image_size
                 )
 
                 state["model"].train()
