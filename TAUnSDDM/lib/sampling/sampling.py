@@ -29,7 +29,7 @@ def get_initial_samples(N, D, device, S, initial_dist, initial_dist_std=None):
 
 
 def get_reverse_rates(model, logits, x, t_ones, cfg, N, D, S):
-    if cfg.loss.name == "CTElbo" or cfg.loss.name == "NLL":
+    if cfg.loss.name == "CTElbo" or cfg.loss.name == "NLL" or cfg.loss.name == "CTElboLambda":
         device = model.device
         qt0 = model.transition(t_ones)  # (N, S, S)
         rate = model.rate(t_ones)  # (N, S, S)
